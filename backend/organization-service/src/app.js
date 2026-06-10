@@ -7,8 +7,7 @@ import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import sequelize from './db/index.js';
 import cookieParser from "cookie-parser";
-import courseRoutes from './routes/course.routes.js';
-import enrollRoutes from './routes/enroll.routes.js';
+import organizationRoutes from './routes/organization.routes.js';
 import { attachErrorHandler } from './observability.js';
 
 
@@ -38,8 +37,7 @@ app.get("/", (req, res) => {
   res.send("Welcome to the Course Service API");
 });
 
-app.use('/', courseRoutes);
-app.use('/enroll', enrollRoutes);
+app.use('/', organizationRoutes);
 
 export async function initDb() {
   await sequelize.authenticate();
