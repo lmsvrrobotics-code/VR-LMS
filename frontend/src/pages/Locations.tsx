@@ -186,22 +186,6 @@ const Locations = () => {
       <section className="section-padding pt-0">
         <div className="container-ngo">
           <h2 className="text-3xl md:text-4xl font-bold text-center mb-8">Find us on the map</h2>
-          {MAPS_KEY ? (
-            <iframe
-              title="VR Robotics Academy — Guntur HQ"
-              src={`https://www.google.com/maps/embed/v1/place?key=${MAPS_KEY}&q=${encodeURIComponent(
-                "VR Robotics Academy, Guntur, Andhra Pradesh",
-              )}`}
-              className="w-full h-[420px] rounded-2xl border border-orange-100 shadow-card"
-              loading="lazy"
-              referrerPolicy="no-referrer-when-downgrade"
-              allowFullScreen
-            />
-          ) : (
-            <div className="rounded-2xl border border-orange-100 h-[420px] flex items-center justify-center text-muted-foreground">
-              Set VITE_GOOGLE_MAPS_API_KEY in .env to show the map.
-            </div>
-          )}
         </div>
       </section>
 
