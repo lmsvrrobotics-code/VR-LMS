@@ -1,12 +1,11 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { 
-  Heart, 
-  Target, 
-  Users, 
-  Globe, 
-  LinkedinIcon,
+import {
+  Heart,
+  Target,
+  Users,
+  Globe,
   Lightbulb
 } from "lucide-react";
 
@@ -36,41 +35,38 @@ const About = () => {
     }
   ];
 
-  const team = [
+  // Trainers & team — ported from index.vrrobotics-backup.html
+  // ("Meet the Trainers & Leads"). Photos hosted on Cloudinary.
+  const team: {
+    name: string;
+    role: string;
+    description: string;
+    photo: string;
+    accent: string;
+    featured: boolean;
+    tags: string[];
+    qual?: string;
+    highlights?: string[];
+  }[] = [
     {
-      name: "Kishore Gade",
-      role: "Founder and Managing Director",
-      description: "Ph.D. from IISc, Bengaluru with over 10 years of corporate experience in tech industry.",
-      socials: {
-      facebook: "https://facebook.com/",
-      instagram: "https://instagram.com/",
-      linkedin: "https://www.linkedin.com/in/kishore-gade-0059a131/?originalSubdomain=in"
-    }
-      // expertise: "Educational Strategy"
+      name: "Vamsi Mittapalli",
+      role: "CEO & Founder · Robotics & AIoT Trainer",
+      description: "B.Tech in Electrical & Electronics Engineering and a Robotics Trainer at NxtWave, Vamsi founded VR Robotics Academy to close the gap between classroom theory and real-world building. He has led hands-on robotics workshops across multiple campuses and designed the project-based curriculum students learn on today.",
+      qual: "B.Tech — Electrical & Electronics Engineering · Robotics Trainer, NxtWave",
+      photo: "https://res.cloudinary.com/dqcybkje5/image/upload/v1777619263/vamshii2_tdbxjj.jpg",
+      accent: "#FF6A00",
+      featured: true,
+      highlights: [
+        "Conducted hands-on robotics workshops across multiple campuses",
+        "Designed the academy's project-based learning modules",
+        "Mentored students in real-world robotics & AIoT applications",
+      ],
+      tags: ["Arduino", "Microbit", "Raspberry Pi", "Python", "Scratch", "ROS"],
     },
-    {
-      name: "M Venkateswara Rao",
-      role: "Advisory Board",
-      description: "Ph.D. from IIT Madras, with post-doctoral experience from the USA and Canada",
-      socials: {
-      facebook: "https://facebook.com/",
-      instagram: "https://instagram.com/",
-      linkedin: "https://www.linkedin.com/in/venkateswararao-mannava-132b2b1a/?utm_source=share&original_referer=&utm_content=profile&utm_campaign=share_via&utm_medium=member_mweb&originalSubdomain=ca"
-    }
-      // expertise: "Platform Development"
-    },
-    {
-      name: "V K Chaitanya",
-      role: "Advisory Board",
-      description: "Ph.D. from Purdue University, USA, engaged with US-based AI enterprise.",
-      socials: {
-      facebook: "https://facebook.com/",
-      instagram: "https://instagram.com/",
-      linkedin: "https://www.linkedin.com/in/vkcmanam/?utm_source=share&utm_medium=member_mweb&utm_campaign=share_via&utm_content=profile"
-    }
-      // expertise: "Curriculum Design"
-    }
   ];
+  // The CEO/Founder gets a big feature card; everyone else sits in a row below.
+  const lead = team.find((m) => m.featured) || team[0];
+  const others = team.filter((m) => m !== lead);
 
   return (
     <div className="overflow-hidden">
@@ -115,7 +111,7 @@ const About = () => {
               </h2>
               <div className="space-y-4 text-muted-foreground leading-relaxed">
                 <p>
-                  VR Robotics Academy is a future-focused robotics and AI learning institute. It was founded by doctorates from prestigious universities with extensive corporate experience to address the critical gap between academic preparation and industry requirements. We believe in creating sustainable bridges between educational institutions and Corporations to benefit all stakeholders.
+                  VR Robotics Academy is a future-focused robotics and AI learning institute. It was founded by doctorates from prestigious universities with extensive corporate experience to address the critical gap between academic preparation and industry requirements. We believe in creating sustainable bridges between educational institutions and Corporations to benefit all stakeholders.
                 </p>
                 <p>
                   Today, we partner with organizations worldwide to identify educational gaps and 
@@ -192,57 +188,90 @@ const About = () => {
         <div className="container-ngo">
           <div className="text-center space-y-4 mb-16">
             <h2 className="text-3xl md:text-4xl font-bold">
-              Meet Our <span className="text-gradient">Leadership</span>
+              Meet Our <span className="text-gradient">Trainers &amp; Team</span>
             </h2>
-            {/* <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Passionate educators, doctorates, and community builders working together 
-              to make education accessible for everyone.
-            </p> */}
+            <p className="text-base text-muted-foreground max-w-2xl mx-auto">
+              All sessions are led by qualified engineering professionals — degree-qualified,
+              background-verified, and certified in our curriculum.
+            </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {team.map((member, index) => (
-             <Card key={index} className="card-ngo border-0 group relative overflow-hidden pb-6 border-2 border-warm-green rounded-xl">
-  <CardHeader className="text-center space-y-3">
-    <div className="w-16 h-16 bg-gradient-hero rounded-full flex items-center justify-center mx-auto">
-      <Users className="w-8 h-8 text-white" />
-    </div>
-    <div>
-      <CardTitle className="text-lg">{member.name}</CardTitle>
-      <CardDescription className="text-primary font-medium">
-        {member.role}
-      </CardDescription>
-    </div>
-  </CardHeader>
+          <div className="max-w-5xl mx-auto space-y-6">
+            {/* ── Lead / Founder — big feature card ── */}
+            <div
+              className="card-ngo-static rounded-2xl border border-border/60 bg-card overflow-hidden grid md:grid-cols-[minmax(0,360px)_1fr]"
+              style={{ borderTop: `4px solid ${lead.accent}` }}
+            >
+              <div className="relative">
+                <img
+                  src={lead.photo}
+                  alt={lead.name}
+                  loading="lazy"
+                  className="w-full h-72 md:h-full object-cover object-top"
+                />
+                <span className="absolute top-3 left-3 inline-flex items-center gap-1 rounded-full bg-gradient-hero text-white text-[11px] font-bold px-2.5 py-1 shadow">
+                  ★ Founder · CEO
+                </span>
+              </div>
+              <div className="p-6 sm:p-8 flex flex-col">
+                <h3 className="font-bold text-2xl leading-tight">{lead.name}</h3>
+                <p className="text-sm font-semibold mt-1" style={{ color: lead.accent }}>{lead.role}</p>
+                <p className="text-[15px] text-muted-foreground mt-4 leading-relaxed">{lead.description}</p>
 
-  <CardContent className="space-y-3">
-    <p className="text-sm text-muted-foreground leading-relaxed">
-      {member.description}
-    </p>
-  </CardContent>
+                {lead.highlights && (
+                  <ul className="mt-5 space-y-2">
+                    {lead.highlights.map((h) => (
+                      <li key={h} className="flex items-start gap-2 text-sm">
+                        <span className="mt-0.5 text-primary" style={{ color: lead.accent }}>✓</span>
+                        <span className="text-foreground/80">{h}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
 
-  {/* Bottom Footer with Social Icons on Hover */}
-  <div className="absolute bottom-0 left-0 w-full backdrop-blur-md py-2 px-4 flex justify-end gap-4 ">
-    {/* {member.socials?.facebook && (
-      <a href={member.socials.facebook} target="_blank" rel="noopener noreferrer">
-        <FacebookIcon className="w-5 h-5 text-primary hover:scale-110 transition-transform" />
-      </a>
-    )}
-    {member.socials?.instagram && (
-      <a href={member.socials.instagram} target="_blank" rel="noopener noreferrer">
-        <InstagramIcon className="w-5 h-5 text-primary hover:scale-110 transition-transform" />
-      </a>
-    )} */}
-    {member.socials?.linkedin && (
-      <a href={member.socials.linkedin} target="_blank" rel="noopener noreferrer">
-        <LinkedinIcon className="w-7 h-7 text-primary hover:scale-110 transition-transform" />
-      </a>
-    )}
-  </div>
-</Card>
+                <div className="flex flex-wrap gap-1.5 mt-6">
+                  {lead.tags.map((t) => (
+                    <span key={t} className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-secondary text-secondary-foreground">
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
 
-
-            ))}
+            {/* ── The rest of the team — cards below (hidden if none) ── */}
+            {others.length > 0 && (
+            <div className="grid sm:grid-cols-2 gap-6">
+              {others.map((member, index) => (
+                <div
+                  key={index}
+                  className="card-ngo-static rounded-2xl border border-border/60 bg-card overflow-hidden flex flex-col"
+                  style={{ borderTop: `4px solid ${member.accent}` }}
+                >
+                  <div className="relative">
+                    <img
+                      src={member.photo}
+                      alt={member.name}
+                      loading="lazy"
+                      className="w-full h-60 object-cover object-top"
+                    />
+                  </div>
+                  <div className="p-5 flex flex-col flex-1">
+                    <h3 className="font-bold text-lg leading-tight">{member.name}</h3>
+                    <p className="text-sm font-semibold mt-1" style={{ color: member.accent }}>{member.role}</p>
+                    <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{member.description}</p>
+                    <div className="flex flex-wrap gap-1.5 mt-4">
+                      {member.tags.map((t) => (
+                        <span key={t} className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-secondary text-secondary-foreground">
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            )}
           </div>
         </div>
       </section>

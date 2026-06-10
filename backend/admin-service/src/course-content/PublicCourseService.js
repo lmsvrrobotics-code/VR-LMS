@@ -75,7 +75,8 @@ const fetchAuthUser = async (userId) => {
     try {
         const rows = await authDb.query(
             `SELECT u."userId" AS id, u.name, u.email,
-                    u.expertise, u.bio, u."linkedinUrl", u."teacherPhoto"
+                    u.expertise, u.bio, u."linkedinUrl",
+                    u."teacherPhoto", u."studentPhoto"
                FROM users u
               WHERE u."userId" = :id
               LIMIT 1`,
@@ -83,8 +84,15 @@ const fetchAuthUser = async (userId) => {
         );
         if (!rows.length) return null;
         const u = rows[0];
-        const photo = u.teacherPhoto
-            ? absoluteUpload(u.teacherPhoto)
+        // Instructor avatar source: the admin-uploaded teacher photo wins, then
+        // fall back to the teacher's own self-service profile photo (studentPhoto
+        // column, set from the dashboard Profile page), and only a deterministic
+        // pravatar placeholder when neither exists. Mirrors forum.service's
+        // COALESCE(teacherPhoto, studentPhoto) so the same avatar shows
+        // everywhere a teacher is rendered.
+        const uploadedPhoto = u.teacherPhoto || u.studentPhoto;
+        const photo = uploadedPhoto
+            ? absoluteUpload(uploadedPhoto)
             : `https://i.pravatar.cc/200?u=${u.id}`;
         return {
             id: u.id,
@@ -185,6 +193,9 @@ const sanitizeCourse = (course, sections = [], lessons = [], creator = null) => 
         class_from: c.class_from == null ? null : Number(c.class_from),
         class_to: c.class_to == null ? null : Number(c.class_to),
         is_paid: c.is_paid ?? 0,
+        // Free public sample/teaser course — open to every registered student
+        // in the normal player (no payment / release gating).
+        is_marketing: !!c.is_marketing,
         price: Number(c.price || 0),
         discount_flag: c.discount_flag || 0,
         discounted_price: Number(c.discounted_price || 0),
@@ -192,6 +203,10 @@ const sanitizeCourse = (course, sections = [], lessons = [], creator = null) => 
         // the public course-details "This course includes" line so students
         // see the real expiry the admin set in the Pricing tab.
         expiry_period: c.expiry_period == null ? null : Number(c.expiry_period),
+        // Admin-set Score denominator + Lectures label for the details stats
+        // card. score_max NULL = no max set; lectures_label '' = renders "—".
+        score_max: c.score_max == null ? null : Number(c.score_max),
+        lectures_label: c.lectures_label || '',
         thumbnail: c.thumbnail || '',
         banner: c.banner || c.thumbnail || '',
         preview: c.preview || '',
@@ -372,6 +387,80 @@ const detailsBySlug = async (slug, clgId = null, verifiedUserId = null) => {
     // the UI shows "Go to Course" instead of a misleading "Buy" button.
     sanitized.purchased = verifiedUserId ? await paymentSvc.hasPaid(verifiedUserId, course.id) : false;
 
+    // "Assigned" = an admin/teacher delegated this course to the student via an
+    // explicit roster (individual or batch). These students bypass the paywall
+    // (same rule the player uses: rosterScoped skips payment), so the details
+    // page should offer "Go to Course" instead of "Buy this course". A global
+    // (rosterless) assignment does NOT count — those are still paywalled.
+    sanitized.assigned = false;
+    if (verifiedUserId) {
+        try {
+            const gate = await teachingSvc.visibleLessonIdsForStudent(course.id, verifiedUserId);
+            sanitized.assigned = gate.rosterScoped === true;
+        } catch (e) {
+            console.warn('[details] assignment check failed:', e.message);
+        }
+    }
+
+    // Student's own completion % for this course (DB-authoritative). 0 for an
+    // anonymous viewer or a not-yet-started course — drives the progress bar on
+    // the course-details page.
+    let progress = 0;
+    if (verifiedUserId) {
+        try {
+            const hist = await watchStore.getHistoryDb(course.id, verifiedUserId);
+            const done = hist?.completed_lesson?.length || 0;
+            const total = sanitized.lesson_count || 0;
+            progress = total ? Math.round((done / total) * 100) : 0;
+        } catch (e) {
+            console.warn('[details] progress read failed:', e.message);
+        }
+    }
+    sanitized.progress = progress;
+
+    // Class rank + earned score. The "class" = everyone TAKING this course
+    // (roster ∪ enrolled ∪ paid), so a student gets a live position the moment
+    // they're in the class — even before earning points (tie-broken by score).
+    // Earned score comes from the per-course leaderboard (lessons + quizzes).
+    // Only a viewer who is actually in the class gets a rank; others see "—".
+    // Best-effort: a failure here must never break the course-details page.
+    sanitized.class_total = 0;
+    sanitized.class_rank = null;
+    sanitized.student_score = 0;
+    if (verifiedUserId) {
+        try {
+            const rankingSvc = require('../services/RankingService');
+            const [lb, enrolledRows, paidRows, rosterIds] = await Promise.all([
+                rankingSvc.build({ courseId: course.id, meUserId: verifiedUserId, limit: 100 }),
+                UserProgress.findAll({ where: { course_id: course.id, enrolled: true }, attributes: ['user_id'], raw: true }),
+                Payment.findAll({ where: { course_id: course.id, status: 'paid' }, attributes: ['user_id'], raw: true }),
+                teachingSvc.studentsForCourse(course.id),
+            ]);
+
+            const classIds = new Set();
+            enrolledRows.forEach((r) => r.user_id && classIds.add(String(r.user_id)));
+            paidRows.forEach((r) => r.user_id && classIds.add(String(r.user_id)));
+            rosterIds.forEach((id) => classIds.add(String(id)));
+
+            const meId = String(verifiedUserId);
+            const viewerInClass = sanitized.purchased || sanitized.assigned || classIds.has(meId);
+            if (viewerInClass) classIds.add(meId);
+
+            const myScore = lb.me?.score || 0;
+            sanitized.student_score = myScore;
+            sanitized.class_total = classIds.size;
+            if (viewerInClass && classIds.size > 0) {
+                // Rank = 1 + classmates with a strictly higher score.
+                const higher = (lb.leaderboard || []).filter(
+                    (r) => classIds.has(String(r.user_id)) && Number(r.score) > myScore,
+                ).length;
+                sanitized.class_rank = higher + 1;
+            }
+        } catch (e) {
+            console.warn('[details] class rank read failed:', e.message);
+        }
+    }
+
     return {
         course: sanitized,
         reviews: [],
@@ -437,9 +526,31 @@ const detailsFirstActive = async () => {
 
 // userIdRaw lets the caller (server.js) pass in the requesting student. When
 // missing/invalid, progress fields render as zero (anonymous browse).
-const playerData = async (slug, lessonIdRaw, userIdRaw, { verifiedUserId = null } = {}) => {
+const playerData = async (slug, lessonIdRaw, userIdRaw, { verifiedUserId = null, verifiedRole = null } = {}) => {
     const course = await Course.findOne({ where: { slug } });
     if (!course) return null;
+
+    // Privileged viewer = the people who run the course, not consume it. They
+    // get FULL access to every section/lesson regardless of release or payment:
+    //   - any admin / root, and
+    //   - a teacher who owns this course (created it, or is in teacher_ids).
+    // Release-gating ("students only see what the teacher released") and the
+    // paywall apply ONLY to students. This must trust the VERIFIED role/id —
+    // never the spoofable x-user-id header.
+    const courseTeacherIds = safeJSON(course.teacher_ids, [])
+        .map((v) => String(v ?? '').trim())
+        .filter(Boolean);
+    const isPrivilegedViewer =
+        verifiedRole === 'admin' || verifiedRole === 'root' ||
+        (verifiedRole === 'teacher' && !!verifiedUserId && (
+            String(course.user_id || '') === String(verifiedUserId) ||
+            courseTeacherIds.includes(String(verifiedUserId))
+        ));
+    // Marketing/sample courses are a free public teaser: fully open to everyone
+    // (no drip, no teacher-release gating, no paywall) so a freshly-registered
+    // student can watch them in the normal player to get hooked on VR Robotics.
+    const isMarketing = !!course.is_marketing;
+    const bypassGating = isPrivilegedViewer || isMarketing;
 
     const sections = await sectionRepo.findByCourse(course.id);
     const sectionIds = sections.map((s) => s.id);
@@ -537,7 +648,9 @@ const playerData = async (slug, lessonIdRaw, userIdRaw, { verifiedUserId = null 
     const progress = totalLessons ? Math.round((completedIds.length / totalLessons) * 100) : 0;
 
     const lockedLessonIds = [];
-    if (course.enable_drip_content) {
+    // Drip (sequential unlock) also only applies to students — a privileged
+    // viewer (course teacher / admin) sees the whole curriculum unlocked.
+    if (course.enable_drip_content && !bypassGating) {
         let blocked = false;
         for (const sec of sanitized.sections) {
             for (const l of sec.lessons) {
@@ -555,17 +668,31 @@ const playerData = async (slug, lessonIdRaw, userIdRaw, { verifiedUserId = null 
     // calling the player with an arbitrary lesson_id. Free lessons stay open.
     // Courses with no teaching assignment are untouched (enforced === false).
     let delegated = false;
-    try {
+    // True only when the student matched an explicit roster (B2B school/batch
+    // delegation). The paywall below is skipped for those students; everyone
+    // else (B2C / global release) is still paywalled on top of release-gating.
+    let rosterScoped = false;
+    // Privileged viewers (the course's own teacher / admins) bypass release
+    // gating entirely — they need to see every lesson to teach and to decide
+    // what to release. Only students are gated. Marketing courses are open too.
+    if (!bypassGating) try {
         // Release-gating trusts ONLY a verified identity. If the request had no
         // valid token, verifiedUserId is null → on a delegated course nothing is
         // visible (everything locked, video src withheld). This prevents
         // unlocking another student's content by spoofing x-user-id.
         const gate = await teachingSvc.visibleLessonIdsForStudent(course.id, verifiedUserId);
+        rosterScoped = gate.rosterScoped === true;
         if (gate.enforced) {
             delegated = true;
             const { lockedLessonIds: gatedLocks, stripCurrent } = computeGating({
                 visibleLessonIds: gate.lessonIds,
-                freeLessonIds: flatLessons.filter((l) => l.is_free).map((l) => l.id),
+                // Teacher RELEASE is the master gate: a lesson is visible only
+                // when released, even if it's flagged is_free. (is_free still
+                // exempts a lesson from the PAYWALL below — free means "no
+                // payment required", not "skips the teacher's drip".) Passing an
+                // empty free list here is what makes "only released = enabled,
+                // otherwise disabled" hold for every lesson.
+                freeLessonIds: [],
                 allLessonIds: flatLessons.map((l) => l.id),
                 currentLessonId: lesson?.id ?? null,
                 alreadyLocked: lockedLessonIds,
@@ -589,13 +716,17 @@ const playerData = async (slug, lessonIdRaw, userIdRaw, { verifiedUserId = null 
     // who has PAID (verified identity). Free lessons stay open as a preview.
     // Independent of delegation: a paid course can also be teacher-released.
     let paywalled = false;
-    try {
-        // Delegated courses (school/batch) are governed by teacher releases, not
-        // by personal payment — don't double-gate those students.
+    // Same bypass as release-gating: the course's own teacher/admins — and
+    // marketing/sample courses (free teaser) — are never paywalled.
+    if (!bypassGating) try {
+        // B2B roster students (school/batch) are governed by teacher releases,
+        // not by personal payment — don't double-gate them. Everyone else
+        // (B2C / global release) still hits the paywall ON TOP of release-gating,
+        // so a paid lesson needs BOTH payment and a teacher release to unlock.
         const effectivePrice = Number(course.discounted_price) > 0
             ? Number(course.discounted_price) : Number(course.price || 0);
         const paid = verifiedUserId ? await paymentSvc.hasPaid(verifiedUserId, course.id) : false;
-        if (!delegated && isPaywalled({ isPaid: course.is_paid, price: effectivePrice, hasPaid: paid })) {
+        if (!rosterScoped && isPaywalled({ isPaid: course.is_paid, price: effectivePrice, hasPaid: paid })) {
             paywalled = true;
             const freeIds = new Set(flatLessons.filter((l) => l.is_free).map((l) => Number(l.id)));
             for (const l of flatLessons) {
@@ -744,7 +875,7 @@ const submitQuiz = async ({ quiz_id, user_id, score, total, answers }) => {
 // (which is the student-facing, college- and batch-scoped catalog) so this
 // preview can render on the anonymous home page without leaking enrolment
 // scope or pulling the heavier per-student progress hydration.
-const catalog = async ({ limit = 12, classFrom = null, classTo = null } = {}) => {
+const catalog = async ({ limit = 12, classFrom = null, classTo = null, track = null, search = null } = {}) => {
     // Optional class-bucket filter [classFrom, classTo]. The admin assigns a
     // course to one discrete bucket (e.g. "8–12" or "12–18"), and the navbar
     // filters by those same buckets, so we use CONTAINMENT (the course range
@@ -765,6 +896,22 @@ const catalog = async ({ limit = 12, classFrom = null, classTo = null } = {}) =>
         where[Op.and] = [
             { [Op.or]: [{ class_from: null }, { class_from: { [Op.gte]: cf } }] },
             { [Op.or]: [{ class_to: null }, { class_to: { [Op.lte]: ct } }] },
+        ];
+    }
+    // Optional track filter (course_type): 'engineering' or 'freshers'. Mirrors
+    // the navbar dropdown's ?track= links. 'general'/'all'/empty = no filter.
+    const t = String(track || '').trim().toLowerCase();
+    if (t === 'engineering' || t === 'freshers') {
+        where.course_type = t;
+    }
+    // Optional keyword search over title + short description (kid-friendly free
+    // text from the home/catalog search box). Case-insensitive substring match.
+    const q = String(search || '').trim();
+    if (q) {
+        const { Op } = require('sequelize');
+        where[Op.or] = [
+            { title: { [Op.iLike]: `%${q}%` } },
+            { short_description: { [Op.iLike]: `%${q}%` } },
         ];
     }
 
@@ -810,6 +957,12 @@ const catalog = async ({ limit = 12, classFrom = null, classTo = null } = {}) =>
             class_to: c.class_to,
             lesson_count: a.count,
             total_duration_secs: a.secs,
+            // Lets the dashboard decide "Go to Course" (free) vs "Buy this
+            // course" (paid + not yet accessible). Course attribute, not
+            // per-user, so it's safe in the shared/cached catalog.
+            is_paid: c.is_paid ?? 0,
+            // Free sample/teaser → always playable, shown with a "Free sample" badge.
+            is_marketing: !!c.is_marketing,
         };
     });
 };

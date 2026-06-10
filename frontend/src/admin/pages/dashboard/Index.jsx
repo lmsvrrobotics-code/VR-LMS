@@ -1,8 +1,27 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, Layers, GraduationCap, Users, ArrowUpRight, PieChart } from 'lucide-react';
+import { BookOpen, GraduationCap, Users, ArrowUpRight, PieChart, Star, MessageSquare, Presentation, MonitorPlay, UserPlus, TrendingUp } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from 'recharts';
 import { dashboardStats } from '../../api/admin';
 import { leadStats } from '../../api/leads';
+import { feedbackStats, teacherFeedbackStats } from '../../api/feedback';
+
+// Small bar chart of per-attribute averages (0-5) for a feedback direction.
+const FeedbackChart = ({ data, color }) => (
+    <ResponsiveContainer width="100%" height={220}>
+        <BarChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 4 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef0f6" />
+            <XAxis dataKey="short" tick={{ fontSize: 11, fill: '#6b7280' }} interval={0} />
+            <YAxis domain={[0, 5]} ticks={[0, 1, 2, 3, 4, 5]} tick={{ fontSize: 11, fill: '#6b7280' }} />
+            <Tooltip
+                cursor={{ fill: 'rgba(255,106,0,0.06)' }}
+                formatter={(v) => [`${Number(v).toFixed(1)} / 5`, 'Avg']}
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e0e5f3' }}
+            />
+            <Bar dataKey="value" fill={color} radius={[6, 6, 0, 0]} maxBarSize={46} />
+        </BarChart>
+    </ResponsiveContainer>
+);
 
 // Attractive stat card: colored icon badge, big bold number, soft gradient
 // background, left accent bar, and a hover lift. `accent` carries the metric's
@@ -48,11 +67,23 @@ export default function Dashboard() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [newLeads, setNewLeads] = useState(0);
+    const [fb, setFb] = useState(null);   // teacher → student (performance)
+    const [tfb, setTfb] = useState(null); // student → teacher (class ratings)
 
-    // Lead alert — best-effort; a failure here must not break the dashboard.
+    // Lead alert + both feedback summaries — best-effort; failures here must
+    // not break the dashboard.
     useEffect(() => {
         leadStats().then((s) => setNewLeads(s?.new || 0)).catch(() => {});
+        feedbackStats().then(setFb).catch(() => {});
+        teacherFeedbackStats().then(setTfb).catch(() => {});
     }, []);
+
+    // Build chart rows (short labels) from a feedback stats payload.
+    const chartData = (stats) => (stats?.attributes || []).map((a) => ({
+        short: a.label.split(/[\s/&]+/)[0].slice(0, 8),
+        label: a.label,
+        value: stats?.per_attribute?.[a.key] ?? 0,
+    }));
 
     // Pulled out of useEffect so the error-state Retry button can call it too.
     const load = async () => {
@@ -95,9 +126,15 @@ export default function Dashboard() {
 
     const cards = [
         { key: 'course_count', label: 'Total Courses', icon: BookOpen, to: '/admin/courses', accent: { solid: '#3b82f6', tint: 'rgba(59,130,246,0.10)' } },
-        { key: 'lesson_count', label: 'Total Lessons', icon: Layers, to: '/admin/courses', accent: { solid: '#8b5cf6', tint: 'rgba(139,92,246,0.10)' } },
+        // "Total Lessons" card removed from the UI by request (backend still
+        // returns lesson_count — logic untouched).
         { key: 'enrollment_count', label: 'Total Enrollments', icon: GraduationCap, to: '/admin/students', accent: { solid: '#12c093', tint: 'rgba(18,192,147,0.10)' } },
         { key: 'student_count', label: 'Total Students', icon: Users, to: '/admin/students', accent: { solid: '#FF6A00', tint: 'rgba(255,106,0,0.10)' } },
+        { key: 'teacher_count', label: 'Total Teachers', icon: GraduationCap, to: '/admin/teachers', accent: { solid: '#ec4899', tint: 'rgba(236,72,153,0.10)' } },
+        { key: 'demo_count', label: 'Total Demos', icon: Presentation, to: '/admin/demos', accent: { solid: '#16a34a', tint: 'rgba(22,163,74,0.10)' } },
+        { key: 'class_count', label: 'Total Classes', icon: MonitorPlay, to: '/admin/classes', accent: { solid: '#0ea5e9', tint: 'rgba(14,165,233,0.10)' } },
+        { key: 'lead_count', label: 'Total Leads', icon: UserPlus, to: '/admin/leads', accent: { solid: '#f59e0b', tint: 'rgba(245,158,11,0.10)' } },
+        { key: 'conversion_count', label: 'Conversions', icon: TrendingUp, to: '/admin/leads?status=converted', accent: { solid: '#14b8a6', tint: 'rgba(20,184,166,0.10)' } },
     ];
 
     const statusItems = [
@@ -133,8 +170,8 @@ export default function Dashboard() {
                 </Link>
             )}
 
-            {/* Stat cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* Stat cards — live counts so the admin sees real, never-stale data. */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {cards.map((c) => (
                     <StatCard
                         key={c.key}
@@ -146,6 +183,59 @@ export default function Dashboard() {
                     />
                 ))}
             </div>
+
+            {/* Feedback insights — statistical graphs for BOTH directions:
+                teacher→student performance evaluations and student→teacher class
+                ratings. Each links to the full feedback browser. */}
+            {((fb && fb.total_evaluations > 0) || (tfb && tfb.total_feedback > 0)) && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    {/* Teacher → Student */}
+                    <div className="rounded-ol-12 border border-ebordermuted bg-white p-5">
+                        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                            <div className="flex items-center gap-2">
+                                <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(255,106,0,0.12)' }}>
+                                    <Star className="w-5 h-5 text-skin" />
+                                </span>
+                                <div>
+                                    <h4 className="text-[15px] font-bold text-dark m-0 leading-tight">Student Performance</h4>
+                                    <p className="text-[12px] text-gray m-0">Teacher evaluations of students</p>
+                                </div>
+                            </div>
+                            <Link to="/admin/feedback" className="text-[12px] text-skin font-semibold inline-flex items-center gap-1">View <ArrowUpRight className="w-3.5 h-3.5" /></Link>
+                        </div>
+                        <div className="flex items-center gap-5 mb-3">
+                            <div><span className="text-[22px] font-extrabold text-dark">{fb?.total_evaluations ?? 0}</span><span className="text-[12px] text-gray ml-1.5">evaluations</span></div>
+                            <div className="inline-flex items-center gap-1"><span className="text-[22px] font-extrabold text-dark">{(fb?.overall_avg ?? 0).toFixed(1)}</span><span className="text-yellow-400 text-[16px]">★</span><span className="text-[12px] text-gray ml-1">avg</span></div>
+                        </div>
+                        {fb && fb.total_evaluations > 0
+                            ? <FeedbackChart data={chartData(fb)} color="#FF6A00" />
+                            : <p className="text-[13px] text-gray py-8 text-center">No evaluations yet.</p>}
+                    </div>
+
+                    {/* Student → Teacher */}
+                    <div className="rounded-ol-12 border border-ebordermuted bg-white p-5">
+                        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                            <div className="flex items-center gap-2">
+                                <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(37,99,235,0.12)' }}>
+                                    <MessageSquare className="w-5 h-5" style={{ color: '#2563eb' }} />
+                                </span>
+                                <div>
+                                    <h4 className="text-[15px] font-bold text-dark m-0 leading-tight">Teacher Ratings</h4>
+                                    <p className="text-[12px] text-gray m-0">Student ratings of classes</p>
+                                </div>
+                            </div>
+                            <Link to="/admin/feedback" className="text-[12px] text-skin font-semibold inline-flex items-center gap-1">View <ArrowUpRight className="w-3.5 h-3.5" /></Link>
+                        </div>
+                        <div className="flex items-center gap-5 mb-3">
+                            <div><span className="text-[22px] font-extrabold text-dark">{tfb?.total_feedback ?? 0}</span><span className="text-[12px] text-gray ml-1.5">responses</span></div>
+                            <div className="inline-flex items-center gap-1"><span className="text-[22px] font-extrabold text-dark">{(tfb?.overall_avg ?? 0).toFixed(1)}</span><span className="text-yellow-400 text-[16px]">★</span><span className="text-[12px] text-gray ml-1">avg</span></div>
+                        </div>
+                        {tfb && tfb.total_feedback > 0
+                            ? <FeedbackChart data={chartData(tfb)} color="#2563eb" />
+                            : <p className="text-[13px] text-gray py-8 text-center">No class feedback yet.</p>}
+                    </div>
+                </div>
+            )}
 
             {/* Course status breakdown */}
             <div className="rounded-ol-12 border border-ebordermuted bg-white p-5">

@@ -18,6 +18,10 @@ module.exports = (sequelize) => {
         class_to: { type: DataTypes.SMALLINT, allowNull: true },
         is_paid: { type: DataTypes.BOOLEAN, defaultValue: false },
         is_best: { type: DataTypes.BOOLEAN, defaultValue: false },
+        // Free public sample/teaser course — visible & fully playable to every
+        // registered student (bypasses payment + release gating) to attract
+        // new sign-ups. Managed by the "Marketing course" toggle on the course.
+        is_marketing: { type: DataTypes.BOOLEAN, defaultValue: false },
         price: { type: DataTypes.FLOAT, defaultValue: 0 },
         discounted_price: { type: DataTypes.FLOAT, defaultValue: 0 },
         discount_flag: { type: DataTypes.BOOLEAN, defaultValue: false },
@@ -44,6 +48,14 @@ module.exports = (sequelize) => {
         batch_ids: { type: DataTypes.JSON, allowNull: true, defaultValue: [] },
         average_rating: { type: DataTypes.FLOAT, defaultValue: 0 },
         expiry_period: { type: DataTypes.INTEGER, allowNull: true },
+        // Admin-set "out of" for the Score row on the course-details page. The
+        // student's earned points come from the per-course leaderboard
+        // (RankingService); this is just the denominator the admin chooses.
+        // NULL = no max set (the page then shows the earned points alone).
+        score_max: { type: DataTypes.INTEGER, allowNull: true },
+        // Admin-set free text for the "Lectures" row on course-details
+        // (e.g. "2 Hours/ Week"). NULL/empty renders as "—".
+        lectures_label: { type: DataTypes.STRING(255), allowNull: true },
         // Whether completion of this course grants a certificate. Surfaced on
         // the public course-details page (the "Includes certificate" line) and
         // gates the certificate-issue flow.

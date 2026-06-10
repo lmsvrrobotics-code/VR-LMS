@@ -121,6 +121,7 @@ export default {
 			},
 			transitionTimingFunction: {
 				'smooth': 'var(--transition-smooth)',
+				'theme-spring': 'cubic-bezier(0.34, 1.56, 0.64, 1)',
 			},
 			keyframes: {
 				'accordion-down': {

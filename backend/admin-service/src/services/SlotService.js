@@ -5,6 +5,8 @@ const authDb = require('../config/authDatabase');
 const { HttpError } = require('../middlewares/error');
 
 const PER_PAGE = 10;
+// Hard cap so the calendar feed (per_page) can't trigger an unbounded scan.
+const MAX_PER_PAGE = 1000;
 
 // Normalise an incoming id list (array, or JSON string, or CSV) into a clean
 // array of non-empty string ids. The admin form sends JSON arrays.
@@ -24,8 +26,8 @@ const parseDate = (val) => {
     return Number.isNaN(d.getTime()) ? null : d;
 };
 
-const list = async ({ page = 1, search } = {}) => {
-    const limit = PER_PAGE;
+const list = async ({ page = 1, search, per_page } = {}) => {
+    const limit = Math.min(Math.max(Number(per_page) || PER_PAGE, 1), MAX_PER_PAGE);
     const offset = (Number(page) - 1) * limit;
     try {
         const { count, rows } = await slotRepo.paginate({ search, limit, offset });

@@ -389,8 +389,14 @@ All colors MUST be HSL.
 .prose-custom pre { background: #0f1620; color: #fff; font-size: 13px; padding: 12px; border-radius: 6px; overflow-x: auto; margin-bottom: 12px; }
 
 /* Course player layout (ported from mern-course) */
-.player-shell { min-height: 100vh; background: #f8f9ff; }
-.player-container { max-width: 1400px; margin: 0 auto; padding: 0 1.25rem; }
+.player-shell {
+  min-height: 100vh;
+  background:
+    radial-gradient(900px 500px at 85% -5%, rgba(255, 106, 0, 0.08), transparent 60%),
+    radial-gradient(700px 500px at 0% 100%, rgba(31, 137, 130, 0.06), transparent 55%),
+    linear-gradient(180deg, #f6f7fb 0%, #eef0f7 100%);
+}
+.player-container { max-width: 1480px; margin: 0 auto; padding: 0 1.25rem; }
 
 /* Player-scoped brand color: retarget the global `skin` utilities to the
    player's teal (#FF6A00) without disturbing the rest of the app (admin,
@@ -674,4 +680,230 @@ button, .btn, [role="button"] { transition: transform .2s ease, box-shadow .2s e
   .text-gradient { animation: none; }
   .reveal-ready .card-ngo,
   .reveal-ready [data-reveal] { opacity: 1; transform: none; transition: none; }
+}
+
+/* ============================================================
+   Dashboard dark mode (scoped)
+   ------------------------------------------------------------
+   These rules ONLY apply inside a dashboard whose root carries
+   the `dark` class plus a per-surface hook (`dash-dark`,
+   `teacher-dark`, `admin-dark`). The public marketing site never
+   gets these classes, so it always stays in the light brand look.
+
+   The shadcn token block `.dark { --background … }` (defined above)
+   already flips every `bg-card`/`bg-muted`/`text-muted-foreground`
+   /`border-border` utility automatically. The rules below only
+   repaint the hardcoded (non-token) colors the dashboards use so
+   the dark theme reads as one cohesive, premium surface.
+   ============================================================ */
+
+/* Smooth the flip so toggling feels deliberate, not jarring. */
+.dash-dark, .dash-dark *,
+.teacher-dark, .teacher-dark *,
+.admin-dark, .admin-dark * {
+  transition: background-color .35s ease, border-color .35s ease, color .35s ease;
+}
+
+/* ---- Shared: lift any un-tokened body text to a light ink ---- */
+.dash-dark, .teacher-dark, .admin-dark { color: hsl(var(--foreground)); }
+
+/* ---- Student dashboard ----
+   The shell (bg-background/bg-card) flips via tokens, but the inner tab content
+   (Programs, Leaderboard, Profile, SectionHeader) is built with hardcoded light
+   utilities. Repaint those so the whole dashboard is cohesively dark. */
+.dash-dark .bg-gradient-hero { background: linear-gradient(135deg, #FF6A00 0%, #FF9A4D 100%); }
+/* Section backdrop (the panel behind the course cards) recedes; cards lift. */
+.dash-dark .bg-gradient-subtle,
+.dash-dark .bg-gradient-card { background: #0f0f14; }
+.dash-dark .bg-white { background-color: #16161f; }
+.dash-dark .bg-gray-50 { background-color: #14141c; }
+/* Borders */
+.dash-dark .border-gray-100,
+.dash-dark .border-gray-200 { border-color: rgba(255, 255, 255, 0.08); }
+.dash-dark .border-emerald-200 { border-color: rgba(16, 185, 129, 0.3); }
+/* Text — greys to readable light inks, headings brightest. */
+.dash-dark .text-gray-500 { color: #9aa3b2; }
+.dash-dark .text-gray-600 { color: #aab2c0; }
+.dash-dark .text-gray-700,
+.dash-dark .text-gray-800,
+.dash-dark .text-gray-900 { color: #e6e8ee; }
+/* "Intermediate" / level chips. */
+.dash-dark .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.15); }
+.dash-dark .text-emerald-700 { color: #6ee7b7; }
+/* Inputs inside the dashboard. */
+.dash-dark input,
+.dash-dark textarea,
+.dash-dark select {
+  background-color: #101019;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: hsl(var(--foreground));
+}
+.dash-dark input::placeholder,
+.dash-dark textarea::placeholder { color: #6b7280; }
+
+/* Admin-themed building blocks reused inside the student/teacher dashboards
+   (e.g. the Course Details page, which renders inside the student shell, and
+   the teacher's admin-theme course tools). These carry hardcoded near-black
+   ink + light surfaces — repaint so headings/body don't vanish on dark. */
+.dash-dark .text-dark,
+.teacher-dark .text-dark { color: #e6e8ee; }
+.dash-dark .text-muted,
+.teacher-dark .text-muted,
+.admin-dark .text-muted { color: #9aa3b2; }
+/* Progress / neutral track fills. */
+.dash-dark .bg-gray-200,
+.teacher-dark .bg-gray-200 { background-color: rgba(255, 255, 255, 0.12); }
+/* Rich-text (course description) blocks. */
+.dash-dark .prose-custom,
+.teacher-dark .prose-custom,
+.admin-dark .prose-custom { color: #c7ccd6; }
+.dash-dark .prose-custom h1, .dash-dark .prose-custom h2, .dash-dark .prose-custom h3,
+.teacher-dark .prose-custom h1, .teacher-dark .prose-custom h2, .teacher-dark .prose-custom h3,
+.admin-dark .prose-custom h1, .admin-dark .prose-custom h2, .admin-dark .prose-custom h3 { color: #e6e8ee; }
+.dash-dark .prose-custom code,
+.teacher-dark .prose-custom code,
+.admin-dark .prose-custom code { background: #101019; color: #e6e8ee; }
+
+/* ===================== Teacher dashboard ===================== */
+/* Section cards / panels rendered as solid white. */
+.teacher-dark .bg-white { background-color: #16161f; }
+/* Warm cream blocks (earnings / dispute banner / incentive rows). */
+.teacher-dark .bg-\[\#fff6ee\] { background-color: #1d1d28; }
+/* Sidebar nav hover wash. */
+.teacher-dark .hover\:bg-orange-50:hover { background-color: rgba(255, 106, 0, 0.12); }
+/* "View details" / link accents — soften the blue for dark. */
+.teacher-dark .text-blue-600 { color: #7aa7ff; }
+/* Muted helper headings keep readable contrast. */
+.teacher-dark .text-muted-foreground { color: #9aa3b2; }
+/* Inputs inside teacher panels. */
+.teacher-dark input,
+.teacher-dark textarea,
+.teacher-dark select {
+  background-color: #101019;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: hsl(var(--foreground));
+}
+.teacher-dark input::placeholder,
+.teacher-dark textarea::placeholder { color: #6b7280; }
+
+/* ====================== Admin dashboard ====================== */
+/* Root surface + base ink (two classes beats the `.admin-theme` rule). */
+.admin-theme.admin-dark { background: #0f0f14; color: #c7ccd6; }
+.admin-dark .bg-bodybg { background-color: #0f0f14; }
+/* Sidebar, cards, stat cards, tables — every white surface. */
+.admin-dark .bg-white,
+.admin-dark .ol-card,
+.admin-dark .stat-card { background-color: #16161f; }
+/* Hardcoded sidebar/card borders. */
+.admin-dark .border-border { border-color: rgba(255, 255, 255, 0.08) !important; }
+.admin-dark .bg-ebordermuted { background-color: rgba(255, 255, 255, 0.1); }
+/* Sidebar text tones. */
+.admin-dark .text-gray { color: #9aa3b2; }
+.admin-dark .text-dark { color: #e6e8ee; }
+/* Active nav / hover wash (was a pale cream) → faint brand tint. */
+.admin-dark .bg-lightgreen { background-color: rgba(255, 106, 0, 0.14); }
+.admin-dark .hover\:bg-lightgreen:hover { background-color: rgba(255, 106, 0, 0.14); }
+/* Tables. */
+.admin-dark .e-table thead th {
+  background-color: #1c1c26;
+  color: #e6e8ee;
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+.admin-dark .e-table tbody td {
+  color: #c7ccd6;
+  border-bottom-color: rgba(255, 255, 255, 0.07);
+}
+.admin-dark .e-table tbody tr:hover { background-color: rgba(255, 106, 0, 0.08); }
+/* Form controls. */
+.admin-dark .ol-form-control,
+.admin-dark input,
+.admin-dark textarea,
+.admin-dark select {
+  background-color: #101019;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #c7ccd6;
+}
+.admin-dark .ol-form-label { color: #c7ccd6; }
+.admin-dark .ol-btn-outline-secondary { background-color: #16161f; border-color: rgba(255, 255, 255, 0.14); color: #e6e8ee; }
+.admin-dark .edit-badge { background-color: #16161f; }
+/* Pagination + page-link borders. */
+.admin-dark .e-page-link { border-color: rgba(255, 255, 255, 0.14); color: #c7ccd6; }
+
+/* ---- react-big-calendar dark theme (teacher + admin calendars) ----
+   rbc ships a light-only stylesheet; repaint its grid, toolbar, headers,
+   today/off-range cells and agenda so the calendar matches the dark shell.
+   Scoped under the dashboard dark wrappers so the public site is untouched. */
+.teacher-dark .rbc-toolbar,
+.admin-dark .rbc-toolbar { color: #e6e8ee; }
+.teacher-dark .rbc-toolbar button,
+.admin-dark .rbc-toolbar button {
+  color: #c7ccd6;
+  border-color: rgba(255, 255, 255, 0.16);
+  background-color: transparent;
+}
+.teacher-dark .rbc-toolbar button:hover,
+.admin-dark .rbc-toolbar button:hover,
+.teacher-dark .rbc-toolbar button:focus,
+.admin-dark .rbc-toolbar button:focus {
+  background-color: rgba(255, 106, 0, 0.16);
+  color: #fff;
+  border-color: rgba(255, 106, 0, 0.5);
+}
+.teacher-dark .rbc-toolbar button.rbc-active,
+.admin-dark .rbc-toolbar button.rbc-active {
+  background-color: rgba(255, 106, 0, 0.9);
+  color: #fff;
+  border-color: rgba(255, 106, 0, 0.9);
+  box-shadow: none;
+}
+.teacher-dark .rbc-toolbar button.rbc-active:hover,
+.admin-dark .rbc-toolbar button.rbc-active:hover { background-color: #FF6A00; color: #fff; }
+
+/* Grid borders + headers */
+.teacher-dark .rbc-month-view,
+.admin-dark .rbc-month-view,
+.teacher-dark .rbc-time-view,
+.admin-dark .rbc-time-view,
+.teacher-dark .rbc-header,
+.admin-dark .rbc-header,
+.teacher-dark .rbc-month-row,
+.admin-dark .rbc-month-row,
+.teacher-dark .rbc-day-bg + .rbc-day-bg,
+.admin-dark .rbc-day-bg + .rbc-day-bg,
+.teacher-dark .rbc-time-content,
+.admin-dark .rbc-time-content,
+.teacher-dark .rbc-time-header-content,
+.admin-dark .rbc-time-header-content,
+.teacher-dark .rbc-timeslot-group,
+.admin-dark .rbc-timeslot-group,
+.teacher-dark .rbc-time-content > * + * > *,
+.admin-dark .rbc-time-content > * + * > * {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.teacher-dark .rbc-header,
+.admin-dark .rbc-header { color: #9aa3b2; font-weight: 600; }
+.teacher-dark .rbc-date-cell,
+.admin-dark .rbc-date-cell { color: #c7ccd6; }
+.teacher-dark .rbc-button-link,
+.admin-dark .rbc-button-link { color: inherit; }
+
+/* Off-range (other month) days + today highlight */
+.teacher-dark .rbc-off-range-bg,
+.admin-dark .rbc-off-range-bg { background-color: rgba(0, 0, 0, 0.25); }
+.teacher-dark .rbc-off-range,
+.admin-dark .rbc-off-range { color: #5b6472; }
+.teacher-dark .rbc-today,
+.admin-dark .rbc-today { background-color: rgba(255, 106, 0, 0.1); }
+
+/* "+n more" link + agenda view */
+.teacher-dark .rbc-show-more,
+.admin-dark .rbc-show-more { background-color: transparent; color: #FF9A4D; }
+.teacher-dark .rbc-agenda-view table.rbc-agenda-table,
+.admin-dark .rbc-agenda-view table.rbc-agenda-table,
+.teacher-dark .rbc-agenda-view table.rbc-agenda-table tbody > tr > td,
+.admin-dark .rbc-agenda-view table.rbc-agenda-table tbody > tr > td,
+.teacher-dark .rbc-agenda-view table.rbc-agenda-table thead > tr > th,
+.admin-dark .rbc-agenda-view table.rbc-agenda-table thead > tr > th {
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #c7ccd6;
 }

@@ -66,7 +66,7 @@
 //           {tabs.map((tab) => (
 //             <Button
 //               key={tab.value}
-//                className={`w-full justify-start text-black bg-transparent border border-black/2 ${
+//                className={`w-full justify-start text-black dark:text-foreground bg-transparent border border-black/2 dark:border-white/10 ${
 //     activeTab === tab.value
 //       ? "bg-[#FF6A00] text-white hover:bg-gradient-hero"
 //       : "hover:bg-gradient-hero"
@@ -145,7 +145,7 @@
 //         {tabs.map((tab) => (
 //           <Button
 //               key={tab.value}
-//                className={`w-full justify-start text-black bg-transparent border border-black/2 ${
+//                className={`w-full justify-start text-black dark:text-foreground bg-transparent border border-black/2 dark:border-white/10 ${
 //     activeTab === tab.value
 //       ? "bg-[#FF6A00] text-white hover:bg-gradient-hero"
 //       : "hover:bg-gradient-hero"
@@ -225,17 +225,18 @@ import { useAuth } from "@/hooks/useAuth";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { BRAND } from "@/branding";
 const Logo = BRAND.logo; // VR Robotics Academy logo (hosted)
-import Overview from "./Overview";
 import ProfilePage from "./ProfilePage";
 import SectionHeader from "./SectionHeader";
 import ProgramsPage from "./Programspage";
-import MyCoursesGrid from "@/components/course/MyCoursesGrid";
 import Leaderboard from "@/components/course/Leaderboard";
+import ClassFeedbackPage from "./ClassFeedbackPage";
 import NotificationsPage from "./NotificationsPage";
+import FeedbackFormsInbox from "./FeedbackFormsInbox";
 import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { useDashboardTheme } from "@/hooks/useDashboardTheme";
 
 import {
-  BookOpen,
   User,
   GraduationCap,
   CreditCard,
@@ -243,14 +244,15 @@ import {
   LogOut,
   Target,
   Trophy,
+  Star,
   Menu,
   X,
 } from "lucide-react";
 
 const tabs = [
-  { value: "overview", label: "Overview", icon: BookOpen },
   { value: "courses", label: "My Courses", icon: GraduationCap },
   { value: "leaderboard", label: "Leaderboard", icon: Trophy },
+  { value: "feedback", label: "Class Feedback", icon: Star },
   { value: "profile", label: "Profile", icon: User },
   // { value: "payments", label: "Payments", icon: CreditCard },
 ];
@@ -264,7 +266,7 @@ interface StudentDashboardProps {
   contentOverride?: { title: string; node: React.ReactNode };
 }
 
-const VALID_TABS = ["overview", "courses", "leaderboard", "notifications", "profile"] as const;
+const VALID_TABS = ["courses", "leaderboard", "feedback", "feedback-forms", "notifications", "profile"] as const;
 
 const StudentDashboard = ({ contentOverride }: StudentDashboardProps = {}) => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -276,12 +278,13 @@ const StudentDashboard = ({ contentOverride }: StudentDashboardProps = {}) => {
   const initialTab = (() => {
     const fromUrl = searchParams.get("tab");
     if (fromUrl && (VALID_TABS as readonly string[]).includes(fromUrl)) return fromUrl;
-    return contentOverride ? "courses" : "overview";
+    return "courses";
   })();
 
   const [activeTab, setActiveTab] = useState<string>(initialTab);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, logoutUser, loading } = useAuth();
+  const { isDark } = useDashboardTheme();
   const navigate = useNavigate();
 
   const goToTab = (value: string) => {
@@ -329,20 +332,25 @@ const StudentDashboard = ({ contentOverride }: StudentDashboardProps = {}) => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-background">
+    <div
+      className={`min-h-screen flex flex-col md:flex-row bg-background ${
+        isDark ? "dark dash-dark" : ""
+      }`}
+    >
       {/* Sidebar - Desktop */}
       <aside className="hidden md:flex md:flex-col fixed left-0 top-0 h-screen w-64 border-r bg-card z-40">
-        <div className="flex items-center gap-2 p-4 border-b">
+        <div className="flex items-center justify-between gap-2 p-4 border-b">
           <Link to="/" aria-label="Go to home">
             <img src={Logo} alt="Logo" className="w-15 h-15 rounded-lg object-cover" />
           </Link>
+          <ThemeToggle />
         </div>
 
         <nav className="flex-1 p-4 space-y-2">
           {tabs.map((tab) => (
             <Button
               key={tab.value}
-              className={`w-full justify-start text-black bg-transparent border border-black/2 ${
+              className={`w-full justify-start text-black dark:text-foreground bg-transparent border border-black/2 dark:border-white/10 ${
                 activeTab === tab.value
                   ? "bg-[#FF6A00] text-white hover:bg-gradient-hero"
                   : "hover:bg-gradient-hero"
@@ -413,14 +421,17 @@ const StudentDashboard = ({ contentOverride }: StudentDashboardProps = {}) => {
                   className="h-15 w-15 rounded-lg object-cover"
                 />
               </Link>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setSidebarOpen(false)}
-                className="hover:bg-red-100"
-              >
-                <X className="h-10 w-10 text-[#FF6A00]-500" />
-              </Button>
+              <div className="flex items-center gap-2">
+                <ThemeToggle />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSidebarOpen(false)}
+                  className="hover:bg-red-100"
+                >
+                  <X className="h-10 w-10 text-[#FF6A00]-500" />
+                </Button>
+              </div>
             </div>
 
             {/* User Info - Mobile */}
@@ -439,7 +450,7 @@ const StudentDashboard = ({ contentOverride }: StudentDashboardProps = {}) => {
               {tabs.map((tab) => (
                 <Button
                   key={tab.value}
-                  className={`w-full justify-start text-black bg-transparent border border-black/2 ${
+                  className={`w-full justify-start text-black dark:text-foreground bg-transparent border border-black/2 dark:border-white/10 ${
                     activeTab === tab.value
                       ? "bg-[#FF6A00] text-white hover:bg-gradient-hero"
                       : "hover:bg-gradient-hero"
@@ -487,23 +498,27 @@ const StudentDashboard = ({ contentOverride }: StudentDashboardProps = {}) => {
           </>
         ) : (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsContent value="overview">
-            <SectionHeader title="Dashboard" student={studentData} />
-            <Overview />
-          </TabsContent>
-
           <TabsContent value="courses">
-            <SectionHeader title="My Courses" student={studentData} />
-            {/* Owned courses (paid ∪ enrolled ∪ delegated) from the canonical
-                lms_admin /my-courses; renders nothing when the student has none,
-                leaving the program browser below as the entry point. */}
-            <MyCoursesGrid />
+            <SectionHeader title="" student={studentData} />
+            {/* All courses to browse / join, with their progress, come from the
+                Programs view. The separate owned-courses progress cards were
+                removed by request. */}
             <ProgramsPage />
           </TabsContent>
 
           <TabsContent value="leaderboard">
             <SectionHeader title="Leaderboard" student={studentData} />
             <Leaderboard />
+          </TabsContent>
+
+          <TabsContent value="feedback">
+            <SectionHeader title="Class Feedback" student={studentData} />
+            <ClassFeedbackPage />
+          </TabsContent>
+
+          <TabsContent value="feedback-forms">
+            <SectionHeader title="Feedback Forms" student={studentData} />
+            <FeedbackFormsInbox />
           </TabsContent>
 
           <TabsContent value="notifications">

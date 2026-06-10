@@ -16,8 +16,14 @@
 import { getProfile } from "./authApi";
 import { getMyProgramRequest } from "./programRequestApi";
 import { getUserProgress } from "./userProgressApi";
-import { listMyCertificates } from "./course/courseApi";
+import { listMyCertificates, getMyTeacherFeedback } from "./course/courseApi";
 import { listLiveClasses } from "@/zoom-live-class/player/liveClassApi";
+import { listPendingForms } from "./feedbackFormsApi";
+
+// A live class is treated as "done" (feedback-ready) once this long after its
+// scheduled start. LiveClass has no status column, so completion is derived
+// from class_date_and_time + this window.
+const LIVE_CLASS_SESSION_MS = 60 * 60 * 1000; // 1 hour
 
 // Pass mark — kept in sync with Programspage.tsx / Assesments.jsx.
 export const PASS_THRESHOLD = 50;
@@ -59,6 +65,14 @@ const writeSeen = (ids: string[]) => {
   }
 };
 
+// Minimal shapes for the loosely-typed data sources this feed aggregates.
+interface ProfileData { preScore?: number | string | null; postScore?: number | string | null }
+interface ProgramReq { id?: number | string; program?: string; created_at?: string }
+interface ProgressRow { enrolled?: boolean; course_id?: number | string }
+interface MyFeedbackRow { course_id?: number | string | null }
+interface LiveClassRow { id: number | string; class_topic?: string; class_date_and_time?: string; host?: { name?: string } }
+interface CertRow { id?: number | string; identifier?: string; created_at?: string; course?: { title?: string } }
+
 /**
  * Build the notifications feed by aggregating existing student-flow data.
  * Each source is fetched independently; a failing source is skipped so the
@@ -70,7 +84,7 @@ export async function buildFeed(): Promise<FeedItem[]> {
   // 1. Pre / post-assessment — only once actually TAKEN (score != null).
   try {
     const res = await getProfile();
-    const data: any = res?.data ?? {};
+    const data = (res?.data ?? {}) as ProfileData;
 
     if (data.preScore != null) {
       const pre = Number(data.preScore);
@@ -104,7 +118,7 @@ export async function buildFeed(): Promise<FeedItem[]> {
 
   // 2. Program request received.
   try {
-    const request: any = await getMyProgramRequest();
+    const request = (await getMyProgramRequest()) as ProgramReq | null;
     if (request && request.program) {
       feed.push({
         id: `program-request-${request.id ?? "x"}`,
@@ -120,36 +134,67 @@ export async function buildFeed(): Promise<FeedItem[]> {
     /* skip program-request section */
   }
 
-  // 3. Live classes scheduled on enrolled courses (upcoming/live only).
+  // 3. Live classes on enrolled courses. Upcoming/live → "join" reminder.
+  //    Once a class has ENDED → a "share your feedback" prompt that deep-links
+  //    to the Class Feedback tab — UNLESS the student already rated that course
+  //    (so we don't nag after they've submitted).
   try {
-    const progress: any = await getUserProgress();
-    const rows: any[] = progress?.rows ?? [];
+    const progress = (await getUserProgress()) as { rows?: ProgressRow[] };
+    const rows: ProgressRow[] = progress?.rows ?? [];
     const courseIds = [
       ...new Set(
-        rows.filter((r) => r.enrolled && r.course_id).map((r) => r.course_id)
+        rows.filter((r) => r.enrolled && r.course_id).map((r) => r.course_id as number | string)
       ),
     ];
+
+    // Courses this student has already given class feedback for.
+    let ratedCourseIds = new Set<string>();
+    try {
+      const mine = (await getMyTeacherFeedback()) as MyFeedbackRow[];
+      ratedCourseIds = new Set(mine.map((f) => String(f.course_id)).filter((x) => x && x !== "null"));
+    } catch {
+      /* no feedback yet / not signed in */
+    }
+
     const perCourse = await Promise.all(
       courseIds.map((cid) =>
         listLiveClasses(cid)
-          .then((r: any) => r.live_classes || [])
-          .catch(() => [])
+          .then((r) => ({ cid, list: ((r as { live_classes?: LiveClassRow[] }).live_classes || []) }))
+          .catch(() => ({ cid, list: [] as LiveClassRow[] }))
       )
     );
-    for (const list of perCourse) {
+    for (const { cid, list } of perCourse) {
       for (const lc of list) {
-        if (lc.status === "completed" || lc.status === "finished") continue;
-        feed.push({
-          id: `live-class-${lc.id}`,
-          iconKey: "video",
-          severity: "info",
-          title: "Live class scheduled",
-          body:
-            `"${lc.class_topic}"` +
-            (lc.host?.name ? ` with ${lc.host.name}` : "") +
-            ". Join from the course player's Live class tab.",
-          when: lc.class_date_and_time,
-        });
+        const startMs = lc.class_date_and_time ? new Date(lc.class_date_and_time).getTime() : NaN;
+        const ended = !Number.isNaN(startMs) && startMs + LIVE_CLASS_SESSION_MS < Date.now();
+        if (ended) {
+          // Class is over → prompt for feedback (skip if already rated).
+          if (ratedCourseIds.has(String(cid))) continue;
+          feed.push({
+            id: `class-feedback-${lc.id}`,
+            iconKey: "video",
+            severity: "info",
+            title: "Share your class feedback",
+            body:
+              `Your live class "${lc.class_topic}" has ended` +
+              (lc.host?.name ? ` with ${lc.host.name}` : "") +
+              ". Tap to rate the class and your teacher.",
+            when: lc.class_date_and_time,
+            link: "/dashboard?tab=feedback",
+          });
+        } else {
+          feed.push({
+            id: `live-class-${lc.id}`,
+            iconKey: "video",
+            severity: "info",
+            title: "Live class scheduled",
+            body:
+              `"${lc.class_topic}"` +
+              (lc.host?.name ? ` with ${lc.host.name}` : "") +
+              ". Join from the course player's Live class tab.",
+            when: lc.class_date_and_time,
+          });
+        }
       }
     }
   } catch {
@@ -158,8 +203,8 @@ export async function buildFeed(): Promise<FeedItem[]> {
 
   // 4. Certificates earned.
   try {
-    const res: any = await listMyCertificates();
-    const certs: any[] = res?.certificates ?? [];
+    const res = (await listMyCertificates()) as { certificates?: CertRow[] };
+    const certs: CertRow[] = res?.certificates ?? [];
     for (const c of certs) {
       feed.push({
         id: `certificate-${c.id ?? c.identifier}`,
@@ -175,6 +220,29 @@ export async function buildFeed(): Promise<FeedItem[]> {
     }
   } catch {
     /* skip certificate section */
+  }
+
+  // 5. Teacher-authored feedback forms enabled for this student that they
+  //    haven't submitted yet. One-time: once submitted, the server stops
+  //    returning it, so the notification disappears on its own.
+  try {
+    const pending = await listPendingForms();
+    for (const f of pending) {
+      feed.push({
+        id: `feedback-form-${f.id}`,
+        iconKey: "mail",
+        severity: "info",
+        title: "New feedback form",
+        body:
+          `Your teacher${f.teacher_name ? ` ${f.teacher_name}` : ""} asked for your feedback` +
+          (f.title ? `: "${f.title}"` : "") +
+          ". Tap to fill it in — it only takes a minute.",
+        when: f.enabled_at || undefined,
+        link: "/dashboard?tab=feedback-forms",
+      });
+    }
+  } catch {
+    /* skip feedback-form section */
   }
 
   // Newest first when a date is known; undated items keep insertion order.

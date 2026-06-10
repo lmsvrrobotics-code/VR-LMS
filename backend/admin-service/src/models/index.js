@@ -28,7 +28,6 @@ const Book = require('./Book')(sequelize);
 const Slot = require('./Slot')(sequelize);
 const Demo = require('./Demo')(sequelize);
 const ClassSession = require('./ClassSession')(sequelize);
-const TimetableEntry = require('./TimetableEntry')(sequelize);
 const Project = require('./Project')(sequelize);
 const Testimonial = require('./Testimonial')(sequelize);
 const Resource = require('./Resource')(sequelize);
@@ -47,8 +46,19 @@ const Lead = require('./Lead')(sequelize);
 const Payment = require('./Payment')(sequelize);
 // Admin-editable key/value app settings (SMTP/email config from dashboard).
 const AppSetting = require('./AppSetting')(sequelize);
+// Learning centers shown on the public Locations page (admin-managed).
+const Location = require('./Location')(sequelize);
+// Student → teacher/class feedback (inverse of StudentRecord evaluation).
+const TeacherFeedback = require('./TeacherFeedback')(sequelize);
+// Marketing/demo videos shown to students (CEO intro + sample teasers).
+const DemoVideo = require('./DemoVideo')(sequelize);
+// Teacher-authored dynamic feedback forms + their one-time student responses.
+const FeedbackForm = require('./FeedbackForm')(sequelize);
+const FeedbackResponse = require('./FeedbackResponse')(sequelize);
+// Public "Send us a Message" contact submissions (admin inbox).
+const ContactMessage = require('./ContactMessage')(sequelize);
 
-const models = { Category, Course, SeoField, User, Lesson, Section, Question, QuizSubmission, Setting, LiveClass, Coupon, Certificate, PreAssessmentResult, UserProgress, LessonCompletion, LessonWatchProgress, Language, Forum, ForumReport, Program, Batch, BatchMember, EmailJob, Gallery, Book, Slot, Demo, ClassSession, TimetableEntry, Project, Testimonial, Resource, ResourceCategory, TeacherFreeSchedule, StudentRecord, StudentLearning, TeachingAssignment, AssignmentMember, LessonRelease, Lead, Payment, AppSetting };
+const models = { Category, Course, SeoField, User, Lesson, Section, Question, QuizSubmission, Setting, LiveClass, Coupon, Certificate, PreAssessmentResult, UserProgress, LessonCompletion, LessonWatchProgress, Language, Forum, ForumReport, Program, Batch, BatchMember, EmailJob, Gallery, Book, Slot, Demo, ClassSession, Project, Testimonial, Resource, ResourceCategory, TeacherFreeSchedule, StudentRecord, StudentLearning, TeachingAssignment, AssignmentMember, LessonRelease, Lead, Payment, AppSetting, Location, TeacherFeedback, DemoVideo, FeedbackForm, FeedbackResponse, ContactMessage };
 Object.values(models).forEach((m) => m.associate && m.associate(models));
 
 module.exports = { sequelize, ...models };

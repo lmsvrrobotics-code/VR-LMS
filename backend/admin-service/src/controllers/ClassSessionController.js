@@ -2,8 +2,8 @@ const classService = require('../services/ClassSessionService');
 const { asyncHandler } = require('../middlewares/error');
 
 exports.index = asyncHandler(async (req, res) => {
-    const { page, search } = req.query;
-    res.json(await classService.list({ page, search }));
+    const { page, search, per_page } = req.query;
+    res.json(await classService.list({ page, search, per_page }));
 });
 exports.show = asyncHandler(async (req, res) => res.json(await classService.get(req.params.id)));
 exports.store = asyncHandler(async (req, res) => res.json(await classService.create({ body: req.body })));

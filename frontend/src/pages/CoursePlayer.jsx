@@ -6,7 +6,6 @@ import Navbar from '@/components/layout/Navbar';
 import PlayerSidebar from '@/components/course/player/PlayerSidebar';
 import PlayerLesson from '@/components/course/player/PlayerLesson';
 import PlayerTabs from '@/components/course/player/PlayerTabs';
-import MyLearnings from '@/components/course/player/MyLearnings';
 
 const PLAY_BASE = '/courses/programs/course-details/play';
 
@@ -162,93 +161,136 @@ export default function CoursePlayer() {
     }
     if (!data) return null;
 
-    const { course, lesson, history, locked_lesson_ids: lockedIds = [], progress, completed_lesson_count, delegated } = data;
+    const { course, lesson, history, locked_lesson_ids: lockedIds = [], progress, completed_lesson_count, delegated, paywalled } = data;
     const completedIds = history.completed_lesson || [];
     const isCurrentLocked = lesson && lockedIds.includes(lesson.id);
     const dripSettings = safeObj(course.drip_content_settings);
-    // A lesson is gated either by drip (enable_drip_content) or by teacher
-    // delegation (the teacher hasn't released this lesson yet). In delegated
-    // mode the backend has already stripped the video src, so show the lock UI.
-    const gatingOn = course.enable_drip_content === 1 || delegated === true;
+    // A lesson is gated by drip, by teacher release (delegated — universal now),
+    // or by the paywall. In every case the backend has already stripped the
+    // video src, so we just show the lock UI with the most actionable reason.
+    const gatingOn = course.enable_drip_content === 1 || delegated === true || paywalled === true;
+    // Prefer the paywall message: an unpaid student can act on it (buy), and
+    // payment is required even once a lesson is released. Otherwise fall back to
+    // the teacher-release message, then the drip message.
+    const lockedMessage = paywalled
+        ? 'Purchase this course to unlock this lesson.'
+        : delegated
+            ? 'Your teacher hasn’t released this lesson yet.'
+            : dripSettings.locked_lesson_message;
+
+    const isDone = lesson && completedIds.includes(lesson.id);
 
     return (
         <div ref={shellRef} className="player-shell flex flex-col">
             <Navbar />
 
-            <section className="flex-1 py-5">
-                <div className="player-container grid grid-cols-1 lg:grid-cols-3 gap-5">
-                    <div className="lg:col-span-2">
-                        <div className="relative">
-                            <PlayerLesson
-                                lesson={lesson}
-                                course={course}
-                                locked={gatingOn && isCurrentLocked}
-                                lockedMessage={delegated
-                                    ? 'Your teacher hasn’t released this lesson yet.'
-                                    : dripSettings.locked_lesson_message}
-                                onLessonEnded={onMarkComplete}
-                                onTimeUpdate={handleTimeUpdate}
-                            />
-                            <button
-                                type="button"
-                                onClick={onFullscreen}
-                                className="absolute top-3 right-3 z-10 w-9 h-9 flex items-center justify-center rounded-md bg-black/55 text-white hover:bg-black/75 transition-colors"
-                                title="Fullscreen"
-                                aria-label="Fullscreen"
-                            >
-                                <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path
-                                        d="M8.08917 11.9108C8.415 12.2367 8.415 12.7633 8.08917 13.0892L2.845 18.3333H6.66667C7.1275 18.3333 7.5 18.7067 7.5 19.1667C7.5 19.6267 7.1275 20 6.66667 20H2.5C1.12167 20 0 18.8783 0 17.5V13.3333C0 12.8733 0.3725 12.5 0.833333 12.5C1.29417 12.5 1.66667 12.8733 1.66667 13.3333V17.155L6.91083 11.9108C7.23667 11.585 7.76333 11.585 8.08917 11.9108ZM17.5 0H13.3333C12.8725 0 12.5 0.373333 12.5 0.833333C12.5 1.29333 12.8725 1.66667 13.3333 1.66667H17.155L11.9108 6.91083C11.585 7.23667 11.585 7.76333 11.9108 8.08917C12.0733 8.25167 12.2867 8.33333 12.5 8.33333C12.7133 8.33333 12.9267 8.25167 13.0892 8.08917L18.3333 2.845V6.66667C18.3333 7.12667 18.7058 7.5 19.1667 7.5C19.6275 7.5 20 7.12667 20 6.66667V2.5C20 1.12167 18.8783 0 17.5 0Z"
-                                        fill="currentColor"
-                                    />
-                                </svg>
-                            </button>
+            <section className="flex-1 py-6 sm:py-8">
+                <div className="player-container">
+                    {/* Premium lesson header — course eyebrow + current lesson title,
+                        with a live progress pill on the right. */}
+                    <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+                        <div className="min-w-0">
+                            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#FF6A00] mb-1.5">
+                                {course.title}
+                            </p>
+                            <h1 className="text-[22px] sm:text-[28px] font-extrabold text-gray-900 leading-tight">
+                                {lesson?.title || 'Select a lesson to begin'}
+                            </h1>
                         </div>
-
-                        {lesson && !isCurrentLocked && (
-                            <div className="flex items-center justify-between flex-wrap gap-3 mb-5">
-                                <div className="flex gap-2">
-                                    <button type="button" className="ol-btn-outline" onClick={() => goRelative(-1)}>
-                                        <i className="fa fa-arrow-left mr-2" /> Previous
-                                    </button>
-                                    <button type="button" className="ol-btn-outline" onClick={() => goRelative(1)}>
-                                        Next <i className="fa fa-arrow-right ml-2" />
-                                    </button>
-                                </div>
-                                <button
-                                    type="button"
-                                    className="ol-btn-primary"
-                                    onClick={onMarkComplete}
-                                    disabled={marking || completedIds.includes(lesson.id)}
-                                >
-                                    {completedIds.includes(lesson.id)
-                                        ? <><i className="fa fa-check mr-2" />Completed</>
-                                        : marking ? 'Saving…' : 'Mark as complete'}
-                                </button>
-                            </div>
-                        )}
-
-                        {lesson && !isCurrentLocked && (
-                            <MyLearnings courseId={course.id} lessonId={lesson.id} />
-                        )}
-
-                        <PlayerTabs
-                            course={course}
-                            lesson={lesson}
-                            progress={progress}
-                            completedCount={completed_lesson_count}
-                        />
+                        <div className="flex items-center gap-2.5 rounded-full bg-white border border-gray-200 shadow-sm px-4 py-2 shrink-0">
+                            <span className="relative flex h-2.5 w-2.5">
+                                <span className="absolute inline-flex h-full w-full rounded-full bg-[#FF6A00] opacity-60 animate-ping" />
+                                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#FF6A00]" />
+                            </span>
+                            <span className="text-[13px] font-bold text-gray-900 tabular-nums">{progress}%</span>
+                            <span className="text-[12px] text-gray-400 font-medium">complete</span>
+                        </div>
                     </div>
 
-                    <div className="lg:col-span-1">
-                        <PlayerSidebar
-                            course={course}
-                            currentLessonId={lesson?.id}
-                            completedIds={completedIds}
-                            lockedIds={lockedIds}
-                            progress={progress}
-                            completedCount={completed_lesson_count}
-                        />
+                    {/* LEFT = curriculum, RIGHT = video. On mobile the video stacks
+                        first (order-1) so the player is the focus. */}
+                    <div className="grid grid-cols-1 lg:grid-cols-[minmax(300px,1fr)_2fr] gap-6 items-start">
+                        {/* ---- LEFT: Course curriculum ---- */}
+                        <div className="order-2 lg:order-1 lg:sticky lg:top-[88px]">
+                            <PlayerSidebar
+                                course={course}
+                                currentLessonId={lesson?.id}
+                                completedIds={completedIds}
+                                lockedIds={lockedIds}
+                                progress={progress}
+                                completedCount={completed_lesson_count}
+                            />
+                        </div>
+
+                        {/* ---- RIGHT: Video / lesson + actions + tabs ---- */}
+                        <div className="order-1 lg:order-2 space-y-5">
+                            <div className="relative rounded-2xl overflow-hidden bg-black ring-1 ring-black/5 shadow-[0_24px_70px_-15px_rgba(0,0,0,0.45)]">
+                                <PlayerLesson
+                                    lesson={lesson}
+                                    course={course}
+                                    locked={gatingOn && isCurrentLocked}
+                                    lockedMessage={lockedMessage}
+                                    onLessonEnded={onMarkComplete}
+                                    onTimeUpdate={handleTimeUpdate}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={onFullscreen}
+                                    className="absolute top-3 right-3 z-10 w-10 h-10 flex items-center justify-center rounded-xl bg-black/55 text-white backdrop-blur-sm hover:bg-[#FF6A00] transition-colors"
+                                    title="Fullscreen"
+                                    aria-label="Fullscreen"
+                                >
+                                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path
+                                            d="M8.08917 11.9108C8.415 12.2367 8.415 12.7633 8.08917 13.0892L2.845 18.3333H6.66667C7.1275 18.3333 7.5 18.7067 7.5 19.1667C7.5 19.6267 7.1275 20 6.66667 20H2.5C1.12167 20 0 18.8783 0 17.5V13.3333C0 12.8733 0.3725 12.5 0.833333 12.5C1.29417 12.5 1.66667 12.8733 1.66667 13.3333V17.155L6.91083 11.9108C7.23667 11.585 7.76333 11.585 8.08917 11.9108ZM17.5 0H13.3333C12.8725 0 12.5 0.373333 12.5 0.833333C12.5 1.29333 12.8725 1.66667 13.3333 1.66667H17.155L11.9108 6.91083C11.585 7.23667 11.585 7.76333 11.9108 8.08917C12.0733 8.25167 12.2867 8.33333 12.5 8.33333C12.7133 8.33333 12.9267 8.25167 13.0892 8.08917L18.3333 2.845V6.66667C18.3333 7.12667 18.7058 7.5 19.1667 7.5C19.6275 7.5 20 7.12667 20 6.66667V2.5C20 1.12167 18.8783 0 17.5 0Z"
+                                            fill="currentColor"
+                                        />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            {lesson && !isCurrentLocked && (
+                                <div className="flex items-center justify-between flex-wrap gap-3 rounded-2xl bg-white border border-gray-200 shadow-sm px-4 py-3">
+                                    <div className="flex gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => goRelative(-1)}
+                                            className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-[14px] font-semibold text-gray-700 hover:border-[#FF6A00] hover:text-[#FF6A00] transition-colors"
+                                        >
+                                            <i className="fa fa-arrow-left" /> Previous
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => goRelative(1)}
+                                            className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-[14px] font-semibold text-gray-700 hover:border-[#FF6A00] hover:text-[#FF6A00] transition-colors"
+                                        >
+                                            Next <i className="fa fa-arrow-right" />
+                                        </button>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={onMarkComplete}
+                                        disabled={marking || isDone}
+                                        className={`inline-flex items-center gap-2 rounded-xl px-6 py-2.5 text-[14px] font-bold text-white shadow-sm transition-all ${
+                                            isDone
+                                                ? 'bg-emerald-500 cursor-default'
+                                                : 'bg-gradient-to-r from-[#FF6A00] to-[#ff8a3d] hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-60'
+                                        }`}
+                                    >
+                                        {isDone
+                                            ? <><i className="fa fa-check" />Completed</>
+                                            : marking ? 'Saving…' : <><i className="fa fa-circle-check" />Mark as complete</>}
+                                    </button>
+                                </div>
+                            )}
+
+                            <PlayerTabs
+                                course={course}
+                                lesson={lesson}
+                                progress={progress}
+                                completedCount={completed_lesson_count}
+                            />
+                        </div>
                     </div>
                 </div>
             </section>

@@ -32,46 +32,65 @@ export default function PlayerSidebar({ course, currentLessonId, completedIds, l
     const toggle = (sid) => setOpenSections((m) => ({ ...m, [sid]: !m[sid] }));
 
     return (
-        <aside className="bg-white border border-gray-200 rounded-xl overflow-hidden text-gray-900 shadow-[0_4px_40px_rgba(0,0,0,0.08)]">
-            <div className="p-4 border-b border-gray-200 bg-gradient-to-br from-lightgreen/40 to-white">
-                <h2 className="text-[16px] font-bold mb-2 text-gray-900">📚 Course curriculum</h2>
-                <div className="flex items-center justify-between text-[12px] text-gray-600 mb-1.5">
-                    <span className="font-semibold text-skin">{progress}% complete</span>
-                    <span>{completedCount}/{course.lesson_count} lessons</span>
-                </div>
-                <div className="h-2.5 bg-gray-200 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-emerald-400 to-skin rounded-full transition-all" style={{ width: `${progress}%` }} />
+        <aside className="bg-white border border-gray-200/80 rounded-2xl overflow-hidden text-gray-900 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.18)]">
+            {/* Premium header — dark gradient panel with the curriculum title and
+                an animated progress bar. */}
+            <div className="relative p-5 bg-gradient-to-br from-[#1b1f2a] via-[#23283a] to-[#1b1f2a] text-white overflow-hidden">
+                <div className="absolute -top-10 -right-10 w-32 h-32 rounded-full bg-[#FF6A00]/20 blur-2xl" />
+                <div className="relative">
+                    <h2 className="text-[15px] font-bold mb-3 flex items-center gap-2">
+                        <span className="inline-flex w-7 h-7 items-center justify-center rounded-lg bg-[#FF6A00]/20 text-[#FF8a3d]">
+                            <i className="fa fa-list-ul text-[13px]" />
+                        </span>
+                        Course curriculum
+                    </h2>
+                    <div className="flex items-center justify-between text-[12px] mb-2">
+                        <span className="font-bold text-[#FF8a3d]">{progress}% complete</span>
+                        <span className="text-white/60 font-medium">{completedCount}/{course.lesson_count} lessons</span>
+                    </div>
+                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-[#FF6A00] to-[#ffb27a] rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
+                    </div>
                 </div>
             </div>
 
             <div className="max-h-[calc(100vh-220px)] overflow-y-auto">
-                {course.sections.map((section) => {
+                {course.sections.map((section, sIdx) => {
                     const isOpen = openSections[section.id];
+                    const secDone = section.lessons.filter((l) => completedIds.includes(l.id)).length;
                     return (
-                        <div key={section.id} className="border-b border-gray-200">
+                        <div key={section.id} className="border-b border-gray-100 last:border-0">
                             <button
                                 type="button"
                                 onClick={() => toggle(section.id)}
-                                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+                                className="w-full flex items-center justify-between gap-3 px-4 py-3.5 text-left hover:bg-gray-50 transition-colors"
                             >
-                                <span className="font-semibold text-[15px] text-skin">{section.title}</span>
-                                <i className={`fa fa-chevron-up text-[12px] text-gray-500 transition-transform ${isOpen ? '' : 'rotate-180'}`} />
+                                <span className="flex items-center gap-3 min-w-0">
+                                    <span className="flex-shrink-0 w-7 h-7 rounded-lg bg-gray-100 text-gray-500 text-[12px] font-bold flex items-center justify-center">
+                                        {String(sIdx + 1).padStart(2, '0')}
+                                    </span>
+                                    <span className="min-w-0">
+                                        <span className="block font-bold text-[14px] text-gray-900 truncate">{section.title}</span>
+                                        <span className="block text-[11px] text-gray-400 font-medium">{secDone}/{section.lessons.length} done</span>
+                                    </span>
+                                </span>
+                                <i className={`fa fa-chevron-up text-[12px] text-gray-400 transition-transform ${isOpen ? '' : 'rotate-180'}`} />
                             </button>
                             {isOpen && (
-                                <ul className="bg-white pb-2">
+                                <ul className="bg-gray-50/40 pb-2">
                                     {section.lessons.map((lesson) => {
                                         const isCurrent = lesson.id === currentLessonId;
                                         const isCompleted = completedIds.includes(lesson.id);
                                         const isLocked = lockedIds.includes(lesson.id);
 
-                                        // Active row is a full teal pill with white content; inactive
-                                        // rows are normal text with a muted icon tile. Locked items
-                                        // are dimmed and non-clickable.
+                                        // Active row is a full orange gradient pill with white
+                                        // content + a soft glow; inactive rows are normal text with
+                                        // a muted icon tile. Locked items are dimmed and non-clickable.
                                         const rowCls = isCurrent
-                                            ? 'bg-skin text-white rounded-lg'
+                                            ? 'bg-gradient-to-r from-[#FF6A00] to-[#ff8a3d] text-white rounded-xl shadow-[0_8px_20px_-6px_rgba(255,106,0,0.6)]'
                                             : isLocked
-                                                ? 'text-gray-400 cursor-not-allowed pointer-events-none'
-                                                : 'text-gray-500 hover:bg-gray-100 rounded-lg';
+                                                ? 'text-gray-400 cursor-not-allowed pointer-events-none rounded-xl'
+                                                : 'text-gray-600 hover:bg-white hover:shadow-sm rounded-xl';
                                         // Video → rounded square; everything else (quiz, document) → round.
                                         const tileShape = isVideoType(lesson.lesson_type) ? 'rounded-md' : 'rounded-full';
                                         const tileCls = isCurrent

@@ -2,8 +2,8 @@ const demoService = require('../services/DemoService');
 const { asyncHandler } = require('../middlewares/error');
 
 exports.index = asyncHandler(async (req, res) => {
-    const { page, search } = req.query;
-    res.json(await demoService.list({ page, search }));
+    const { page, search, per_page } = req.query;
+    res.json(await demoService.list({ page, search, per_page }));
 });
 exports.show = asyncHandler(async (req, res) => res.json(await demoService.get(req.params.id)));
 exports.store = asyncHandler(async (req, res) => res.json(await demoService.create({ body: req.body })));

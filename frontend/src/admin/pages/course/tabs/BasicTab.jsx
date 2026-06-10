@@ -38,6 +38,10 @@ export default function BasicTab({ course, onSave, formId }) {
         // Class-access range (Class 1–12). '' = open to all classes.
         class_from: course.class_from == null ? '' : String(course.class_from),
         class_to: course.class_to == null ? '' : String(course.class_to),
+        // Course-details stats card: admin-set Score "out of" + Lectures label.
+        // '' = not set (Score shows earned points alone; Lectures shows "—").
+        score_max: course.score_max == null ? '' : String(course.score_max),
+        lectures_label: course.lectures_label || '',
         // The screenshot offers only Active / Private. Treat everything else as the closer of the two.
         status: course.status === 'private' ? 'private' : 'active',
         // Whether completing the course issues a certificate. Defaults to
@@ -47,6 +51,9 @@ export default function BasicTab({ course, onSave, formId }) {
             ? true
             : !!course.has_certificate,
         teacher_id: String(currentTeacherId),
+        // Free public sample/teaser course — visible & playable to every
+        // registered student (bypasses payment + release gating).
+        is_marketing: !!course.is_marketing,
     });
     const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
 
@@ -226,20 +233,41 @@ export default function BasicTab({ course, onSave, formId }) {
                 </select>
             </Row>
 
+            {/* Combined access selector: the class ranges and the former
+                "Category" options (For Engineering / For Freshers) share one
+                dropdown. A `type:` value sets course_type and clears the numeric
+                range; a numeric range sets class_from/to and resets course_type
+                to general. Both fields still go to the backend. */}
             <Row label="Class access range">
                 <select
                     className="ol-form-control w-full"
-                    value={f.class_from && f.class_to ? `${f.class_from}-${f.class_to}` : ''}
+                    value={
+                        f.course_type && f.course_type !== 'general'
+                            ? `type:${f.course_type}`
+                            : f.class_from && f.class_to
+                                ? `${f.class_from}-${f.class_to}`
+                                : ''
+                    }
                     onChange={(e) => {
-                        const [cf, ct] = e.target.value.split('-');
-                        set('class_from', cf || '');
-                        set('class_to', ct || '');
+                        const v = e.target.value;
+                        if (v.startsWith('type:')) {
+                            set('course_type', v.slice(5));
+                            set('class_from', '');
+                            set('class_to', '');
+                        } else {
+                            const [cf, ct] = v.split('-');
+                            set('class_from', cf || '');
+                            set('class_to', ct || '');
+                            set('course_type', 'general');
+                        }
                     }}
                 >
                     <option value="">All classes</option>
                     <option value="8-12">Class 8 – 12</option>
                     <option value="12-18">Class 12 – 18</option>
-                    {f.class_from && f.class_to &&
+                    <option value="type:engineering">For Engineering</option>
+                    <option value="type:freshers">For Freshers</option>
+                    {f.course_type === 'general' && f.class_from && f.class_to &&
                         !['8-12', '12-18'].includes(`${f.class_from}-${f.class_to}`) && (
                         <option value={`${f.class_from}-${f.class_to}`}>
                             Class {f.class_from} – {f.class_to}
@@ -247,22 +275,7 @@ export default function BasicTab({ course, onSave, formId }) {
                     )}
                 </select>
                 <div className="text-[12px] text-gray mt-1">
-                    Pick the class group this course is for. "All classes" makes it open to everyone.
-                </div>
-            </Row>
-
-            <Row label="Category">
-                <select
-                    className="ol-form-control w-full"
-                    value={f.course_type}
-                    onChange={(e) => set('course_type', e.target.value)}
-                >
-                    <option value="general">General</option>
-                    <option value="engineering">For Engineering</option>
-                    <option value="freshers">For Freshers</option>
-                </select>
-                <div className="text-[12px] text-gray mt-1">
-                    Tags the course so it shows under the matching menu (For Engineering / For Freshers).
+                    Pick the class group or audience this course is for. "All classes" makes it open to everyone; "For Engineering / For Freshers" also tags it for the matching menu.
                 </div>
             </Row>
 
@@ -281,6 +294,33 @@ export default function BasicTab({ course, onSave, formId }) {
                     <option value="french">French</option>
                     <option value="german">German</option>
                 </select>
+            </Row>
+
+            <Row label="Score (out of)">
+                <input
+                    type="number"
+                    min="0"
+                    className="ol-form-control w-full"
+                    value={f.score_max}
+                    onChange={(e) => set('score_max', e.target.value)}
+                    placeholder="e.g. 50"
+                />
+                <div className="text-[12px] text-gray mt-1">
+                    The maximum points for this course's Score row on the course-details page. A student's earned points come from the course leaderboard (lessons + quizzes); this is just the "out of" value. Leave blank to hide the max.
+                </div>
+            </Row>
+
+            <Row label="Lectures">
+                <input
+                    type="text"
+                    className="ol-form-control w-full"
+                    value={f.lectures_label}
+                    onChange={(e) => set('lectures_label', e.target.value)}
+                    placeholder="e.g. 2 Hours/ Week"
+                />
+                <div className="text-[12px] text-gray mt-1">
+                    Free text shown on the "Lectures" row of the course-details stats card. Leave blank to show "—".
+                </div>
             </Row>
 
             <Row label="Create as" required>
@@ -332,6 +372,21 @@ export default function BasicTab({ course, onSave, formId }) {
                         />
                         <span className="text-[14px]">No</span>
                     </label>
+                </div>
+            </Row>
+
+            <Row label="Marketing course">
+                <label className="inline-flex items-center gap-2 cursor-pointer pt-2">
+                    <input
+                        type="checkbox"
+                        checked={f.is_marketing === true}
+                        onChange={(e) => set('is_marketing', e.target.checked)}
+                        className="accent-skin w-4 h-4"
+                    />
+                    <span className="text-[14px]">Free sample — visible & fully playable to every registered student</span>
+                </label>
+                <div className="text-[12px] text-gray mt-1">
+                    Turn on for a demo/teaser course (e.g. 2-3 sample videos). It bypasses payment and lesson release-gating so a newly-registered student can watch it in the normal course player and get attracted to VR Robotics.
                 </div>
             </Row>
         </form>

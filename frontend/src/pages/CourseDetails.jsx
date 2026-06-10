@@ -5,15 +5,6 @@ import { enrollCourse } from '@/api/userProgressApi';
 import { buyCourse } from '@/api/paymentApi';
 import { fmtDuration, safeArr } from '@/components/course/format';
 import { sanitizeHtml } from '@/lib/sanitizeHtml';
-import PreviewModal from '@/components/course/PreviewModal';
-
-const TABS = [
-    { key: 'overview', label: 'Overview' },
-    { key: 'curriculum', label: 'Curriculum' },
-    { key: 'details', label: 'Details' },
-    { key: 'teacher', label: 'Teacher' },
-    { key: 'reviews', label: 'Reviews' },
-];
 
 export default function CourseDetails({ slug: slugProp } = {}) {
     const params = useParams();
@@ -21,8 +12,6 @@ export default function CourseDetails({ slug: slugProp } = {}) {
     const navigate = useNavigate();
     const slug = slugProp || params.slug || searchParams.get('slug') || 'first';
     const [data, setData] = useState(null);
-    const [tab, setTab] = useState('overview');
-    const [preview, setPreview] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     // Stays true after the user clicks Enroll/Start Learning. Component unmounts
@@ -40,8 +29,10 @@ export default function CourseDetails({ slug: slugProp } = {}) {
         // verified payment (or returns alreadyPaid). Free courses skip this.
         const paidCourse = (c.is_paid === true || Number(c.is_paid) === 1)
             && Number(c.discounted_price || c.price || 0) > 0;
-        // Already owned → straight to the player, no re-payment.
-        if (paidCourse && c.purchased) { goToPlayer(); return; }
+        // Already accessible → straight to the player, no payment. Covers a
+        // purchased course, an admin/teacher-assigned (roster) course, and a
+        // marketing/sample course (free teaser) — none should hit checkout.
+        if (c.is_marketing || c.assigned || (paidCourse && c.purchased)) { goToPlayer(); return; }
         if (paidCourse) {
             if (!localStorage.getItem('accessToken')) { navigate('/auth'); return; }
             setPayError(null);
@@ -96,9 +87,7 @@ export default function CourseDetails({ slug: slugProp } = {}) {
     if (error) return <div className="max-w-[1280px] mx-auto px-4 py-16 text-center text-danger">{error}</div>;
     if (!data) return null;
 
-    const { course, reviews } = data;
-    const stars = Math.round(course.average_rating || 0);
-    const requirements = safeArr(course.requirements);
+    const { course } = data;
     const outcomes = safeArr(course.outcomes);
     const faqs = safeArr(course.faqs);
 
@@ -115,83 +104,54 @@ export default function CourseDetails({ slug: slugProp } = {}) {
                 </div>
             )}
 
-            {/* Breadcrumb + course header */}
-            <section className="bg-gradient-to-b from-lightgreen/40 to-white border-b border-border">
-                <div className="max-w-[1280px] mx-auto px-4 py-10">
-                    <nav className="text-[13px] mb-5 flex items-center gap-2 text-muted">
-                        <Link to="/" className="hover:text-skin transition-colors">Home</Link>
-                        <i className="fa fa-chevron-right text-[10px]" />
-                        <span className="text-dark font-medium truncate max-w-[60vw]">{course.title}</span>
-                    </nav>
+            {/* Course details — replica of the reference layout */}
+            <section className="bg-white min-h-[70vh]">
+                <div className="max-w-[1180px] mx-auto px-4 py-10">
+                    <h2 className="text-center text-[30px] sm:text-[42px] font-extrabold text-dark mb-10 tracking-tight">
+                        Courses Details
+                    </h2>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-12 items-start">
+                        {/* Left: Overview tab + content */}
                         <div className="lg:col-span-2">
-                            {course.level && (
-                                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-skin bg-lightgreen px-3 py-1.5 rounded-full mb-4">
-                                    <i className="fa fa-bolt text-[10px]" />
-                                    {course.level}
-                                </span>
-                            )}
-                            <h1 className="text-[28px] sm:text-[36px] lg:text-[40px] font-bold text-dark leading-[1.15] tracking-tight mb-4">
-                                {course.title}
-                            </h1>
-                            <p className="text-[15px] sm:text-[16px] text-muted leading-relaxed mb-6 max-w-2xl">
-                                {course.short_description}
-                            </p>
-
-                            <div className="flex flex-wrap items-center gap-x-5 gap-y-3 text-[13px] text-dark mb-6">
-                                <div className="flex items-center gap-1.5">
-                                    {Array.from({ length: 5 }).map((_, i) => (
-                                        <i key={i} className={`fa fa-star text-[13px] ${i < stars ? 'text-amber-400' : 'text-border'}`} />
-                                    ))}
-                                    <span className="ml-1 font-semibold">{(course.average_rating || 0).toFixed(1)}</span>
-                                    <span className="text-muted">({course.review_count || 0})</span>
-                                </div>
-                                <span className="text-border">•</span>
-                                <div className="flex items-center gap-1.5 text-muted">
-                                    <i className="fa fa-users text-[12px]" />
-                                    <span><span className="font-semibold text-dark">{course.enrolled || 0}</span> students</span>
-                                </div>
-                                <span className="text-border">•</span>
-                                <div className="flex items-center gap-1.5 text-muted">
-                                    <i className="fa fa-clock text-[12px]" />
-                                    <span>{fmtDuration(course.total_duration_secs)}</span>
-                                </div>
-                                <span className="text-border">•</span>
-                                <div className="flex items-center gap-1.5 text-muted">
-                                    <i className="fa fa-language text-[12px]" />
-                                    <span className="capitalize">{course.language}</span>
-                                </div>
-                                {course.has_certificate && (
-                                    <>
-                                        <span className="text-border">•</span>
-                                        <div className="flex items-center gap-1.5 text-muted">
-                                            <i className="fa fa-graduation-cap text-[12px]" />
-                                            <span>Certificate</span>
-                                        </div>
-                                    </>
-                                )}
+                            {/* Tab bar — Overview */}
+                            <div className="border-b border-border mb-8">
+                                <button type="button" className="relative px-1 pb-3 text-[16px] font-semibold text-dark cursor-default">
+                                    Overview
+                                    <span className="absolute left-0 right-0 -bottom-px h-[3px] bg-emerald-400 rounded-t" />
+                                </button>
                             </div>
 
-                            {course.creator && (
-                                <div className="flex items-center gap-3 pt-1">
-                                    <img
-                                        src={course.creator.photo}
-                                        alt=""
-                                        className="w-11 h-11 rounded-full object-cover ring-2 ring-white shadow-sm"
-                                    />
-                                    <div className="leading-tight">
-                                        <p className="text-[11px] uppercase tracking-wider text-muted m-0">Created by</p>
-                                        <p className="text-[14px] font-semibold text-dark m-0">{course.creator.name}</p>
+                            <h1 className="text-[30px] sm:text-[38px] font-extrabold text-dark mb-7">
+                                {course.title}
+                            </h1>
+
+                            {/* Progress bar (pill) — student's completion of this course */}
+                            <div className="mb-9">
+                                <div className="h-6 rounded-full bg-gray-200 overflow-hidden">
+                                    <div
+                                        className="h-full rounded-full bg-emerald-400 flex items-center justify-center text-[11px] font-bold text-white transition-all"
+                                        style={{ width: `${Math.max(Number(course.progress) || 0, 6)}%`, minWidth: 44 }}
+                                    >
+                                        {course.progress || 0}%
                                     </div>
                                 </div>
-                            )}
+                            </div>
+
+                            {/* Quick highlights — fills the page with at-a-glance
+                                course facts (level, lessons, hours, language…). */}
+                            <CourseHighlights course={course} />
+
+                            {/* Overview body — description / outcomes / FAQ.
+                                The full curriculum (sections + lessons) is shown
+                                inside the course player, so it's intentionally
+                                NOT repeated here. */}
+                            <Overview course={course} outcomes={outcomes} faqs={faqs} />
                         </div>
 
-                        {/* Pricing card */}
-                        <PricingCard
+                        {/* Right: stats card */}
+                        <StatsCard
                             course={course}
-                            onPreview={() => setPreview(true)}
                             onEnroll={handleEnroll}
                             enrolling={enrolling}
                             payError={payError}
@@ -199,187 +159,106 @@ export default function CourseDetails({ slug: slugProp } = {}) {
                     </div>
                 </div>
             </section>
-
-            {/* Tabs */}
-            <section className="bg-bodybg/40">
-                <div className="bg-white border-b border-border">
-                    <div className="max-w-[1280px] mx-auto px-4">
-                        <div className="flex gap-1 sm:gap-6 overflow-x-auto">
-                            {TABS.map((t) => {
-                                const active = tab === t.key;
-                                return (
-                                    <button
-                                        key={t.key}
-                                        type="button"
-                                        onClick={() => setTab(t.key)}
-                                        className={`relative whitespace-nowrap px-3 sm:px-1 py-4 text-[14px] font-medium transition-colors ${
-                                            active ? 'text-skin' : 'text-muted hover:text-dark'
-                                        }`}
-                                    >
-                                        {t.label}
-                                        {active && (
-                                            <span className="absolute left-0 right-0 -bottom-px h-[3px] bg-skin rounded-t" />
-                                        )}
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
-                </div>
-                <div className="max-w-[1280px] mx-auto px-4 py-10">
-                    {tab === 'overview' && <Overview course={course} outcomes={outcomes} faqs={faqs} />}
-                    {tab === 'curriculum' && <Curriculum course={course} />}
-                    {tab === 'details' && <Details requirements={requirements} outcomes={outcomes} />}
-                    {tab === 'teacher' && <Teacher teacher={course.creator} />}
-                    {tab === 'reviews' && <Reviews course={course} reviews={reviews} stars={stars} />}
-                </div>
-            </section>
-
-            {preview && course.preview && (
-                <PreviewModal src={course.preview} onClose={() => setPreview(false)} />
-            )}
         </>
     );
 }
 
-function PricingCard({ course, onPreview, onEnroll, enrolling, payError }) {
-    // is_paid can come back as 0/1 (MySQL) or false/true; treat anything
-    // falsy / explicit zero as "Free". Paid courses surface the price block
-    // above the CTA; free courses show a "Free enrolment" line instead.
+// Right-hand stats card — replica of the reference design: icon + label rows
+// (Duration, Total Hours, Score, Lectures, Class Rank) and a teal "Go to Course"
+// button. Real data for Duration/Total Hours; Score, Lectures and Class Rank are
+// static placeholders (no backing data yet — can be wired later).
+function StatsCard({ course, onEnroll, enrolling, payError }) {
     const isFree = !course.is_paid || Number(course.is_paid) === 0;
+    // Access (→ "Go to Course") = free, a marketing/sample course (open to all),
+    // already purchased, OR assigned by an admin/teacher (roster delegation).
+    // Anyone without access on a paid course sees "Buy this course".
+    const owned = isFree || course.is_marketing || course.purchased || course.assigned;
 
-    const price = Number(course.price || 0);
-    const discounted = Number(course.discounted_price || 0);
-    // discount_flag is the admin's "Apply discount" checkbox. Only show the
-    // strike-through pricing when the flag is on AND the discounted value is
-    // strictly less than the regular price (defensive — admin could leave a
-    // stale value behind).
-    const hasDiscount = !isFree && !!course.discount_flag && discounted > 0 && discounted < price;
-    const effectivePrice = hasDiscount ? discounted : price;
-    const formatPrice = (n) => `₹${n.toLocaleString('en-IN')}`;
-    const percentOff = hasDiscount && price > 0
-        ? Math.round(((price - discounted) / price) * 100)
-        : 0;
-
-    // expiry_period stores the number of months access lasts after enrolment.
-    // NULL (or missing) means lifetime. Render the real value so the line
-    // reflects what the admin set in the Pricing tab.
     const months = Number(course.expiry_period) || 0;
-    const expiryLabel = months > 0
-        ? `${months} month${months === 1 ? '' : 's'} access`
-        : 'Lifetime access';
-    const expiryIcon = months > 0 ? 'fa-hourglass-half' : 'fa-infinity';
+    const durationLabel = months > 0 ? `${months} Month${months === 1 ? '' : 's'}` : 'Lifetime';
 
-    // Clean stat rows (label ↔ value) for the sidebar card — RoboPrenr style.
-    void expiryIcon;
-    const stats = [
-        { icon: 'fa-clock', label: 'Duration', value: expiryLabel },
-        { icon: 'fa-hourglass-half', label: 'Total length', value: fmtDuration(course.total_duration_secs) },
-        { icon: 'fa-play-circle', label: 'Lessons', value: String(course.lesson_count || 0) },
-        { icon: 'fa-layer-group', label: 'Sections', value: String(course.section_count || 0) },
-        { icon: 'fa-signal', label: 'Level', value: course.level ? String(course.level) : '—' },
-        { icon: 'fa-tag', label: 'Price', value: isFree ? 'Free' : formatPrice(effectivePrice) },
-        ...(course.has_certificate ? [{ icon: 'fa-certificate', label: 'Certificate', value: 'Yes' }] : []),
+    // Score: student's earned leaderboard points for this course over the
+    // admin-set max (score_max). With no max set, show the earned points alone.
+    const earned = Number(course.student_score) || 0;
+    const scoreValue = course.score_max != null && course.score_max !== ''
+        ? `${earned} / ${course.score_max}`
+        : String(earned);
+    // Lectures: dynamic from the course's real lesson count (auto-updates as
+    // the admin adds/removes lessons). An optional admin label overrides it.
+    const lessonCount = Number(course.lesson_count) || 0;
+    const lecturesValue = course.lectures_label
+        || (lessonCount ? `${lessonCount} ${lessonCount === 1 ? 'Lecture' : 'Lectures'}` : '—');
+    // Class Rank: live "#rank / total" among everyone taking this course. The
+    // backend gives every enrolled/assigned student a position (even at 0
+    // points, tie-broken by score); a non-class viewer gets null → "—".
+    const rankValue = course.class_rank
+        ? `#${course.class_rank}${course.class_total ? ` / ${course.class_total}` : ''}`
+        : '—';
+
+    const rows = [
+        { icon: 'fa-clock', label: 'Duration', value: durationLabel },
+        { icon: 'fa-hourglass-half', label: 'Total Hours', value: fmtDuration(course.total_duration_secs) },
+        { icon: 'fa-sliders-h', label: 'Score', value: scoreValue },
+        { icon: 'fa-file-lines', label: 'Lectures', value: lecturesValue },
+        { icon: 'fa-crown', label: 'Class Rank', value: rankValue },
     ];
+
     return (
         <div className="lg:col-span-1">
-            <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden sticky top-[80px]">
+            <div className="bg-white rounded-2xl border border-border shadow-[0_10px_40px_rgba(0,0,0,0.08)] p-7 sticky top-[90px]">
+                <ul className="m-0 p-0 list-none">
+                    {rows.map((r) => (
+                        <li key={r.label} className="flex items-center justify-between py-4 border-b border-border/60 last:border-0">
+                            <span className="flex items-center gap-3 text-[15px] font-bold text-dark">
+                                <i className={`fa ${r.icon} text-muted w-5 text-center text-[15px]`} />
+                                {r.label}
+                            </span>
+                            <span className="text-[14px] text-muted whitespace-nowrap">{r.value}</span>
+                        </li>
+                    ))}
+                </ul>
+
                 <button
                     type="button"
-                    onClick={onPreview}
-                    className="block relative w-full aspect-video bg-bodybg group"
+                    onClick={onEnroll}
+                    disabled={enrolling}
+                    className="mt-6 w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3.5 rounded-xl shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                    <img
-                        src={course.banner || course.thumbnail}
-                        alt=""
-                        className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                    />
-                    {course.preview ? (
-                        <span className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-t from-black/60 via-black/30 to-transparent">
-                            <span className="w-16 h-16 rounded-full bg-white text-skin flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                                <i className="fa fa-play text-[20px] ml-1" />
-                            </span>
-                            <span className="mt-3 text-white text-[13px] font-medium tracking-wide">
-                                Watch preview
-                            </span>
-                        </span>
-                    ) : (
-                        <span className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
-                    )}
+                    {enrolling ? 'Loading…' : owned ? 'Go to Course' : 'Buy this course'}
                 </button>
-                <div className="p-6">
-                    {/* Price block — only renders for paid courses. Free
-                        courses skip this entirely so the CTA sits at the top
-                        of the card (the "Enrol for free" button already
-                        communicates the price). */}
-                    {!isFree && (
-                        <div className="mb-4">
-                            <div className="flex items-baseline gap-3 flex-wrap">
-                                <span className="text-[28px] font-bold text-dark leading-none">
-                                    {formatPrice(effectivePrice)}
-                                </span>
-                                {hasDiscount && (
-                                    <>
-                                        <span className="text-[16px] text-muted line-through">
-                                            {formatPrice(price)}
-                                        </span>
-                                        <span className="text-[11px] font-semibold uppercase tracking-wider bg-amber-100 text-amber-700 px-2 py-1 rounded">
-                                            {percentOff}% off
-                                        </span>
-                                    </>
-                                )}
-                            </div>
-                            {hasDiscount && (
-                                <p className="text-[12px] text-muted mt-1.5">
-                                    You save {formatPrice(price - discounted)}
-                                </p>
-                            )}
+                {payError && (
+                    <p className="mt-2 text-[12px] text-red-600 text-center">{payError}</p>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// Compact "course at a glance" strip — surfaces the real admin data the detail
+// page already has so the left column never looks empty.
+function CourseHighlights({ course }) {
+    const items = [
+        { icon: 'fa-signal', label: 'Level', value: course.level ? String(course.level) : '—', cap: true },
+        { icon: 'fa-layer-group', label: 'Sections', value: course.section_count || 0 },
+        { icon: 'fa-file-lines', label: 'Lessons', value: course.lesson_count || 0 },
+        { icon: 'fa-clock', label: 'Total Hours', value: fmtDuration(course.total_duration_secs) },
+        { icon: 'fa-language', label: 'Language', value: course.language ? String(course.language) : '—', cap: true },
+        { icon: 'fa-award', label: 'Certificate', value: course.has_certificate ? 'Included' : 'No' },
+    ];
+    return (
+        <div className="mb-10 rounded-2xl border border-border bg-white p-5 sm:p-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-5">
+                {items.map((it) => (
+                    <div key={it.label} className="flex items-center gap-3 min-w-0">
+                        <span className="w-9 h-9 shrink-0 rounded-lg bg-lightgreen text-skin flex items-center justify-center">
+                            <i className={`fa ${it.icon} text-[14px]`} />
+                        </span>
+                        <div className="min-w-0">
+                            <div className="text-[12px] text-muted">{it.label}</div>
+                            <div className={`text-[15px] font-semibold text-dark truncate ${it.cap ? 'capitalize' : ''}`}>{it.value}</div>
                         </div>
-                    )}
-
-                    <button
-                        type="button"
-                        onClick={onEnroll}
-                        disabled={enrolling}
-                        className={`w-full ${isFree || course.purchased ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-skin hover:bg-skin/90'} text-white font-semibold py-3 rounded-lg shadow-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
-                    >
-                        {enrolling ? (
-                            <>
-                                <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                                Loading…
-                            </>
-                        ) : (
-                            <>
-                                {isFree || course.purchased ? 'Go to Course' : 'Buy this course'}
-                                <i className="fa fa-arrow-right text-[12px]" />
-                            </>
-                        )}
-                    </button>
-
-                    {payError && (
-                        <p className="mt-2 text-[12px] text-red-600 text-center">{payError}</p>
-                    )}
-                    {!isFree && course.purchased && (
-                        <p className="mt-2 text-[11px] text-green-600 text-center font-semibold">✓ You own this course</p>
-                    )}
-                    {!isFree && !course.purchased && (
-                        <p className="mt-2 text-[11px] text-muted text-center">🔒 Secure payment via Razorpay</p>
-                    )}
-
-                    <div className="mt-6 pt-2">
-                        <ul className="m-0 p-0 list-none text-[14px] text-dark">
-                            {stats.map((item) => (
-                                <li key={item.label} className="flex items-center justify-between py-2.5 border-b border-border/60 last:border-0">
-                                    <span className="flex items-center gap-2.5 text-muted">
-                                        <i className={`fa ${item.icon} text-skin w-4 text-center`} />
-                                        {item.label}
-                                    </span>
-                                    <span className="font-semibold text-dark capitalize">{item.value}</span>
-                                </li>
-                            ))}
-                        </ul>
                     </div>
-                </div>
+                ))}
             </div>
         </div>
     );

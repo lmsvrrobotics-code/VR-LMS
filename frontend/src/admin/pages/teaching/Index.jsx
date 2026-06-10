@@ -6,7 +6,6 @@ import {
     createAssignment,
     deleteAssignment,
     getRoster,
-    getProgress,
     addMembers,
     removeMember,
     listReleases,
@@ -175,6 +174,15 @@ function RosterCard({ assignment, canEdit }) {
         <div className="ol-card rounded-ol-8 mb-3">
             <div className="ol-card-body px-5 py-4">
                 <h5 className="text-[14px] font-semibold text-dark mb-3">Roster ({data?.member_count ?? 0} students)</h5>
+
+                {/* A rosterless assignment is "global": its released lessons are
+                    visible to EVERY student of the course, not a fixed roster.
+                    Spell that out so an empty roster doesn't look like a mistake. */}
+                {data && (data.member_count ?? 0) === 0 && (
+                    <p className="text-[12px] text-skin bg-lightgreen rounded-ol-8 px-3 py-2 mb-3">
+                        No roster — released lessons are visible to <strong>all</strong> students enrolled in this course. Add a batch or individual students only if you want to limit access to a specific group.
+                    </p>
+                )}
 
                 {canEdit && (
                     <div className="flex flex-wrap gap-3 mb-4">
@@ -379,60 +387,6 @@ function ReleaseCard({ assignment, onChanged }) {
     );
 }
 
-// -- Progress card (admin + teacher): completion of released lessons --------
-function ProgressCard({ assignment }) {
-    const [data, setData] = useState(null);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        setLoading(true);
-        getProgress(assignment.id)
-            .then(setData)
-            .catch(() => setData({ total_released: 0, students: [] }))
-            .finally(() => setLoading(false));
-    }, [assignment.id]);
-
-    const students = data?.students || [];
-    const totalReleased = data?.total_released || 0;
-    const avg = students.length
-        ? Math.round(students.reduce((s, x) => s + x.percent, 0) / students.length)
-        : 0;
-
-    return (
-        <div className="ol-card rounded-ol-8 mt-3">
-            <div className="ol-card-body px-5 py-4">
-                <div className="flex items-center justify-between mb-3">
-                    <h5 className="text-[14px] font-semibold text-dark m-0">Student progress</h5>
-                    <span className="text-[12px] text-gray">{totalReleased} lesson(s) released · avg {avg}%</span>
-                </div>
-                {loading ? (
-                    <p className="text-[13px] text-gray">Loading…</p>
-                ) : totalReleased === 0 ? (
-                    <p className="text-[13px] text-gray">No lessons released yet — release lessons above to start tracking progress.</p>
-                ) : students.length === 0 ? (
-                    <p className="text-[13px] text-gray">No students on this roster yet.</p>
-                ) : (
-                    <ul className="list-none p-0 m-0 flex flex-col gap-2">
-                        {students.map((s) => (
-                            <li key={s.id} className="flex items-center gap-3">
-                                <span className="text-[13px] text-dark w-[160px] truncate" title={s.name}>{s.name}</span>
-                                <div className="flex-1 h-2.5 rounded-full bg-bodybg overflow-hidden">
-                                    <div
-                                        className="h-full rounded-full"
-                                        style={{ width: `${s.percent}%`, backgroundColor: s.percent >= 100 ? '#12c093' : '#3b82f6' }}
-                                    />
-                                </div>
-                                <span className="text-[12px] text-gray w-[90px] text-right tabular-nums">
-                                    {s.completed}/{s.total} · {s.percent}%
-                                </span>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-            </div>
-        </div>
-    );
-}
 
 export default function TeachingAssignmentsIndex() {
     const claims = useMemo(() => { const t = getToken() || localStorage.getItem('accessToken'); return t ? decodeJwt(t) : null; }, []);
@@ -447,8 +401,6 @@ export default function TeachingAssignmentsIndex() {
     // ?tab=add → show ONLY the "assign course → teacher" form. Otherwise show
     // the manage view (list grouped by teacher + roster/release/progress).
     const showAdd = isAdmin && params.get('tab') === 'add';
-    // Bumped after a release/revoke so the list counts + Student progress refresh.
-    const [refreshKey, setRefreshKey] = useState(0);
 
     const load = async () => {
         setLoading(true);
@@ -552,8 +504,7 @@ export default function TeachingAssignmentsIndex() {
                                 </div>
                             )}
                             <RosterCard key={`roster-${selected.id}`} assignment={selected} canEdit={isAdmin} />
-                            <ReleaseCard key={`rel-${selected.id}`} assignment={selected} onChanged={() => { load(); setRefreshKey((k) => k + 1); }} />
-                            <ProgressCard key={`prog-${selected.id}-${refreshKey}`} assignment={selected} />
+                            <ReleaseCard key={`rel-${selected.id}`} assignment={selected} onChanged={() => load()} />
                         </>
                     )}
                 </div>

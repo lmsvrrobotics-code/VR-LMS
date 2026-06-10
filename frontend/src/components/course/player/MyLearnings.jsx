@@ -41,30 +41,37 @@ export default function MyLearnings({ courseId, lessonId }) {
     };
 
     if (!lessonId) return null;
-    const inputCls = 'w-full rounded-lg border border-gray-200 px-4 py-2.5 outline-none focus:border-primary text-sm';
+    const inputCls = 'w-full rounded-xl border border-gray-200 px-4 py-2.5 outline-none focus:border-[#FF6A00] focus:ring-2 focus:ring-[#FF6A00]/15 text-sm transition-all';
+
+    if (!studentId) {
+        return <p className="text-sm text-gray-500">Sign in as a student to save your notes for this lesson.</p>;
+    }
 
     return (
-        <div className="rounded-xl border border-gray-200 bg-white p-5 mt-5">
-            <h3 className="text-[18px] font-bold mb-4">My Learnings</h3>
-            {!studentId ? (
-                <p className="text-sm text-gray-500">Sign in as a student to save your learnings.</p>
-            ) : (
-                <form onSubmit={save} className="space-y-3">
-                    <div>
-                        <label className="block text-[13px] font-semibold mb-1">Title</label>
-                        <input className={inputCls} value={title} onChange={(e) => { setTitle(e.target.value); setSaved(false); }} placeholder="Project Title" />
-                    </div>
-                    <div>
-                        <label className="block text-[13px] font-semibold mb-1">Description</label>
-                        <textarea rows={4} className={inputCls} value={description} onChange={(e) => { setDescription(e.target.value); setSaved(false); }}
-                            placeholder="What did you learn? Make notes of your learning on this topic. It will help you revise the topic later." />
-                    </div>
-                    <div className="flex items-center gap-3">
-                        <button type="submit" className="ol-btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
-                        {saved && <span className="text-[13px] text-green-600 font-medium">✓ Saved</span>}
-                    </div>
-                </form>
-            )}
-        </div>
+        <form onSubmit={save} className="space-y-4">
+            <p className="text-[13px] text-gray-500 -mt-1">
+                <i className="fa fa-circle-info mr-1.5 text-[#FF6A00]" />
+                A private note just for this lesson — it auto-loads whenever you reopen the lesson.
+            </p>
+            <div>
+                <label className="block text-[13px] font-semibold text-gray-800 mb-1.5">Title</label>
+                <input className={inputCls} value={title} onChange={(e) => { setTitle(e.target.value); setSaved(false); }} placeholder="e.g. Key takeaways" />
+            </div>
+            <div>
+                <label className="block text-[13px] font-semibold text-gray-800 mb-1.5">Notes</label>
+                <textarea rows={5} className={inputCls} value={description} onChange={(e) => { setDescription(e.target.value); setSaved(false); }}
+                    placeholder="What did you learn? Jot down notes on this lesson — it'll help you revise later." />
+            </div>
+            <div className="flex items-center gap-3">
+                <button
+                    type="submit"
+                    disabled={saving}
+                    className="inline-flex items-center gap-2 rounded-xl px-6 py-2.5 text-[14px] font-bold text-white bg-gradient-to-r from-[#FF6A00] to-[#ff8a3d] shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-60"
+                >
+                    <i className="fa fa-floppy-disk" />{saving ? 'Saving…' : 'Save note'}
+                </button>
+                {saved && <span className="text-[13px] text-emerald-600 font-semibold"><i className="fa fa-check mr-1" />Saved</span>}
+            </div>
+        </form>
     );
 }

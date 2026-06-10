@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -41,6 +41,7 @@ import {
   ChevronRight,
   Clock,
   FileText,
+  Search,
 } from "lucide-react";
 
 const ADMIN_BASE =
@@ -102,7 +103,7 @@ interface CourseItem {
  */
 
 const ROBOT_IMG =
-  "https://image2url.com/r2/default/images/1775200145399-f0e4d8bd-15f4-46de-b4ea-3a5744599aa1.png";
+  "https://res.cloudinary.com/dqcybkje5/image/upload/v1781092137/ChatGPT_Image_Jun_10_2026_05_16_21_PM_1_t9q9hc.png";
 
 const modules = [
   { name: "Digital Logic Foundations", desc: "Build your first programs and understand core computational thinking", img: "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=600&h=300&fit=crop" },
@@ -320,6 +321,13 @@ const BookDemoModal = ({ onClose, mode = "paid" }: { onClose: () => void; mode?:
 
 const Home = () => {
   const [demoOpen, setDemoOpen] = useState(false);
+  const navigate = useNavigate();
+  // Hero course search → sends the kid to the catalog with the term applied.
+  const [heroSearch, setHeroSearch] = useState("");
+  const runHeroSearch = () => {
+    const v = heroSearch.trim();
+    navigate(v ? `/courses/browse?search=${encodeURIComponent(v)}` : "/courses/browse");
+  };
 
   // Live gallery preview — same source as the /gallery page (admin-service).
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
@@ -388,12 +396,12 @@ const Home = () => {
     <div className="overflow-hidden">
       {/* ───────────── Hero ───────────── */}
       <section id="home" className="relative bg-gradient-subtle">
-        <div className="container-ngo grid lg:grid-cols-2 gap-10 items-center py-16 lg:py-24">
-          <div className="space-y-6">
+        <div className="container-ngo grid lg:grid-cols-2 gap-10 items-center lg:items-start py-16 lg:py-20">
+          <div className="space-y-5 lg:pt-6">
             <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 text-primary px-4 py-1.5 text-sm font-semibold">
               <Sparkles className="w-4 h-4" /> The Future of STEM Education
             </span>
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight">
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-[1.05]">
               Learn <span className="text-gradient">Robotics & AI</span> Faster —
               With Clear Guidance and Real Projects.
             </h1>
@@ -409,31 +417,55 @@ const Home = () => {
                 <a href="#curriculum">Explore Curriculum</a>
               </Button>
             </div>
+
+            {/* Kid-friendly course search → catalog */}
+            <form
+              onSubmit={(e) => { e.preventDefault(); runHeroSearch(); }}
+              className="relative max-w-md"
+            >
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+              <input
+                value={heroSearch}
+                onChange={(e) => setHeroSearch(e.target.value)}
+                placeholder="Search courses… try “robots”, “coding”, “AI”"
+                aria-label="Search courses"
+                className="w-full rounded-full border border-border bg-white pl-12 pr-24 py-3 text-foreground outline-none focus:ring-2 focus:ring-primary/40"
+              />
+              <button
+                type="submit"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 bg-gradient-hero text-white rounded-full px-5 py-2 text-sm font-semibold"
+              >
+                Search
+              </button>
+            </form>
           </div>
 
-          <div className="relative flex justify-center items-center min-h-[420px]">
-            {/* Soft pulsing aura */}
-            <div className="absolute w-[360px] h-[360px] rounded-full bg-gradient-to-br from-primary/40 via-orange-300/30 to-transparent blur-3xl animate-glow-pulse" />
+          <div className="flex justify-center items-center pt-12 lg:pt-16">
+            {/* Wrapper shrinks to the image, so the ring + aura below are sized
+                relative to the image and stay aligned/centered as it scales. */}
+            <div className="relative inline-block w-full max-w-2xl lg:max-w-3xl">
+              {/* Soft aura behind the image (gentle pulse) */}
+              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 aspect-square w-[88%] rounded-full bg-gradient-to-br from-primary/25 via-orange-200/30 to-transparent blur-3xl animate-glow-pulse" />
 
-            {/* Slowly spinning dashed orbit ring */}
-            <div className="absolute w-[420px] h-[420px] rounded-full border-2 border-dashed border-primary/30 animate-ring-spin" />
+              {/* Dashed circle ring, sized to hug the image so its content meets
+                  the ring line. Centered box so the spin rotates around the image. */}
+              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 aspect-square w-[98%] flex items-center justify-center">
+                <div className="w-full h-full rounded-full border-2 border-dashed border-primary/30 animate-ring-spin" />
+                {/* Accent dots ride along the ring's edge */}
+                <span className="absolute top-0 left-1/2 w-3.5 h-3.5 rounded-full bg-primary/70 blur-[1px] animate-orb-drift" />
+                <span className="absolute bottom-6 right-2 w-5 h-5 rounded-full bg-orange-400/60 blur-[1px] animate-orb-drift" style={{ animationDelay: "1.5s" }} />
+                <span className="absolute top-1/2 right-0 w-3 h-3 rounded-full bg-amber-300/80 animate-orb-drift" style={{ animationDelay: "3s" }} />
+                <span className="absolute bottom-2 left-10 w-2.5 h-2.5 rounded-full bg-primary/80 animate-orb-drift" style={{ animationDelay: "0.8s" }} />
+              </div>
 
-            {/* Drifting glow orbs */}
-            <span className="absolute top-6 left-10 w-4 h-4 rounded-full bg-primary/70 blur-[2px] animate-orb-drift" />
-            <span className="absolute bottom-16 right-8 w-6 h-6 rounded-full bg-orange-400/60 blur-[2px] animate-orb-drift" style={{ animationDelay: "1.5s" }} />
-            <span className="absolute top-1/2 right-16 w-3 h-3 rounded-full bg-amber-300/80 blur-[1px] animate-orb-drift" style={{ animationDelay: "3s" }} />
-            <span className="absolute bottom-8 left-20 w-2.5 h-2.5 rounded-full bg-primary/80 animate-orb-drift" style={{ animationDelay: "0.8s" }} />
-
-            {/* Floating robot */}
-            <img
-              src={ROBOT_IMG}
-              alt="VR Robotics learning robot"
-              className="relative z-10 w-full max-w-md object-contain drop-shadow-2xl animate-robot-float"
-              loading="lazy"
-            />
-
-            {/* Breathing ground shadow */}
-            <div className="absolute bottom-4 left-1/2 w-52 h-5 bg-black/40 rounded-[50%] blur-xl animate-shadow-breathe" />
+              {/* Hero illustration — gentle float, centered in the ring */}
+              <img
+                src={ROBOT_IMG}
+                alt="Kids learning robotics, AI and STEM with VR Robotics Academy"
+                className="relative z-10 w-full object-contain animate-robot-float"
+                loading="eager"
+              />
+            </div>
           </div>
         </div>
 

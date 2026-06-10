@@ -60,7 +60,18 @@ export default function QuizPlayer({ lesson, onCompleted }) {
     const submitRef = useRef(() => {});
 
     if (questions.length === 0) {
-        return <div className="bg-white text-dark p-6">No questions configured for this quiz.</div>;
+        return (
+            <div className="bg-white text-dark p-10 sm:p-14 flex flex-col items-center text-center">
+                <div className="w-16 h-16 rounded-2xl bg-[#FF6A00]/10 text-[#FF6A00] flex items-center justify-center mb-4">
+                    <i className="fa fa-clipboard-question text-[26px]" />
+                </div>
+                <h3 className="text-[18px] font-bold text-gray-900 mb-1">{lesson.title || 'Quiz'}</h3>
+                <p className="text-[14px] text-gray-500 max-w-md">
+                    This quiz doesn’t have any questions yet. Once your instructor adds questions,
+                    they’ll appear here. You can continue with the next lesson in the meantime.
+                </p>
+            </div>
+        );
     }
 
     // fill_blanks answer is the typed text; mcq/true_false answer is an option

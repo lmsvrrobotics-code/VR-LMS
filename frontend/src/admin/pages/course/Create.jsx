@@ -48,6 +48,11 @@ export default function CourseCreate() {
         // Class-access range (Class 1–12). Empty = open to all classes.
         class_from: '',
         class_to: '',
+        // Course-details stats card: admin-set Score "out of" + Lectures label.
+        score_max: '',
+        lectures_label: '',
+        // Free public sample/teaser course (marketing) — '1' on, '0' off.
+        is_marketing: '0',
         is_paid: '1',
         price: '',
         discount_flag: '',
@@ -239,6 +244,12 @@ export default function CourseCreate() {
                                 </select>
                             </div>
 
+                            {/* Combined access selector: the class ranges and the
+                                former "Category" options (For Engineering / For
+                                Freshers) live in one dropdown. A `type:` value sets
+                                course_type and clears the numeric range; a numeric
+                                range sets class_from/to and resets course_type to
+                                general. Both fields still go to the backend. */}
                             <div className="mb-3">
                                 <label className="ol-form-label" htmlFor="class_range">
                                     Class access range
@@ -246,36 +257,35 @@ export default function CourseCreate() {
                                 <select
                                     id="class_range"
                                     className="ol-form-control"
-                                    value={form.class_from && form.class_to ? `${form.class_from}-${form.class_to}` : ''}
+                                    value={
+                                        form.course_type && form.course_type !== 'general'
+                                            ? `type:${form.course_type}`
+                                            : form.class_from && form.class_to
+                                                ? `${form.class_from}-${form.class_to}`
+                                                : ''
+                                    }
                                     onChange={(e) => {
-                                        const [cf, ct] = e.target.value.split('-');
-                                        set('class_from', cf || '');
-                                        set('class_to', ct || '');
+                                        const v = e.target.value;
+                                        if (v.startsWith('type:')) {
+                                            set('course_type', v.slice(5));
+                                            set('class_from', '');
+                                            set('class_to', '');
+                                        } else {
+                                            const [cf, ct] = v.split('-');
+                                            set('class_from', cf || '');
+                                            set('class_to', ct || '');
+                                            set('course_type', 'general');
+                                        }
                                     }}
                                 >
                                     <option value="">All classes</option>
                                     <option value="8-12">Class 8 – 12</option>
                                     <option value="12-18">Class 12 – 18</option>
+                                    <option value="type:engineering">For Engineering</option>
+                                    <option value="type:freshers">For Freshers</option>
                                 </select>
                                 <small className="text-muted">
-                                    Pick the class group this course is for. "All classes" makes it open to everyone.
-                                </small>
-                            </div>
-
-                            <div className="mb-3">
-                                <label className="ol-form-label" htmlFor="course_type">Category</label>
-                                <select
-                                    id="course_type"
-                                    className="ol-form-control"
-                                    value={form.course_type}
-                                    onChange={(e) => set('course_type', e.target.value)}
-                                >
-                                    <option value="general">General</option>
-                                    <option value="engineering">For Engineering</option>
-                                    <option value="freshers">For Freshers</option>
-                                </select>
-                                <small className="text-muted">
-                                    Tags the course so it shows under the matching menu (For Engineering / For Freshers).
+                                    Pick the class group or audience this course is for. "All classes" makes it open to everyone; "For Engineering / For Freshers" also tags it for the matching menu.
                                 </small>
                             </div>
 
@@ -305,6 +315,60 @@ export default function CourseCreate() {
                                         </option>
                                     ))}
                                 </select>
+                            </div>
+
+                            {/* Course-details stats card: admin-set Score "out
+                                of" + Lectures label. Both optional. */}
+                            <div className="mb-3">
+                                <label className="ol-form-label" htmlFor="score_max">
+                                    Score (out of)
+                                </label>
+                                <input
+                                    id="score_max"
+                                    type="number"
+                                    min="0"
+                                    className="ol-form-control"
+                                    name="score_max"
+                                    value={form.score_max}
+                                    onChange={(e) => set('score_max', e.target.value)}
+                                    placeholder="e.g. 50"
+                                />
+                                <small className="text-gray text-[12px]">
+                                    Maximum points for the Score row on course-details. The student's earned points come from the course leaderboard (lessons + quizzes). Leave blank to hide the max.
+                                </small>
+                            </div>
+
+                            <div className="mb-3">
+                                <label className="ol-form-label" htmlFor="lectures_label">
+                                    Lectures
+                                </label>
+                                <input
+                                    id="lectures_label"
+                                    type="text"
+                                    className="ol-form-control"
+                                    name="lectures_label"
+                                    value={form.lectures_label}
+                                    onChange={(e) => set('lectures_label', e.target.value)}
+                                    placeholder="e.g. 2 Hours/ Week"
+                                />
+                                <small className="text-gray text-[12px]">
+                                    Free text shown on the "Lectures" row of the course-details stats card. Leave blank to show "—".
+                                </small>
+                            </div>
+
+                            <div className="mb-3">
+                                <label className="inline-flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={form.is_marketing === '1'}
+                                        onChange={(e) => set('is_marketing', e.target.checked ? '1' : '0')}
+                                        className="accent-skin w-4 h-4"
+                                    />
+                                    <span className="ol-form-label m-0">Marketing course (free sample)</span>
+                                </label>
+                                <small className="text-gray text-[12px] block">
+                                    A demo/teaser course (e.g. 2-3 sample videos) visible & fully playable to every registered student — bypasses payment and release-gating in the normal course player. Great for attracting new sign-ups.
+                                </small>
                             </div>
 
                             {/* Teacher — sourced from the admin teacher API

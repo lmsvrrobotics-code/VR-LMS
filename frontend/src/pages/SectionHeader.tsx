@@ -52,8 +52,9 @@ const SectionHeader = ({ title, student }) => {
 
   return (
     <div className="flex items-center justify-between border-b pb-3 mb-6">
-      {/* Left Title */}
-      <h1 className="text-2xl font-bold">{title}</h1>
+      {/* Left Title — hidden when no title is given (e.g. the My Courses tab,
+          which already shows the label in the sidebar nav). */}
+      {title ? <h1 className="text-2xl font-bold">{title}</h1> : <span />}
 
       {/* Right user info */}
       <div className="flex items-center gap-4">

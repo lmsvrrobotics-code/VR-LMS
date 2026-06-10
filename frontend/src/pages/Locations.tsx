@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import axios from "axios";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -15,9 +16,39 @@ import {
 } from "lucide-react";
 
 /**
- * VR Robotics Academy — Locations page (new page; existing content untouched).
- * Centre photos are placeholders.
+ * VR Robotics Academy — Locations page. The learning-center cards are now
+ * admin-managed (Admin → Marketing → Locations) and loaded from
+ * GET /api/public/locations. Centre photos are optional; cards without a photo
+ * show a coloured placeholder. The hero, map and "Why Join" sections are static.
  */
+
+const ADMIN_BASE =
+  (import.meta.env.VITE_ADMIN_API_URL as string) || "http://localhost:5000";
+
+interface Center {
+  id: number;
+  name: string;
+  city: string | null;
+  state: string | null;
+  pin: string | null;
+  photo_url: string | null;
+  map_url: string | null;
+  is_new: number;
+}
+
+// Card header gradients, cycled by card index so the page keeps its colourful
+// look without the admin having to pick a colour per centre.
+const TINTS = [
+  "from-emerald-500 to-teal-700",
+  "from-indigo-500 to-blue-700",
+  "from-violet-500 to-purple-700",
+  "from-rose-500 to-red-700",
+  "from-amber-500 to-orange-700",
+  "from-sky-500 to-cyan-700",
+];
+
+// Full "City, State" line for a centre (omits missing parts cleanly).
+const addressLine = (c: Center) => [c.city, c.state].filter(Boolean).join(", ");
 
 const Placeholder = ({ label, tint = "from-orange-400 to-orange-600", className = "" }: { label: string; tint?: string; className?: string }) => (
   <div className={`relative flex items-center justify-center bg-gradient-to-br ${tint} text-white ${className}`}>
@@ -25,16 +56,9 @@ const Placeholder = ({ label, tint = "from-orange-400 to-orange-600", className 
       <ImageIcon className="w-8 h-8" />
       <span className="text-xs font-medium">{label}</span>
     </div>
-    <span className="absolute top-2 right-2 text-[10px] bg-black/30 px-1.5 py-0.5 rounded">Image placeholder</span>
+    <span className="absolute top-2 right-2 text-[10px] bg-black/30 px-1.5 py-0.5 rounded">Centre photo</span>
   </div>
 );
-
-const centers = [
-  { name: "Guntur (HQ)", city: "Guntur, Andhra Pradesh", pin: "522001", isNew: false, tint: "from-emerald-500 to-teal-700" },
-  { name: "Vijayawada", city: "Vijayawada, Andhra Pradesh", pin: "520010", isNew: true, tint: "from-indigo-500 to-blue-700" },
-  { name: "Hyderabad", city: "Hyderabad, Telangana", pin: "500081", isNew: true, tint: "from-violet-500 to-purple-700" },
-  { name: "Bengaluru", city: "Bengaluru, Karnataka", pin: "560102", isNew: true, tint: "from-rose-500 to-red-700" },
-];
 
 const whyJoin = [
   { icon: Wrench, color: "text-orange-500", title: "Hands-On Learning", text: "Gain real-world experience with Robotics, AI, and Coding projects designed to build practical tech skills and confidence." },
@@ -49,6 +73,36 @@ const MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
 
 const Locations = () => {
   const [query, setQuery] = useState("");
+  const [centers, setCenters] = useState<Center[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    axios
+      .get(`${ADMIN_BASE}/api/public/locations`, { timeout: 20000 })
+      .then(({ data }) => {
+        if (!cancelled) setCenters(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setCenters([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Filter by the hero search box (name / city / state / PIN).
+  const q = query.trim().toLowerCase();
+  const shown = q
+    ? centers.filter((c) =>
+        [c.name, c.city, c.state, c.pin]
+          .filter(Boolean)
+          .some((v) => String(v).toLowerCase().includes(q)),
+      )
+    : centers;
 
   return (
     <div className="overflow-hidden">
@@ -74,12 +128,25 @@ const Locations = () => {
       {/* Centers */}
       <section className="section-padding">
         <div className="container-ngo">
+          {loading ? (
+            <p className="text-center text-muted-foreground py-10">Loading centers…</p>
+          ) : shown.length === 0 ? (
+            <p className="text-center text-muted-foreground py-10">
+              {centers.length === 0
+                ? "No learning centers listed yet."
+                : "No centers match your search."}
+            </p>
+          ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {centers.map((c) => (
-              <Card key={c.name} className="card-ngo border-0 overflow-hidden">
+            {shown.map((c, i) => (
+              <Card key={c.id} className="card-ngo border-0 overflow-hidden">
                 <div className="relative">
-                  <Placeholder label="Centre photo" tint={c.tint} className="h-44" />
-                  {c.isNew && (
+                  {c.photo_url ? (
+                    <img src={c.photo_url} alt={c.name} className="h-44 w-full object-cover" />
+                  ) : (
+                    <Placeholder label="Centre photo" tint={TINTS[i % TINTS.length]} className="h-44" />
+                  )}
+                  {!!c.is_new && (
                     <span className="absolute top-0 left-0 bg-primary text-white text-xs font-bold px-6 py-1 rotate-[-30deg] -translate-x-5 translate-y-3">
                       New
                     </span>
@@ -88,17 +155,17 @@ const Locations = () => {
                 <CardContent className="p-5 space-y-2">
                   <h3 className="font-semibold text-lg">{c.name}</h3>
                   <p className="flex items-center gap-2 text-muted-foreground text-sm">
-                    <MapPin className="w-4 h-4 text-warm-green" /> {c.city}
+                    <MapPin className="w-4 h-4 text-warm-green" /> {addressLine(c) || "—"}
                   </p>
-                  <p className="text-muted-foreground text-sm">PIN: {c.pin}</p>
+                  {c.pin && <p className="text-muted-foreground text-sm">PIN: {c.pin}</p>}
                   <div className="flex gap-3 pt-2">
                     <Button size="sm" className="bg-warm-green border-0 text-white" asChild>
                       <Link to="/contact">Know More</Link>
                     </Button>
                     <Button size="sm" variant="outline" asChild>
                       <a
-                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                          `VR Robotics Academy ${c.city}`,
+                        href={c.map_url || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                          `VR Robotics Academy ${addressLine(c) || c.name}`,
                         )}`}
                         target="_blank"
                         rel="noopener noreferrer"
@@ -111,6 +178,7 @@ const Locations = () => {
               </Card>
             ))}
           </div>
+          )}
         </div>
       </section>
 

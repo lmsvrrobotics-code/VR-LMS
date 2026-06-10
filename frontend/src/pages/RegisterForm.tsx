@@ -36,6 +36,7 @@ const Register = () => {
     setErr(null);
     if (!name.trim()) return setErr("Please enter your full name.");
     if (!email.trim()) return setErr("Please enter your email.");
+    if (!phone.trim()) return setErr("Please enter your mobile number.");
     if (password.length < 8) return setErr("Password must be at least 8 characters.");
     if (password !== confirm) return setErr("Passwords do not match.");
     if (!consent) return setErr("Please confirm your details are accurate.");
@@ -79,7 +80,7 @@ const Register = () => {
           <CardContent>
             <form className="space-y-4" onSubmit={handleSubmit}>
               <div>
-                <Label className="mb-1 block">Full Name</Label>
+                <Label className="mb-1 block">Full Name <span className="text-red-500">*</span></Label>
                 <Input
                   placeholder="Your name"
                   value={name}
@@ -89,7 +90,7 @@ const Register = () => {
               </div>
 
               <div>
-                <Label className="mb-1 block">Email Address</Label>
+                <Label className="mb-1 block">Email Address <span className="text-red-500">*</span></Label>
                 <Input
                   type="email"
                   placeholder="you@example.com"
@@ -100,16 +101,17 @@ const Register = () => {
               </div>
 
               <div>
-                <Label className="mb-1 block">Mobile Number <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                <Label className="mb-1 block">Mobile Number <span className="text-red-500">*</span></Label>
                 <Input
                   placeholder="Mobile number"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
+                  required
                 />
               </div>
 
               <div>
-                <Label className="mb-1 block">Password</Label>
+                <Label className="mb-1 block">Password <span className="text-red-500">*</span></Label>
                 <div className="relative">
                   <Input
                     type={showPwd ? "text" : "password"}
@@ -129,7 +131,7 @@ const Register = () => {
               </div>
 
               <div>
-                <Label className="mb-1 block">Confirm Password</Label>
+                <Label className="mb-1 block">Confirm Password <span className="text-red-500">*</span></Label>
                 <Input
                   type={showPwd ? "text" : "password"}
                   placeholder="Re-enter password"

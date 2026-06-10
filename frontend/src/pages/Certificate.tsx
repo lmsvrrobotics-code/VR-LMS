@@ -61,8 +61,8 @@ const Certificate = () => {
             <Award className="h-10 w-10 mx-auto mb-3 text-gray-300" />
             <p>You haven't earned any certificates yet.</p>
             <p className="text-sm mt-1">
-              Complete a program <strong>and</strong> pass the post-assessment
-              to receive a certificate of completion.
+              <strong>Complete a course</strong> to receive a certificate of
+              completion.
             </p>
           </div>
         )}

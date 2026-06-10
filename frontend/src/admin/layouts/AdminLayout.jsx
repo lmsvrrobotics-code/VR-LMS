@@ -4,6 +4,8 @@ import Navbar from '@/components/layout/Navbar';
 import { logout as adminLogout, getStoredUser } from '@/admin/api/auth';
 import { getToken as getAdminToken } from '@/admin/api/client';
 import { leadStats } from '@/admin/api/leads';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { useDashboardTheme } from '@/hooks/useDashboardTheme';
 
 // Decode a JWT payload (base64url) without a library. Returns null on any
 // malformed token. The admin-service signs is_root_admin / role / college_id
@@ -43,38 +45,23 @@ const ICONS = {
     program: <Icon d={<><path d="M3 7l9-4 9 4-9 4-9-4z" /><path d="M3 7v6l9 4 9-4V7" /><path d="M12 11v10" /></>} />,
     college: <Icon d={<><path d="M3 21h18" /><path d="M5 21V8l7-4 7 4v13" /><path d="M9 21V12h6v9" /></>} />,
     settings: <Icon d={<><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></>} />,
+    feedback: <Icon d={<><path d="M12 17.3l-5.4 3 1-6-4.4-4.2 6-.9L12 3l2.8 5.3 6 .9-4.4 4.2 1 6z" /></>} />,
+    mail: <Icon d={<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>} />,
     chevron: <Icon className="ml-auto transition-transform" d={<path d="m6 9 6 6 6-6" />} />,
     external: <Icon className="w-[14px] h-[14px]" d={<><path d="M14 3h7v7" /><path d="M10 14 21 3" /><path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h6" /></>} />,
     logout: <Icon d={<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>} />,
 };
 
-// `collegeOnly: true` items are visible ONLY to school admins (admin user
-// whose college_id is set). Items without that flag are visible only to root
-// admins (college_id null/empty). The filter logic in AdminLayout below
-// enforces that split — root admins should never see a college's data and
-// school admins should see only their dashboard.
+// Sidebar items. Two cohorts see this menu: root admin (full menu) and
+// teacher (a filtered subset, computed below). The standalone school/college
+// "Mentor Dashboard" flow was removed — there are no school admins, so its
+// `collegeOnly` items and cohort branch no longer exist.
 const MENU = [
-    // Mentor Dashboard is the school admin's landing (top of the sidebar,
-    // above Batches). Links to the School Dashboard base path, which renders
-    // the Mentor Dashboard section by default. The old "School Dashboard"
-    // (KPIs) sidebar item was removed at the admin's request.
-    { key: 'm_dashboard', label: 'Mentor Dashboard', icon: ICONS.dashboard, to: '/admin/college', collegeOnly: true },
-    // Teacher (Mentor) dashboard feature set, surfaced as college-admin sidebar
-    // items. Each links to the School Dashboard with ?tab=mentor-* which
-    // renders the matching MentorPanel section. collegeOnly so only college
-    // admins see them (root admin keeps the full standard menu).
-    { key: 'm_slots', label: 'Slots', icon: ICONS.assessment, to: '/admin/college?tab=mentor-slots', collegeOnly: true },
-    { key: 'm_demos', label: 'Demos', icon: ICONS.course, to: '/admin/college?tab=mentor-demos', collegeOnly: true },
-    { key: 'm_classes', label: 'Classes', icon: ICONS.course, to: '/admin/college?tab=mentor-classes', collegeOnly: true },
-    { key: 'm_timetable', label: 'Time table', icon: ICONS.category, to: '/admin/college?tab=mentor-timetable', collegeOnly: true },
-    { key: 'm_students', label: 'Students', icon: ICONS.users, to: '/admin/college?tab=mentor-students', collegeOnly: true },
-    { key: 'm_resources', label: 'Resources', icon: ICONS.course, to: '/admin/college?tab=mentor-resources', collegeOnly: true },
-    { key: 'm_profile', label: 'Profile', icon: ICONS.users, to: '/admin/college?tab=mentor-profile', collegeOnly: true },
-    { key: 'm_referral', label: 'Referral', icon: ICONS.users, to: '/admin/college?tab=mentor-referral', collegeOnly: true },
-    { key: 'm_payout', label: 'Payout', icon: ICONS.certificate, to: '/admin/college?tab=mentor-payout', collegeOnly: true },
-    { key: 'm_tasks', label: 'Tasks', icon: ICONS.assessment, to: '/admin/college?tab=mentor-tasks', collegeOnly: true },
     { key: 'dashboard', label: 'Dashboard', icon: ICONS.dashboard, to: '/admin/dashboard' },
     { key: 'calendar', label: 'Calendar', icon: ICONS.category, to: '/admin/calendar' },
+    { key: 'feedback', label: 'Student Feedback', icon: ICONS.feedback, to: '/admin/feedback' },
+    { key: 'feedback-forms', label: 'Feedback Forms', icon: ICONS.feedback, to: '/admin/feedback-forms' },
+    { key: 'messages', label: 'Messages', icon: ICONS.mail, to: '/admin/messages' },
     // Category sidebar entry removed — course grouping is now driven by the
     // `clg_ids` JSON column written from the course form (CollegeMultiSelect).
     // The /admin/categories route still exists in App.tsx for direct access,
@@ -102,6 +89,8 @@ const MENU = [
             { label: 'Books', to: '/admin/books' },
             { label: 'Projects', to: '/admin/projects' },
             { label: 'Gallery', to: '/admin/gallery' },
+            { label: 'Demo Videos', to: '/admin/demo-videos' },
+            { label: 'Locations', to: '/admin/locations' },
             { label: 'Testimonials', to: '/admin/testimonials' },
         ],
     },
@@ -133,14 +122,6 @@ const MENU = [
         icon: ICONS.course,
         children: [
             { label: 'Manage Classes', to: '/admin/classes' },
-        ],
-    },
-    {
-        key: 'timetable',
-        label: 'Time table',
-        icon: ICONS.category,
-        children: [
-            { label: 'Manage Time table', to: '/admin/timetable' },
         ],
     },
     // Assessments menu hidden from the sidebar by request. The feature itself
@@ -303,9 +284,6 @@ function isGroupActive(group, pathname, search = '') {
     if (group.key === 'classes') {
         return pathname.startsWith('/admin/classes');
     }
-    if (group.key === 'timetable') {
-        return pathname.startsWith('/admin/timetable');
-    }
     // Note: `batches` is a children-only group, so the recursion above
     // already lights it up whenever any child's pathname+query matches
     // (see the renderChild matchesLeaf wiring). No special case needed.
@@ -315,6 +293,7 @@ function isGroupActive(group, pathname, search = '') {
 export default function AdminLayout() {
     const { pathname, search } = useLocation();
     const navigate = useNavigate();
+    const { isDark } = useDashboardTheme();
     // Read localStorage once per mount. getStoredUser() does JSON.parse, which
     // returns a fresh object every call — referencing it inline on every
     // render caused downstream effects to see "new" deps and re-fire.
@@ -349,30 +328,20 @@ export default function AdminLayout() {
         return t ? decodeJwt(t) : null;
     }, []);
 
-    // Routing rule: only the explicit root admin sees the full sidebar. Every
-    // other admin — whether they have a college_id or not — is treated as a
-    // school admin and sees only the School Dashboard tab. (The dashboard
-    // endpoint itself 403s if the JWT lacks a college_id, which surfaces a
-    // clear "missing college" error rather than silently showing zeros.)
+    // Routing rule: teachers get a filtered sidebar; every other admin sees the
+    // full menu. (The school/college-admin cohort was removed — no such users.)
     const isTeacher = (tokenClaims?.role ?? adminUser?.role) === 'teacher';
-    // Root admin if EITHER the token or the cached user says so. The token is
-    // checked first so a stale admin_user (missing is_root_admin) can't
-    // misclassify the root admin as a school admin and hide the full sidebar.
-    const isRootAdmin =
-        !isTeacher && (tokenClaims?.is_root_admin === true || adminUser?.is_root_admin === true);
-    const isCollegeAdmin = !isTeacher && !isRootAdmin;
 
-    // Three cohorts, three sidebars:
+    // Two cohorts, two sidebars:
     //   - Teacher: only the Course group (Manage Courses), and only the
     //     Curriculum + Live Class tabs inside Edit Course (see Edit.jsx).
-    //   - School admin: only School Dashboard.
-    //   - Root admin: full menu.
+    //   - Admin (root): full menu.
     let visibleMenu;
     if (isTeacher) {
         // Course group ("Manage Courses" only) + Teacher Assignments ("My
         // Classes") where the teacher releases lessons to their students.
         const courseGroup = MENU
-            .filter((item) => item.key === 'course' && !item.collegeOnly)
+            .filter((item) => item.key === 'course')
             .map((item) => ({
                 ...item,
                 children: (item.children || []).filter((c) => c.to === '/admin/courses'),
@@ -387,10 +356,8 @@ export default function AdminLayout() {
                 children: (item.children || []).filter((c) => c.to === '/admin/teaching'),
             }));
         visibleMenu = [...courseGroup, ...teachingGroup];
-    } else if (isCollegeAdmin) {
-        visibleMenu = MENU.filter((item) => item.collegeOnly === true);
     } else {
-        visibleMenu = MENU.filter((item) => item.collegeOnly !== true);
+        visibleMenu = MENU;
     }
 
     // Hard-stop direct URL access to routes outside an teacher's surface.
@@ -410,13 +377,8 @@ export default function AdminLayout() {
             if (!isTeacherPathAllowed(pathname)) {
                 navigate('/admin/courses', { replace: true });
             }
-            return;
         }
-        if (!isCollegeAdmin) return;
-        if (pathname.startsWith('/admin/college')) return;
-        // Avoid redundant navigate() calls — only redirect when actually off-route.
-        navigate('/admin/college', { replace: true });
-    }, [isTeacher, isCollegeAdmin, pathname, navigate]);
+    }, [isTeacher, pathname, navigate]);
 
     const handleLogout = async () => {
         await adminLogout();
@@ -535,11 +497,16 @@ export default function AdminLayout() {
         }`;
 
     return (
-        <div className="admin-theme min-h-screen flex flex-col bg-bodybg">
+        <div className={`admin-theme min-h-screen flex flex-col bg-bodybg ${isDark ? 'dark admin-dark' : ''}`}>
             <Navbar />
 
             <div className="flex flex-1">
                 <aside className="w-[260px] bg-white border-r border-border shrink-0 flex flex-col">
+                    {/* Appearance / theme toggle pinned at the top of the sidebar. */}
+                    <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border shrink-0">
+                        <span className="text-[11px] uppercase tracking-wider text-gray font-semibold">Appearance</span>
+                        <ThemeToggle />
+                    </div>
                     <div className="flex-1 overflow-y-auto px-3 pt-5 pb-8">
                         <nav className="flex flex-col gap-1">
                             {(() => {

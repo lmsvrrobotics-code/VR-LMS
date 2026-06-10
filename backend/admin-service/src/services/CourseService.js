@@ -16,6 +16,20 @@ const env = require('../config/env');
 const { enqueueMany } = require('../jobs/emailQueue');
 const { courseAssignedToStudent } = require('../helpers/emailTemplates');
 const { HttpError } = require('../middlewares/error');
+const teachingSvc = require('./TeachingAssignmentService');
+
+// Best-effort: every course with a teacher gets a TeachingAssignment so the
+// teacher has a surface to release lessons through (release-gating is universal
+// — see TeachingAssignmentService.visibleLessonIdsForStudent). Never let this
+// fail the course save; the backfill script can repair any miss.
+async function ensureCourseAssignments(courseId, teachers, clgIds) {
+    try {
+        const clgId = Array.isArray(clgIds) ? clgIds[0] : null;
+        await teachingSvc.ensureAssignmentsForCourse(courseId, teachers, clgId);
+    } catch (e) {
+        console.warn('[course] ensureAssignmentsForCourse failed:', e.message);
+    }
+}
 
 // Queue a "you've been assigned to a new course" email for every student
 // who sits at one of the course's colleges AND is a member of one of its
@@ -428,6 +442,11 @@ const create = async ({ body, files = {}, userId }) => {
         // Class-access range (Class 1–12). NULL = open to all classes.
         class_from: toClassNum(b.class_from),
         class_to: toClassNum(b.class_to),
+        // Admin-set Score denominator + Lectures label for course-details.
+        score_max: b.score_max === '' || b.score_max == null ? null : Number(b.score_max),
+        lectures_label: b.lectures_label ? String(b.lectures_label).trim() : null,
+        // Free public sample/teaser course toggle.
+        is_marketing: toBool(b.is_marketing, false),
         is_paid: b.is_paid,
         price: b.price || 0,
         discount_flag: b.discount_flag || 0,
@@ -480,6 +499,9 @@ const create = async ({ body, files = {}, userId }) => {
     // layout used by Udemy/Teachable/Thinkific.
     const course = await courseRepo.create(data);
     await course.update({ slug: slugify(`${b.title}-${course.id}`) });
+
+    // Give the assigned teacher(s) a release surface for this new course.
+    await ensureCourseAssignments(course.id, b.teachers || [finalUserId], data.clg_ids);
 
     const mediaPatch = {};
     if (files.thumbnail?.[0]) {
@@ -559,6 +581,11 @@ const update = async ({ id, body, files = {} }) => {
         // fields, so other partial saves don't wipe an existing range.
         if (b.class_from !== undefined) data.class_from = toClassNum(b.class_from);
         if (b.class_to !== undefined) data.class_to = toClassNum(b.class_to);
+        // Admin-set Score denominator + Lectures label — only touch when the
+        // Basic-tab form sent them so partial saves don't wipe the values.
+        if (b.score_max !== undefined) data.score_max = b.score_max === '' || b.score_max === null ? null : Number(b.score_max);
+        if (b.lectures_label !== undefined) data.lectures_label = b.lectures_label ? String(b.lectures_label).trim() : null;
+        if (b.is_marketing !== undefined) data.is_marketing = toBool(b.is_marketing, false);
         data.status = b.status;
         // Only overwrite the teacher assignment when the form actually
         // sent one. Previously, partial Basic-tab saves submitted an empty
@@ -670,6 +697,16 @@ const update = async ({ id, body, files = {} }) => {
     }
 
     if (Object.keys(data).length) await course.update(data);
+
+    // When the Basic tab changed the teacher assignment, make sure the new
+    // teacher(s) have a release surface for this course (idempotent).
+    if (data.teacher_ids !== undefined) {
+        await ensureCourseAssignments(
+            id,
+            data.teacher_ids,
+            data.clg_ids !== undefined ? data.clg_ids : course.clg_ids,
+        );
+    }
     return { success: 'Course updated successfully' };
 };
 

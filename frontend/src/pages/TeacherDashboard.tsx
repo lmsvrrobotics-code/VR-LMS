@@ -1,13 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/hooks/useAuth";
 import { updateProfile, changePassword } from "@/api/authApi";
+import { uploadStudentPhoto } from "@/api/leadApi";
 import { toast } from "react-toastify";
 // The teacher's assigned courses + lesson-release UI (same component the admin
 // shell uses; it auto-detects the teacher role → shows release, no create form).
 import TeachingAssignmentsIndex from "@/admin/pages/teaching/Index";
+import ScheduleCalendar, { type ScheduleEvent } from "@/components/schedule/ScheduleCalendar";
+import FeedbackFormsView from "@/components/teacher/FeedbackFormsView";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { useDashboardTheme } from "@/hooks/useDashboardTheme";
 import {
   Video,
   Calendar,
@@ -15,13 +20,13 @@ import {
   CalendarDays,
   MessageSquare,
   MonitorPlay,
-  Table2,
   Users,
   Library,
   Contact,
   Megaphone,
   IndianRupee,
   ClipboardList,
+  ClipboardCheck,
   Power,
   Info,
   ChevronLeft,
@@ -38,14 +43,17 @@ import {
 // Only sections wired to real admin data. Dashboard(earnings), Referral, Payout,
 // Tasks were placeholders ("coming soon" / unbuilt earnings) → removed until
 // the earning rules are defined.
+// Slots + Free Schedule removed from the teacher sidebar by request. Their
+// view components (SlotsView / FreeScheduleView) and the render branches below
+// are left intact but unreachable, so the feature can be restored by re-adding
+// the nav entries.
 const navItems = [
   { name: "My Courses", icon: MonitorPlay },
-  { name: "Slots", icon: CalendarDays },
   { name: "Demos", icon: MessageSquare },
   { name: "Classes", icon: MonitorPlay },
-  { name: "Time table", icon: Table2 },
-  { name: "Free Schedule", icon: CalendarDays },
+  { name: "Calendar", icon: CalendarDays },
   { name: "Students", icon: Users },
+  { name: "Feedback Forms", icon: ClipboardList },
   { name: "Resources", icon: Library },
   { name: "Profile", icon: Contact },
 ];
@@ -253,8 +261,6 @@ const Panel = ({ title, icon: Icon, children }: { title: string; icon: typeof Ca
 
 const Empty = ({ text }: { text: string }) => <p className="text-muted-foreground py-8 text-center">{text}</p>;
 
-const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-
 const DemosView = ({ teacherId }: { teacherId?: string }) => {
   const { items, loading } = useTeacherList<{ id: number; title: string; course_title: string | null; start_at: string | null; end_at: string | null; meeting_link: string | null }>(teacherId, "demos", "demos");
   return (
@@ -318,26 +324,29 @@ const ClassesView = ({ teacherId }: { teacherId?: string }) => {
   );
 };
 
-const TimetableView = ({ teacherId }: { teacherId?: string }) => {
-  const { items, loading } = useTeacherList<{ id: number; day_of_week: number; start_time: string | null; end_time: string | null; course_title: string | null }>(teacherId, "timetable", "entries");
+// Teacher Calendar — visualises the teacher's own Demos + Classes (whatever an
+// admin scheduled with this teacher in teacher_ids) on a month/week/day grid.
+// Reuses the same by-teacher endpoints the Demos/Classes tabs use.
+const TeacherCalendarView = ({ teacherId }: { teacherId?: string }) => {
+  const { items: demos, loading: demosLoading } = useTeacherList<{ id: number; title: string; course_title: string | null; start_at: string | null; end_at: string | null; meeting_link: string | null }>(teacherId, "demos", "demos");
+  const { items: classes, loading: classesLoading } = useTeacherList<{ id: number; name: string; course_title: string | null; start_at: string | null; end_at: string | null; meeting_link: string | null }>(teacherId, "classes", "classes");
+
+  const events: ScheduleEvent[] = useMemo(() => {
+    const out: ScheduleEvent[] = [];
+    for (const d of demos) {
+      if (!d.start_at) continue;
+      out.push({ id: `demo-${d.id}`, title: d.title || "Demo", start: new Date(d.start_at), end: new Date(d.end_at || d.start_at), type: "demo", courseTitle: d.course_title, meetingLink: d.meeting_link });
+    }
+    for (const c of classes) {
+      if (!c.start_at) continue;
+      out.push({ id: `class-${c.id}`, title: c.name || "Class", start: new Date(c.start_at), end: new Date(c.end_at || c.start_at), type: "class", courseTitle: c.course_title, meetingLink: c.meeting_link });
+    }
+    return out;
+  }, [demos, classes]);
+
   return (
-    <Panel title="My Time table" icon={Table2}>
-      {loading ? <Empty text="Loading time table…" /> : items.length === 0 ? <Empty text="No timetable entries assigned to you yet." /> : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead><tr className="text-left text-muted-foreground border-b"><th className="py-2 pr-4">Day</th><th className="py-2 pr-4">Time</th><th className="py-2 pr-4">Course</th></tr></thead>
-            <tbody>
-              {items.map((e) => (
-                <tr key={e.id} className="border-b">
-                  <td className="py-3 pr-4 font-semibold">{DAYS[e.day_of_week] || "—"}</td>
-                  <td className="py-3 pr-4 whitespace-nowrap">{hhmmTo12(e.start_time)} – {hhmmTo12(e.end_time)}</td>
-                  <td className="py-3 pr-4">{e.course_title || "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+    <Panel title="My Calendar" icon={CalendarDays}>
+      <ScheduleCalendar events={events} loading={demosLoading || classesLoading} />
     </Panel>
   );
 };
@@ -477,6 +486,28 @@ const ProfileView = ({ user }: { user: Record<string, unknown> | null }) => {
   const [form, setForm] = useState(data);
   const set = (k: string, v: string) => setForm((s) => ({ ...s, [k]: v }));
 
+  // Profile photo — uploaded via the shared self-service endpoint
+  // (/api/public/profile/photo). It's stored on the user row and also feeds the
+  // instructor avatar on the public course pages (teacherPhoto ∪ studentPhoto).
+  const [photo, setPhoto] = useState<string>(seed("teacherPhoto") || seed("studentPhoto"));
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const photoUrl = photo ? `${ADMIN_BASE}/${photo}` : "";
+  const onPhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoUploading(true);
+    try {
+      const res = await uploadStudentPhoto(file);
+      setPhoto(res.photo);
+      toast.success("Profile photo updated");
+    } catch {
+      toast.error("Failed to upload photo. Try a smaller JPG/PNG.");
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
+
   if (!user) return <Empty text="Sign in as a teacher to see your profile." />;
 
   const name = data.name || data.email || "Teacher";
@@ -506,6 +537,28 @@ const ProfileView = ({ user }: { user: Record<string, unknown> | null }) => {
     return (
       <Panel title="Edit Profile" icon={Contact}>
         <form onSubmit={save} className="space-y-4 max-w-2xl">
+          <div>
+            <label className="block text-sm font-medium mb-1">Profile photo</label>
+            <div className="flex items-center gap-4">
+              {photoUrl ? (
+                <img src={photoUrl} alt="" className="w-20 h-20 rounded-2xl object-cover border border-border" />
+              ) : (
+                <div className="w-20 h-20 rounded-2xl bg-gradient-hero text-white text-2xl font-bold flex items-center justify-center">{initials || "T"}</div>
+              )}
+              <div>
+                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPhotoChange} />
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={photoUploading}
+                  className="rounded-lg border border-border text-sm font-semibold px-4 py-2 disabled:opacity-60"
+                >
+                  {photoUploading ? "Uploading…" : "Upload / change photo"}
+                </button>
+                <p className="text-xs text-muted-foreground mt-1">JPG or PNG. The photo saves immediately.</p>
+              </div>
+            </div>
+          </div>
           <div>
             <label className="block text-sm font-medium mb-1">Name</label>
             <input className="w-full rounded-lg border border-border px-3 py-2 text-sm" value={form.name} onChange={(e) => set("name", e.target.value)} />
@@ -546,7 +599,11 @@ const ProfileView = ({ user }: { user: Record<string, unknown> | null }) => {
     <Panel title="My Profile" icon={Contact}>
       <div className="flex items-start justify-between gap-4 mb-6">
         <div className="flex items-center gap-5">
-          <div className="w-20 h-20 rounded-2xl bg-gradient-hero text-white text-2xl font-bold flex items-center justify-center shrink-0">{initials || "T"}</div>
+          {photoUrl ? (
+            <img src={photoUrl} alt="" className="w-20 h-20 rounded-2xl object-cover shrink-0" />
+          ) : (
+            <div className="w-20 h-20 rounded-2xl bg-gradient-hero text-white text-2xl font-bold flex items-center justify-center shrink-0">{initials || "T"}</div>
+          )}
           <div>
             <h2 className="text-2xl font-bold">{name}</h2>
             <p className="text-muted-foreground text-sm mt-1">{years ? `Teaching experience: ${years} year${years === "1" ? "" : "s"}` : "Teacher"}</p>
@@ -738,6 +795,45 @@ const BADGES = [
 ];
 interface StudentRec { id: number; kind: string; data: Record<string, unknown> }
 
+// Post-class performance evaluation attributes (1-5 stars each). Mirrors the
+// Moonpreneur-style evaluation form; surfaced as admin dashboard stats.
+const EVAL_ATTRS = [
+  { key: "curiosity", label: "Curiosity Level" },
+  { key: "participation", label: "Participation Level" },
+  { key: "attentiveness", label: "Attentiveness / Focus" },
+  { key: "attention", label: "Attention / Tardy" },
+  { key: "creativity", label: "Creativity Level" },
+  { key: "camera", label: "Camera" },
+];
+
+// Click-to-set 1-5 star rating; clicking the current value clears it.
+const StarRating = ({ value, onChange }: { value: number; onChange: (n: number) => void }) => (
+  <div className="flex items-center gap-0.5">
+    {[1, 2, 3, 4, 5].map((n) => (
+      <button
+        key={n}
+        type="button"
+        onClick={() => onChange(n === value ? 0 : n)}
+        aria-label={`${n} star${n > 1 ? "s" : ""}`}
+        className={`text-xl leading-none transition-transform hover:scale-110 ${n <= value ? "text-yellow-400" : "text-gray-300 dark:text-white/25"}`}
+      >
+        ★
+      </button>
+    ))}
+  </div>
+);
+
+// Read-only star display for a 0-5 value.
+const Stars = ({ value }: { value: number }) => {
+  const v = Math.round(value || 0);
+  return (
+    <span className="tracking-tight">
+      <span className="text-yellow-400">{"★".repeat(v)}</span>
+      <span className="text-gray-300 dark:text-white/25">{"★".repeat(Math.max(0, 5 - v))}</span>
+    </span>
+  );
+};
+
 // Per-student detail: goals, badges, SPR notes, school marks and projects.
 // All persisted via the flexible /student-records endpoints (kind + data).
 const StudentDetail = ({ teacherId, student }: { teacherId: string; student: { id: string; name: string; classes: number; slots: number } }) => {
@@ -748,6 +844,26 @@ const StudentDetail = ({ teacherId, student }: { teacherId: string; student: { i
   const [spr, setSpr] = useState("");
   const [mark, setMark] = useState({ subject: "", score: "", total: "" });
   const [project, setProject] = useState({ title: "", type: "mini" });
+  // Post-class performance evaluation form.
+  const [evalRatings, setEvalRatings] = useState<Record<string, number>>({});
+  const [evalFeedback, setEvalFeedback] = useState("");
+  const [evalSession, setEvalSession] = useState("");
+  const [evalStage, setEvalStage] = useState("");
+  const [savingEval, setSavingEval] = useState(false);
+  // Per-course progress for this student across the teacher's courses (read-only).
+  const [progress, setProgress] = useState<{ course_id: string; course_title: string; completed: number; total: number; percent: number }[]>([]);
+  const [progressLoading, setProgressLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setProgressLoading(true);
+    axios
+      .get(`${ADMIN_BASE}/api/public/teaching/student-progress/${teacherId}/${student.id}`, { params: { t: Date.now() }, headers: { "Cache-Control": "no-cache", ...teacherAuthHeaders() }, timeout: 30000 })
+      .then(({ data }) => { if (!cancelled) setProgress(Array.isArray(data?.courses) ? data.courses : []); })
+      .catch(() => { if (!cancelled) setProgress([]); })
+      .finally(() => { if (!cancelled) setProgressLoading(false); });
+    return () => { cancelled = true; };
+  }, [teacherId, student.id]);
 
   const load = () => {
     setLoading(true);
@@ -766,6 +882,25 @@ const StudentDetail = ({ teacherId, student }: { teacherId: string; student: { i
   const del = async (id: number) => {
     try { await axios.delete(`${ADMIN_BASE}/api/public/student-records/${id}`, { params: { teacherId }, headers: teacherAuthHeaders() }); load(); }
     catch { toast.error("Failed to delete"); }
+  };
+
+  const submitEval = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const rated = EVAL_ATTRS.map((a) => evalRatings[a.key]).filter((v) => v > 0);
+    if (rated.length === 0) { toast.error("Give at least one rating before saving."); return; }
+    const overall = Math.round((rated.reduce((a, b) => a + b, 0) / rated.length) * 10) / 10;
+    setSavingEval(true);
+    try {
+      await axios.post(
+        `${ADMIN_BASE}/api/public/student-records`,
+        { teacherId, studentId: student.id, kind: "evaluation", data: { ratings: evalRatings, overall, feedback: evalFeedback.trim(), session: evalSession.trim(), stage: evalStage.trim() } },
+        { headers: teacherAuthHeaders() },
+      );
+      setEvalRatings({}); setEvalFeedback(""); setEvalSession(""); setEvalStage("");
+      toast.success("Evaluation saved");
+      load();
+    } catch { toast.error("Failed to save evaluation"); }
+    finally { setSavingEval(false); }
   };
 
   const byKind = (k: string) => records.filter((r) => r.kind === k);
@@ -792,8 +927,89 @@ const StudentDetail = ({ teacherId, student }: { teacherId: string; student: { i
         <Stat value={String(student.classes + student.slots)} label="Total sessions" />
       </div>
 
+      {/* Course progress — how far this student is through each of the teacher's
+          courses (completed vs released lessons). Read-only. */}
+      <section className="mb-8">
+        <h3 className="font-semibold mb-3">Course progress</h3>
+        {progressLoading ? (
+          <p className="text-sm text-muted-foreground">Loading progress…</p>
+        ) : progress.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No courses assigned to you for this student yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {progress.map((c) => (
+              <div key={c.course_id}>
+                <div className="flex items-center justify-between text-sm mb-1 gap-3">
+                  <span className="font-medium truncate" title={c.course_title}>{c.course_title}</span>
+                  <span className="text-muted-foreground tabular-nums whitespace-nowrap">
+                    {c.total ? `${c.completed}/${c.total} · ${c.percent}%` : "No lessons released"}
+                  </span>
+                </div>
+                <div className="h-2.5 rounded-full bg-muted overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${c.percent}%`, backgroundColor: c.percent >= 100 ? "#12c093" : "#FF6A00" }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
       {loading ? <Empty text="Loading…" /> : (
         <div className="space-y-8">
+          {/* Post-class performance evaluation — rate the student on each
+              attribute + leave written feedback. Feeds the admin dashboard. */}
+          <section>
+            <h3 className="font-semibold mb-3">Performance Evaluation <span className="text-muted-foreground font-normal text-sm">(after class)</span></h3>
+
+            {byKind("evaluation").map((r) => {
+              const ed = r.data as { ratings?: Record<string, number>; overall?: number; feedback?: string; session?: string; stage?: string };
+              return (
+                <div key={r.id} className="rounded-xl border border-border p-4 mb-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      {ed.session && <div className="font-medium text-sm truncate">{ed.session}</div>}
+                      {ed.stage && <div className="text-xs text-muted-foreground truncate">{ed.stage}</div>}
+                      {!ed.session && !ed.stage && <div className="text-sm font-medium">Evaluation</div>}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Stars value={ed.overall || 0} />
+                      <span className="text-xs text-muted-foreground tabular-nums">{(ed.overall || 0).toFixed(1)}</span>
+                      <button type="button" onClick={() => del(r.id)} className="text-muted-foreground hover:text-red-600 font-bold leading-none ml-1">×</button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 mt-3">
+                    {EVAL_ATTRS.map((a) => (
+                      <div key={a.key} className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">{a.label}</span>
+                        <Stars value={ed.ratings?.[a.key] || 0} />
+                      </div>
+                    ))}
+                  </div>
+                  {ed.feedback && <p className="text-sm mt-3 rounded-lg bg-muted/50 px-3 py-2">{ed.feedback}</p>}
+                </div>
+              );
+            })}
+
+            <form onSubmit={submitEval} className="rounded-xl border border-border p-4 space-y-3">
+              <div className="grid sm:grid-cols-2 gap-2">
+                <input value={evalStage} onChange={(e) => setEvalStage(e.target.value)} placeholder="Stage / Program (optional)" className="rounded-lg border border-border px-3 py-2 text-sm" />
+                <input value={evalSession} onChange={(e) => setEvalSession(e.target.value)} placeholder="Session (e.g. Blocks vs Text)" className="rounded-lg border border-border px-3 py-2 text-sm" />
+              </div>
+              <div className="grid sm:grid-cols-2 gap-x-8 gap-y-2">
+                {EVAL_ATTRS.map((a) => (
+                  <div key={a.key} className="flex items-center justify-between gap-3">
+                    <span className="text-sm">{a.label}</span>
+                    <StarRating value={evalRatings[a.key] || 0} onChange={(n) => setEvalRatings((s) => ({ ...s, [a.key]: n }))} />
+                  </div>
+                ))}
+              </div>
+              <textarea value={evalFeedback} onChange={(e) => setEvalFeedback(e.target.value)} rows={3} placeholder="Feedback from the project guide…" className="w-full rounded-lg border border-border px-3 py-2 text-sm" />
+              <button disabled={savingEval} className="rounded-lg bg-gradient-hero text-white text-sm font-semibold px-5 py-2 disabled:opacity-60">
+                {savingEval ? "Saving…" : "Save evaluation"}
+              </button>
+            </form>
+          </section>
+
           <section>
             <h3 className="font-semibold mb-2">Primary goal</h3>
             {byKind("goal_primary").map((r) => <Row key={r.id} id={r.id}>{d(r).goal}</Row>)}
@@ -960,10 +1176,41 @@ const StudentsView = ({ teacherId }: { teacherId?: string }) => {
   );
 };
 
+// After a class ends, nudge the teacher to evaluate their students. Derived
+// from the teacher's own classes (end_at within the last 2 days = "recent"),
+// so it appears right after a class and clears itself a couple of days later.
+// Clicking it jumps to the Students tab where the evaluation form lives.
+const RECENT_CLASS_MS = 2 * 24 * 60 * 60 * 1000;
+const PendingFeedbackBanner = ({ teacherId, onGiveFeedback }: { teacherId?: string; onGiveFeedback: () => void }) => {
+  const { items } = useTeacherList<{ id: number; name: string; start_at: string | null; end_at: string | null }>(teacherId, "classes", "classes");
+  const now = Date.now();
+  const recent = items.filter((c) => {
+    const endMs = c.end_at ? new Date(c.end_at).getTime()
+      : (c.start_at ? new Date(c.start_at).getTime() + 60 * 60 * 1000 : NaN);
+    return !Number.isNaN(endMs) && endMs < now && now - endMs < RECENT_CLASS_MS;
+  });
+  if (recent.length === 0) return null;
+  return (
+    <div className="rounded-2xl border border-orange-200 bg-orange-50 dark:bg-orange-500/10 dark:border-white/10 px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+      <div className="flex items-center gap-3">
+        <ClipboardCheck className="w-6 h-6 text-primary shrink-0" />
+        <div>
+          <p className="font-semibold text-sm m-0">{recent.length} recent class{recent.length === 1 ? "" : "es"} ended — share your feedback</p>
+          <p className="text-xs text-muted-foreground m-0">Rate your students' performance from the class in the Students tab.</p>
+        </div>
+      </div>
+      <button type="button" onClick={onGiveFeedback} className="rounded-lg bg-gradient-hero text-white text-sm font-semibold px-4 py-2">
+        Give feedback
+      </button>
+    </div>
+  );
+};
+
 const TeacherDashboard = () => {
   const [active, setActive] = useState("My Courses");
   const [data] = useState<DashboardData>(PLACEHOLDER_DATA);
   const { user } = useAuth();
+  const { isDark } = useDashboardTheme();
 
   // TODO(backend): connect to the teacher earnings API. Uncomment & adapt:
   // useEffect(() => {
@@ -974,14 +1221,17 @@ const TeacherDashboard = () => {
   // }, []);
 
   return (
-    <div className="min-h-screen flex bg-[#f4f4f5]">
+    <div className={`min-h-screen flex bg-[#f4f4f5] dark:bg-[#0f0f14] ${isDark ? "dark teacher-dark" : ""}`}>
       {/* Sidebar */}
-      <aside className="w-64 shrink-0 bg-gradient-to-b from-[#fff6ee] to-white border-r border-orange-100 flex flex-col sticky top-0 h-screen">
-        <div className="flex items-center gap-2 px-6 h-20 border-b border-orange-100">
-          <div className="w-9 h-9 rounded-full bg-gradient-hero" />
-          <span className="font-heading text-xl font-extrabold">
-            <span className="text-gradient">VR</span> Robotics
-          </span>
+      <aside className="w-64 shrink-0 bg-gradient-to-b from-[#fff6ee] to-white dark:from-[#16161f] dark:to-[#101019] border-r border-orange-100 dark:border-white/10 flex flex-col sticky top-0 h-screen">
+        <div className="flex items-center justify-between gap-2 px-6 h-20 border-b border-orange-100 dark:border-white/10">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-9 h-9 rounded-full bg-gradient-hero shrink-0" />
+            <span className="font-heading text-xl font-extrabold truncate">
+              <span className="text-gradient">VR</span> Robotics
+            </span>
+          </div>
+          <ThemeToggle />
         </div>
 
         <nav className="flex-1 overflow-y-auto py-4 space-y-1">
@@ -1006,7 +1256,7 @@ const TeacherDashboard = () => {
 
         <Link
           to="/"
-          className="flex items-center gap-3 px-6 py-4 text-sm font-semibold text-red-500 border-t border-orange-100 hover:bg-red-50"
+          className="flex items-center gap-3 px-6 py-4 text-sm font-semibold text-red-500 border-t border-orange-100 dark:border-white/10 hover:bg-red-50 dark:hover:bg-red-500/10"
         >
           <Power className="w-5 h-5" /> Logout
         </Link>
@@ -1014,6 +1264,9 @@ const TeacherDashboard = () => {
 
       {/* Main */}
       <main className="flex-1 overflow-y-auto p-6 lg:p-8 space-y-6">
+        {/* Post-class nudge to evaluate students — shows on every tab. */}
+        <PendingFeedbackBanner teacherId={user?.userId} onGiveFeedback={() => setActive("Students")} />
+
         {active === "Dashboard" ? (
           <>
             {/* Earnings card */}
@@ -1149,12 +1402,14 @@ const TeacherDashboard = () => {
           <div className="admin-theme"><TeachingAssignmentsIndex /></div>
         ) : active === "Classes" ? (
           <ClassesView teacherId={user?.userId} />
-        ) : active === "Time table" ? (
-          <TimetableView teacherId={user?.userId} />
+        ) : active === "Calendar" ? (
+          <TeacherCalendarView teacherId={user?.userId} />
         ) : active === "Free Schedule" ? (
           <FreeScheduleView teacherId={user?.userId} />
         ) : active === "Students" ? (
           <StudentsView teacherId={user?.userId} />
+        ) : active === "Feedback Forms" ? (
+          <FeedbackFormsView teacherId={user?.userId} />
         ) : active === "Resources" ? (
           <ResourcesView teacherId={user?.userId} />
         ) : active === "Profile" ? (

@@ -29,6 +29,17 @@ export const listCourses = (params?: Record<string, unknown>) =>
 export const getMyCourses = () =>
   api.get("/my-courses").then((r) => (r.data?.courses ?? []) as unknown[]);
 
+// Student → teacher/class feedback. submit + read the student's own past ones.
+export const submitTeacherFeedback = (payload: {
+  courseId?: number | string;
+  ratings: Record<string, number>;
+  enjoyed?: string;
+  suggestions?: string;
+}) => api.post("/teacher-feedback", payload).then((r) => r.data);
+
+export const getMyTeacherFeedback = () =>
+  api.get("/teacher-feedback/mine").then((r) => (r.data?.feedback ?? []) as unknown[]);
+
 // Student leaderboard. Pass a courseId for the per-course board; omit for overall.
 export const getLeaderboard = (courseId?: number) =>
   api

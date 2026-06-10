@@ -21,11 +21,12 @@ const zoomLiveClassRoutes = require('./zoom-live-class/live-class.routes');
 const forumRoutes = require('./forum/forum.routes');
 const couponRoutes = require('./routes/coupon.routes');
 const galleryRoutes = require('./routes/gallery.routes');
+const demoVideoRoutes = require('./routes/demoVideo.routes');
+const locationRoutes = require('./routes/location.routes');
 const bookRoutes = require('./routes/book.routes');
 const slotRoutes = require('./routes/slot.routes');
 const demoRoutes = require('./routes/demo.routes');
 const classRoutes = require('./routes/class.routes');
-const timetableRoutes = require('./routes/timetable.routes');
 const projectRoutes = require('./routes/project.routes');
 const testimonialRoutes = require('./routes/testimonial.routes');
 const resourceRoutes = require('./routes/resource.routes');
@@ -233,6 +234,26 @@ app.get('/api/public/gallery', async (_req, res, next) => {
     } catch (e) { next(e); }
 });
 
+// Public demo/marketing videos — drives the "Explore VR Robotics" section on
+// the student dashboard (CEO intro + sample teasers). Only visible items.
+const demoVideoService = require('./services/DemoVideoService');
+app.get('/api/public/demo-videos', async (_req, res, next) => {
+    try {
+        res.set('Cache-Control', 'no-store');
+        res.json(await demoVideoService.listPublic());
+    } catch (e) { next(e); }
+});
+
+// Public locations list — drives the public Locations page learning-center
+// cards. Only visible items. Admins manage these under Locations → Add/Manage.
+const locationService = require('./services/LocationService');
+app.get('/api/public/locations', async (_req, res, next) => {
+    try {
+        res.set('Cache-Control', 'no-store');
+        res.json(await locationService.listPublic());
+    } catch (e) { next(e); }
+});
+
 // Guard for /api/public/*/by-teacher/:teacherId — these expose a teacher's
 // roster / student records / schedule, so they must NOT be open (was an IDOR:
 // anyone could pass any teacherId). A verified TEACHER may read only their own
@@ -276,10 +297,6 @@ app.get('/api/public/demos/by-teacher/:teacherId', ...requireTeacherSelfOrAdmin,
 const classSvc = require('./services/ClassSessionService');
 app.get('/api/public/classes/by-teacher/:teacherId', ...requireTeacherSelfOrAdmin, async (req, res, next) => {
     try { res.set('Cache-Control', 'no-store'); res.json(await classSvc.listForTeacher(req.params.teacherId)); } catch (e) { next(e); }
-});
-const timetableSvc = require('./services/TimetableEntryService');
-app.get('/api/public/timetable/by-teacher/:teacherId', ...requireTeacherSelfOrAdmin, async (req, res, next) => {
-    try { res.set('Cache-Control', 'no-store'); res.json(await timetableSvc.listForTeacher(req.params.teacherId)); } catch (e) { next(e); }
 });
 const resourceSvc = require('./services/ResourceService');
 app.get('/api/public/resources/by-teacher/:teacherId', ...requireTeacherSelfOrAdmin, async (req, res, next) => {
@@ -343,6 +360,24 @@ const attachVerifiedId = [optionalAuth, (req, _res, next) => {
     next();
 }];
 
+// Student → teacher/class feedback (inverse of the teacher's student records).
+// The student submits; student_id comes from the verified token (x-user-id is
+// a spoofable fallback). Placed AFTER attachVerifiedId is defined.
+const teacherFeedbackSvc = require('./services/TeacherFeedbackService');
+app.post('/api/public/teacher-feedback', ...attachVerifiedId, async (req, res, next) => {
+    try {
+        const studentId = req.verifiedUserId || req.headers['x-user-id'] || null;
+        const { courseId, ratings, enjoyed, suggestions } = req.body || {};
+        res.json(await teacherFeedbackSvc.create({ studentId, courseId, ratings, enjoyed, suggestions }));
+    } catch (e) { next(e); }
+});
+app.get('/api/public/teacher-feedback/mine', ...attachVerifiedId, async (req, res, next) => {
+    try {
+        res.set('Cache-Control', 'no-store');
+        res.json(await teacherFeedbackSvc.listForStudent(req.verifiedUserId || req.headers['x-user-id'] || null));
+    } catch (e) { next(e); }
+});
+
 const learningSvc = require('./services/StudentLearningService');
 app.get('/api/public/learnings/by-student/:studentId', ...attachVerifiedId, async (req, res, next) => {
     // Verified id wins over the URL param so a student can't read another's notes.
@@ -352,10 +387,50 @@ app.post('/api/public/learnings', ...attachVerifiedId, async (req, res, next) =>
     try { res.json(await learningSvc.save({ ...req.body, studentId: req.verifiedUserId || req.body.studentId })); } catch (e) { next(e); }
 });
 
+// Dynamic teacher-authored feedback forms. Teacher CRUD is keyed by teacherId
+// (same by-teacher trust model as slots/demos/classes); students read the forms
+// addressed to them + submit once (verified token identity).
+const feedbackFormSvc = require('./services/FeedbackFormService');
+// Teacher: list/create/update(enable·disable)/delete their own forms.
+app.get('/api/public/feedback-forms/by-teacher/:teacherId', ...requireTeacherSelfOrAdmin, async (req, res, next) => {
+    try { res.set('Cache-Control', 'no-store'); res.json(await feedbackFormSvc.listForTeacher(req.params.teacherId)); } catch (e) { next(e); }
+});
+app.post('/api/public/feedback-forms', ...requireTeacherWrite, async (req, res, next) => {
+    try {
+        const { teacherId, title, description, courseId, questions } = req.body || {};
+        res.json(await feedbackFormSvc.createForm(teacherId, { title, description, courseId, questions }));
+    } catch (e) { next(e); }
+});
+app.patch('/api/public/feedback-forms/:id', ...requireTeacherWrite, async (req, res, next) => {
+    try {
+        const tid = req.body?.teacherId ?? req.query?.teacherId;
+        res.json(await feedbackFormSvc.updateForm(req.params.id, tid, req.body || {}));
+    } catch (e) { next(e); }
+});
+app.delete('/api/public/feedback-forms/:id', ...requireTeacherWrite, async (req, res, next) => {
+    try { res.json(await feedbackFormSvc.deleteForm(req.params.id, req.query.teacherId)); } catch (e) { next(e); }
+});
+// Student: pending forms addressed to me + one-time submit.
+app.get('/api/public/feedback-forms/for-student', ...attachVerifiedId, async (req, res, next) => {
+    try { res.set('Cache-Control', 'no-store'); res.json(await feedbackFormSvc.listForStudent(req.verifiedUserId || req.headers['x-user-id'] || null)); } catch (e) { next(e); }
+});
+app.post('/api/public/feedback-forms/:id/submit', ...attachVerifiedId, async (req, res, next) => {
+    try {
+        const studentId = req.verifiedUserId || req.headers['x-user-id'] || null;
+        res.json(await feedbackFormSvc.submit(studentId, req.params.id, req.body?.answers));
+    } catch (e) { next(e); }
+});
+
 // Public lead capture — portal signup. Creates a LEAD (no login); admin
 // follows up and converts it to a student. Unauthenticated by design.
 const leadCtrl = require('./controllers/LeadController');
 app.post('/api/public/leads', writeLimiter, leadCtrl.capture);
+
+// Public "Send us a Message" capture from the Contact page (no auth, rate-limited).
+const contactMsgSvc = require('./services/ContactMessageService');
+app.post('/api/public/contact', writeLimiter, async (req, res, next) => {
+    try { res.json(await contactMsgSvc.capture(req.body)); } catch (e) { next(e); }
+});
 
 // Public self sign-up (marketing lead-gen). Creates a STUDENT account so the
 // person can log in and land on an empty dashboard, AND records a lead so the
@@ -555,7 +630,7 @@ app.get('/api/public/courses/catalog', async (req, res, next) => {
     try {
         // Public marketing list, hammered on every homepage load and identical
         // for everyone → cache 60s to shield Postgres. No per-user data here.
-        const args = { limit: req.query.limit, classFrom: req.query.classFrom, classTo: req.query.classTo };
+        const args = { limit: req.query.limit, classFrom: req.query.classFrom, classTo: req.query.classTo, track: req.query.track, search: req.query.search };
         const key = `pub:catalog:${JSON.stringify(args)}`;
         const data = await cache.wrap(key, 60, () => publicCourseService.catalog(args));
         res.set('Cache-Control', 'no-store');
@@ -596,7 +671,8 @@ app.get('/api/public/player/:slug', optionalAuth, async (req, res, next) => {
         const clientId = req.headers['x-user-id'] || req.query.user_id;
         const verifiedId = req.authUser?.userId || null;
         const real = await publicCourseService.playerData(
-            req.params.slug, req.query.lesson_id, verifiedId || clientId, { verifiedUserId: verifiedId },
+            req.params.slug, req.query.lesson_id, verifiedId || clientId,
+            { verifiedUserId: verifiedId, verifiedRole: req.authUser?.role || null },
         );
         if (real) return res.json(real);
         return playerCtrl.player(req, res, next);
@@ -655,6 +731,19 @@ app.get('/api/public/teaching/students-by-teacher/:teacherId', ...requireTeacher
     } catch (e) {
         console.warn('[students-by-teacher] failed:', e.message);
         return res.status(500).json({ error: 'Could not load students' });
+    }
+});
+
+// One student's per-course progress across the teacher's courses — powers the
+// "Course progress" section in the teacher dashboard Students detail panel.
+// Guarded on :teacherId (verified teacher self / admin).
+app.get('/api/public/teaching/student-progress/:teacherId/:studentId', ...requireTeacherSelfOrAdmin, async (req, res) => {
+    try {
+        res.set('Cache-Control', 'no-store');
+        res.json(await teachingDelegationSvc.studentProgressForTeacher(req.params.teacherId, req.params.studentId));
+    } catch (e) {
+        console.warn('[student-progress] failed:', e.message);
+        return res.status(500).json({ error: 'Could not load student progress' });
     }
 });
 
@@ -797,6 +886,58 @@ app.use('/api/public', forumRoutes.public);
 // teacher request isn't short-circuited by an earlier adminOnly mount.
 app.use('/api/admin', adminOrTeacher, teachingRoutes);
 
+// Student performance feedback — teacher-authored post-class evaluations
+// (StudentRecord kind='evaluation'), surfaced to the admin as stats + a
+// per-student feedback browser. Read-only + admin-gated.
+const feedbackSvc = require('./services/StudentFeedbackService');
+app.get('/api/admin/feedback/stats', adminOnly, async (req, res, next) => {
+    try { res.json(await feedbackSvc.stats()); } catch (e) { next(e); }
+});
+app.get('/api/admin/feedback/by-student', adminOnly, async (req, res, next) => {
+    try { res.json(await feedbackSvc.byStudent()); } catch (e) { next(e); }
+});
+app.get('/api/admin/feedback', adminOnly, async (req, res, next) => {
+    try { res.json(await feedbackSvc.list({ studentId: req.query.studentId, limit: req.query.limit })); } catch (e) { next(e); }
+});
+
+// Student → teacher/class feedback (admin reads).
+const teacherFeedbackAdminSvc = require('./services/TeacherFeedbackService');
+app.get('/api/admin/teacher-feedback/stats', adminOnly, async (req, res, next) => {
+    try { res.json(await teacherFeedbackAdminSvc.stats()); } catch (e) { next(e); }
+});
+app.get('/api/admin/teacher-feedback/by-teacher', adminOnly, async (req, res, next) => {
+    try { res.json(await teacherFeedbackAdminSvc.byTeacher()); } catch (e) { next(e); }
+});
+app.get('/api/admin/teacher-feedback', adminOnly, async (req, res, next) => {
+    try { res.json(await teacherFeedbackAdminSvc.list({ teacherId: req.query.teacherId, limit: req.query.limit })); } catch (e) { next(e); }
+});
+
+// Dynamic feedback forms — admin reads (all forms, per-form stats, individual
+// records). Read-only + admin-gated; teachers author them via /api/public.
+const feedbackFormAdminSvc = require('./services/FeedbackFormService');
+app.get('/api/admin/feedback-forms', adminOnly, async (req, res, next) => {
+    try { res.json(await feedbackFormAdminSvc.adminForms()); } catch (e) { next(e); }
+});
+app.get('/api/admin/feedback-forms/:id/stats', adminOnly, async (req, res, next) => {
+    try { res.json(await feedbackFormAdminSvc.adminStats(req.params.id)); } catch (e) { next(e); }
+});
+app.get('/api/admin/feedback-forms/:id/responses', adminOnly, async (req, res, next) => {
+    try { res.json(await feedbackFormAdminSvc.adminResponses(req.params.id)); } catch (e) { next(e); }
+});
+
+// Contact messages — admin inbox (list / mark read / delete). Public capture is
+// on /api/public/contact.
+const contactMsgAdminSvc = require('./services/ContactMessageService');
+app.get('/api/admin/contact-messages', adminOnly, async (req, res, next) => {
+    try { res.set('Cache-Control', 'no-store'); res.json(await contactMsgAdminSvc.list(req.query)); } catch (e) { next(e); }
+});
+app.patch('/api/admin/contact-messages/:id', adminOnly, async (req, res, next) => {
+    try { res.json(await contactMsgAdminSvc.update(req.params.id, req.body)); } catch (e) { next(e); }
+});
+app.delete('/api/admin/contact-messages/:id', adminOnly, async (req, res, next) => {
+    try { res.json(await contactMsgAdminSvc.remove(req.params.id)); } catch (e) { next(e); }
+});
+
 // Admin-editable email/SMTP settings (e.g. Brevo) — configurable from the
 // dashboard, stored in app_settings, DB overrides .env. Password never returned.
 const settingsSvc = require('./services/SettingsService');
@@ -817,6 +958,15 @@ app.post('/api/admin/settings/email/test', adminOnly, async (req, res) => {
     } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
+// Admin-editable Razorpay payment keys — admin pastes key_id/key_secret in the
+// dashboard, stored in app_settings, DB overrides .env. Secrets never returned.
+app.get('/api/admin/settings/payment', adminOnly, async (req, res, next) => {
+    try { res.json(await settingsSvc.getPaymentSettingsMasked()); } catch (e) { next(e); }
+});
+app.put('/api/admin/settings/payment', adminOnly, async (req, res, next) => {
+    try { res.json(await settingsSvc.savePaymentSettings(req.body || {})); } catch (e) { next(e); }
+});
+
 // Protected admin endpoints — adminOnly enforces JWT + role
 app.use('/api/admin', adminOnly, leadRoutes);
 app.use('/api/admin', adminOnly, adminRoutes);
@@ -824,11 +974,12 @@ app.use('/api/admin', adminOnly, quizRoutes);
 app.use('/api/admin', adminOnly, liveClassRoutes);
 app.use('/api/admin', adminOnly, couponRoutes);
 app.use('/api/admin', adminOnly, galleryRoutes);
+app.use('/api/admin', adminOnly, demoVideoRoutes);
+app.use('/api/admin', adminOnly, locationRoutes);
 app.use('/api/admin', adminOnly, bookRoutes);
 app.use('/api/admin', adminOnly, slotRoutes);
 app.use('/api/admin', adminOnly, demoRoutes);
 app.use('/api/admin', adminOnly, classRoutes);
-app.use('/api/admin', adminOnly, timetableRoutes);
 app.use('/api/admin', adminOnly, projectRoutes);
 app.use('/api/admin', adminOnly, testimonialRoutes);
 app.use('/api/admin', adminOnly, resourceRoutes);
@@ -1062,6 +1213,12 @@ sequelize.authenticate()
             // a course with no range set is treated as open to all classes.
             await ensureCourseCol('class_from', 'class_from SMALLINT');
             await ensureCourseCol('class_to', 'class_to SMALLINT');
+            // Admin-set Score denominator + Lectures label shown on the
+            // course-details stats card.
+            await ensureCourseCol('score_max', 'score_max INTEGER');
+            await ensureCourseCol('lectures_label', 'lectures_label VARCHAR(255)');
+            // Free public sample/teaser flag (marketing courses).
+            await ensureCourseCol('is_marketing', 'is_marketing BOOLEAN NOT NULL DEFAULT FALSE');
         } catch (e) {
             console.warn('[courses] column check failed:', e.message);
         }
@@ -1142,16 +1299,15 @@ sequelize.authenticate()
             console.warn('[slots] table sync failed:', e.message);
         }
 
-        // Demos / Classes / Timetable — admin scheduling features added
-        // alongside Slots. Same idempotent .sync() pattern creates each table
-        // (demos, class_sessions, timetable_entries) on first run.
+        // Demos / Classes — admin scheduling features added alongside Slots.
+        // Same idempotent .sync() pattern creates each table (demos,
+        // class_sessions) on first run.
         try {
-            const { Demo, ClassSession, TimetableEntry } = require('./models');
+            const { Demo, ClassSession } = require('./models');
             await Demo.sync();
             await ClassSession.sync();
-            await TimetableEntry.sync();
         } catch (e) {
-            console.warn('[demos/classes/timetable] table sync failed:', e.message);
+            console.warn('[demos/classes] table sync failed:', e.message);
         }
 
         // Student Projects + Testimonials — drive the public Home page sections,
@@ -1169,12 +1325,16 @@ sequelize.authenticate()
         // the teacher dashboard Resources tab. Idempotent .sync() creates the
         // `resources` table on first run.
         try {
-            const { Resource, ResourceCategory, TeacherFreeSchedule, StudentRecord, StudentLearning } = require('./models');
+            const { Resource, ResourceCategory, TeacherFreeSchedule, StudentRecord, StudentLearning, TeacherFeedback, DemoVideo } = require('./models');
             await Resource.sync();
             // Teacher-authored weekly availability ("Free Schedule"). Idempotent.
             await TeacherFreeSchedule.sync();
             // Per-student teacher records (goals/badges/SPR/marks/…). Idempotent.
             await StudentRecord.sync();
+            // Student → teacher/class feedback (the inverse direction). Idempotent.
+            await TeacherFeedback.sync();
+            // Marketing/demo videos (CEO intro + sample teasers). Idempotent.
+            await DemoVideo.sync();
             // Student "My Learnings" notes per lesson. Idempotent.
             await StudentLearning.sync();
             // Resource categories table (admin-managed, drives the teacher
@@ -1219,6 +1379,28 @@ sequelize.authenticate()
             console.warn('[teacher-delegation] table sync failed:', e.message);
         }
 
+        // Dynamic feedback forms (teacher-authored) + their one-time responses.
+        // feedback_responses carries a unique (form_id, student_id) index, so —
+        // like the delegation tables above — a plain .sync() on an existing table
+        // would re-issue CREATE INDEX and throw on every boot. Guard each create
+        // on an information_schema existence check so we only build what's missing.
+        try {
+            const { QueryTypes } = require('sequelize');
+            const { FeedbackForm, FeedbackResponse } = require('./models');
+            const exists = async (table) => {
+                const rows = await sequelize.query(
+                    `SELECT 1 FROM information_schema.tables
+                       WHERE table_schema = 'lms_admin' AND table_name = :table LIMIT 1`,
+                    { replacements: { table }, type: QueryTypes.SELECT }
+                );
+                return rows.length > 0;
+            };
+            if (!(await exists('feedback_forms')))     await FeedbackForm.sync();
+            if (!(await exists('feedback_responses'))) await FeedbackResponse.sync();
+        } catch (e) {
+            console.warn('[feedback-forms] table sync failed:', e.message);
+        }
+
         // Leads — public signups awaiting admin follow-up / conversion. Same
         // idempotent .sync() pattern; created on first run, no manual migration.
         try {
@@ -1228,12 +1410,41 @@ sequelize.authenticate()
             console.warn('[leads] table sync failed:', e.message);
         }
 
+        // Contact messages — public "Send us a Message" submissions shown in the
+        // admin dashboard. Idempotent .sync(); created on first run.
+        try {
+            const { ContactMessage } = require('./models');
+            await ContactMessage.sync();
+        } catch (e) {
+            console.warn('[contact-messages] table sync failed:', e.message);
+        }
+
         // Payments — Razorpay course purchases (paywall source of truth).
         try {
             const { Payment } = require('./models');
             await Payment.sync();
         } catch (e) {
             console.warn('[payments] table sync failed:', e.message);
+        }
+
+        // app_settings — admin-pasted SMTP + Razorpay keys (DB overrides .env).
+        // Not in the SQL migrations, so create-if-missing here guarantees the
+        // table exists on a fresh production DB; without this, saving keys from
+        // the dashboard would fail. Idempotent .sync() pattern.
+        try {
+            const { AppSetting } = require('./models');
+            await AppSetting.sync();
+        } catch (e) {
+            console.warn('[settings] app_settings table sync failed:', e.message);
+        }
+
+        // locations — admin-managed learning centers for the public Locations
+        // page. Idempotent create-if-missing on first boot.
+        try {
+            const { Location } = require('./models');
+            await Location.sync();
+        } catch (e) {
+            console.warn('[locations] table sync failed:', e.message);
         }
 
         // lms_admin.programs late-added columns. Same self-heal pattern.

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import axios from "axios";
-import { GraduationCap, FileText, Clock, ArrowRight } from "lucide-react";
+import { GraduationCap, FileText, Clock, ArrowRight, Search, X } from "lucide-react";
 
 const ADMIN_BASE =
   (import.meta.env.VITE_ADMIN_API_URL as string) || "http://localhost:5000";
@@ -19,12 +19,15 @@ interface CourseItem {
   total_duration_secs: number;
 }
 
-// Class buckets shown as filter pills (and mirrored in the navbar dropdown).
-// `value` is the ?class= param ("from-to"); empty = all courses.
-const BUCKETS: { label: string; value: string }[] = [
-  { label: "All Courses", value: "" },
-  { label: "Class 8 – 12", value: "8-12" },
-  { label: "Class 12 – 18", value: "12-18" },
+// Filter pills shown on the catalog (mirrors the navbar Courses dropdown).
+// A bucket filters by either a class range (?class=from-to) or a track
+// (?track=engineering|freshers). Empty both = all courses.
+const BUCKETS: { label: string; cls: string; track: string }[] = [
+  { label: "All Courses", cls: "", track: "" },
+  { label: "Class 8 – 12", cls: "8-12", track: "" },
+  { label: "Class 12 – 18", cls: "12-18", track: "" },
+  { label: "Engineering", cls: "", track: "engineering" },
+  { label: "Freshers", cls: "", track: "freshers" },
 ];
 
 const parseBucket = (raw: string | null): { from: number; to: number } | null => {
@@ -44,8 +47,13 @@ const classLabel = (c: CourseItem): string => {
 const CourseCatalog = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeClass = searchParams.get("class") || "";
+  const activeTrack = searchParams.get("track") || "";
+  const activeSearch = searchParams.get("search") || "";
   const [courses, setCourses] = useState<CourseItem[]>([]);
   const [loading, setLoading] = useState(true);
+  // Local text box, kept in sync with the URL so back/forward + shared links work.
+  const [term, setTerm] = useState(activeSearch);
+  useEffect(() => { setTerm(activeSearch); }, [activeSearch]);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,6 +64,8 @@ const CourseCatalog = () => {
       params.classFrom = bucket.from;
       params.classTo = bucket.to;
     }
+    if (activeTrack) params.track = activeTrack;
+    if (activeSearch) params.search = activeSearch;
     axios
       .get(`${ADMIN_BASE}/api/public/courses/catalog`, { params, timeout: 30000 })
       .then(({ data }) => {
@@ -70,11 +80,25 @@ const CourseCatalog = () => {
     return () => {
       cancelled = true;
     };
-  }, [activeClass]);
+  }, [activeClass, activeTrack, activeSearch]);
 
-  const selectBucket = (value: string) => {
-    if (value) setSearchParams({ class: value });
-    else setSearchParams({});
+  // Selecting a class/track keeps the current search term so the two compose.
+  const selectBucket = (b: { cls: string; track: string }) => {
+    const next: Record<string, string> = {};
+    if (b.cls) next.class = b.cls;
+    else if (b.track) next.track = b.track;
+    if (activeSearch) next.search = activeSearch;
+    setSearchParams(next);
+  };
+
+  // Submit/clear the search box (preserves the active class/track filter).
+  const runSearch = (value: string) => {
+    const next: Record<string, string> = {};
+    if (activeClass) next.class = activeClass;
+    if (activeTrack) next.track = activeTrack;
+    const v = value.trim();
+    if (v) next.search = v;
+    setSearchParams(next);
   };
 
   return (
@@ -90,15 +114,53 @@ const CourseCatalog = () => {
           </p>
         </div>
 
+        {/* Search box */}
+        <form
+          onSubmit={(e) => { e.preventDefault(); runSearch(term); }}
+          className="max-w-xl mx-auto mb-8"
+        >
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+            <input
+              value={term}
+              onChange={(e) => setTerm(e.target.value)}
+              placeholder="What do you want to learn? e.g. robots, coding, AI"
+              aria-label="Search courses"
+              className="w-full rounded-full border border-border bg-white pl-12 pr-24 py-3 text-foreground outline-none focus:ring-2 focus:ring-primary/40"
+            />
+            {activeSearch && (
+              <button
+                type="button"
+                onClick={() => { setTerm(""); runSearch(""); }}
+                aria-label="Clear search"
+                className="absolute right-[88px] top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+            <button
+              type="submit"
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 bg-gradient-hero text-white rounded-full px-5 py-2 text-sm font-semibold"
+            >
+              Search
+            </button>
+          </div>
+          {activeSearch && (
+            <p className="text-center text-sm text-muted-foreground mt-3">
+              Showing results for “<span className="font-semibold text-foreground">{activeSearch}</span>”
+            </p>
+          )}
+        </form>
+
         {/* Class filter pills */}
         <div className="flex flex-wrap items-center justify-center gap-3 mb-12">
           {BUCKETS.map((b) => {
-            const active = activeClass === b.value;
+            const active = activeClass === b.cls && activeTrack === b.track;
             return (
               <button
                 key={b.label}
                 type="button"
-                onClick={() => selectBucket(b.value)}
+                onClick={() => selectBucket(b)}
                 className={`px-5 py-2 rounded-full text-sm font-semibold transition-colors ${
                   active
                     ? "bg-gradient-hero text-white shadow-md"
@@ -115,7 +177,7 @@ const CourseCatalog = () => {
           <p className="text-center text-muted-foreground py-16">Loading courses…</p>
         ) : courses.length === 0 ? (
           <p className="text-center text-muted-foreground py-16">
-            No courses found for this class range yet.
+            No courses found for this selection yet.
           </p>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">

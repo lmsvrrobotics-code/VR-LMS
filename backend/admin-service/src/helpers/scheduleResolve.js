@@ -3,7 +3,7 @@ const { Course } = require('../models');
 const authDb = require('../config/authDatabase');
 
 // Shared resolvers for the teacher-facing schedule endpoints (slots, demos,
-// classes, timetable). Resolve lms_admin course titles and auth-DB user names.
+// classes). Resolve lms_admin course titles and auth-DB user names.
 
 async function resolveCourseTitles(courseIds) {
     // Course.id is an integer PK — only numeric course_ids can match a row.

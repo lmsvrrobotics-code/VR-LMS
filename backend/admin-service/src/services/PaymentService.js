@@ -1,22 +1,28 @@
 const axios = require('axios');
 const { Payment, Course, UserProgress } = require('../models');
 const { HttpError } = require('../middlewares/error');
-const env = require('../config/env');
 const { verifyCheckoutSignature, verifyWebhookSignature } = require('./paymentLogic');
 const cache = require('../config/cache');
+const settings = require('./SettingsService');
 
 const RZP_API = 'https://api.razorpay.com/v1';
 
-const isConfigured = () => Boolean(env.razorpay.keyId && env.razorpay.keySecret);
-const requireConfigured = () => {
-    if (!isConfigured()) {
-        throw new HttpError(503, 'Payments are not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.');
+// Keys come from SettingsService (DB-pasted by admin, else .env). Resolved
+// fresh per call (cached 30s inside SettingsService).
+const getKeys = () => settings.getPaymentConfig();
+const isConfigured = async () => {
+    const k = await getKeys();
+    return Boolean(k.keyId && k.keySecret);
+};
+const requireConfigured = async () => {
+    if (!(await isConfigured())) {
+        throw new HttpError(503, 'Payments are not configured. Add your Razorpay keys in Admin → Settings.');
     }
 };
 
 // Basic-auth header for Razorpay's REST API (key_id:key_secret).
-const authHeader = () => ({
-    Authorization: `Basic ${Buffer.from(`${env.razorpay.keyId}:${env.razorpay.keySecret}`).toString('base64')}`,
+const authHeader = (keys) => ({
+    Authorization: `Basic ${Buffer.from(`${keys.keyId}:${keys.keySecret}`).toString('base64')}`,
 });
 
 // Has this student already paid for this course?
@@ -47,7 +53,8 @@ const grantAccess = async (payment, razorpayPaymentId) => {
 
 // Step 1 — create a Razorpay order for a course and persist a 'created' Payment.
 const createOrder = async ({ user, courseId }) => {
-    requireConfigured();
+    await requireConfigured();
+    const keys = await getKeys();
     const userId = String(user?.userId || user?.id || '');
     if (!userId) throw new HttpError(401, 'Sign in to purchase.');
     const cid = Number(courseId);
@@ -71,7 +78,7 @@ const createOrder = async ({ user, courseId }) => {
         const res = await axios.post(
             `${RZP_API}/orders`,
             { amount, currency: 'INR', receipt: `c${cid}_u${userId}_${Date.now()}`, notes: { course_id: String(cid), user_id: userId } },
-            { headers: authHeader(), timeout: 15000 },
+            { headers: authHeader(keys), timeout: 15000 },
         );
         order = res.data;
     } catch (e) {
@@ -90,7 +97,7 @@ const createOrder = async ({ user, courseId }) => {
         order_id: order.id,
         amount,
         currency: 'INR',
-        key_id: env.razorpay.keyId,
+        key_id: keys.keyId,
         course: { id: course.id, title: course.title },
     };
 };
@@ -98,9 +105,10 @@ const createOrder = async ({ user, courseId }) => {
 // Step 2 — verify the checkout handler response and grant access synchronously
 // (the webhook is the backup/authoritative path).
 const verifyAndGrant = async ({ user, orderId, paymentId, signature }) => {
-    requireConfigured();
+    await requireConfigured();
+    const keys = await getKeys();
     const userId = String(user?.userId || user?.id || '');
-    const ok = verifyCheckoutSignature({ orderId, paymentId, signature, keySecret: env.razorpay.keySecret });
+    const ok = verifyCheckoutSignature({ orderId, paymentId, signature, keySecret: keys.keySecret });
     if (!ok) throw new HttpError(400, 'Payment signature verification failed.');
 
     const payment = await Payment.findOne({ where: { razorpay_order_id: orderId } });
@@ -114,11 +122,12 @@ const verifyAndGrant = async ({ user, orderId, paymentId, signature }) => {
 // Webhook — authoritative confirmation from Razorpay. Verifies the HMAC over the
 // raw body and grants access on payment.captured / order.paid.
 const handleWebhook = async ({ rawBody, signature }) => {
-    if (!env.razorpay.webhookSecret) {
-        console.warn('[payments] webhook hit but RAZORPAY_WEBHOOK_SECRET not set — ignoring');
+    const keys = await getKeys();
+    if (!keys.webhookSecret) {
+        console.warn('[payments] webhook hit but Razorpay webhook secret not set — ignoring');
         return { ignored: true };
     }
-    const ok = verifyWebhookSignature({ rawBody, signature, webhookSecret: env.razorpay.webhookSecret });
+    const ok = verifyWebhookSignature({ rawBody, signature, webhookSecret: keys.webhookSecret });
     if (!ok) throw new HttpError(400, 'Invalid webhook signature');
 
     let event;

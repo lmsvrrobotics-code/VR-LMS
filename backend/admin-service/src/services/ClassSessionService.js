@@ -1,7 +1,11 @@
 const classRepo = require('../repositories/ClassSessionRepository');
 const { HttpError } = require('../middlewares/error');
+const { resolveCourseTitles, resolveUserNames } = require('../helpers/scheduleResolve');
 
 const PER_PAGE = 10;
+// Hard cap so the calendar feed (which asks for a big per_page to plot every
+// session) can't trigger an unbounded scan. 1000 covers every scheduled class.
+const MAX_PER_PAGE = 1000;
 
 const toIdArray = (val) => {
     if (val == null) return [];
@@ -19,14 +23,39 @@ const parseDate = (val) => {
     return Number.isNaN(d.getTime()) ? null : d;
 };
 
-const list = async ({ page = 1, search } = {}) => {
-    const limit = PER_PAGE;
+// Attach human-readable course title + assigned teacher names to each row so
+// the admin calendar can show "who/what" without a second round-trip. Best
+// effort: name/title resolution failing must never drop the rows themselves.
+const enrich = async (rows) => {
+    const plain = (rows || []).map((r) => (r && typeof r.toJSON === 'function' ? r.toJSON() : r));
+    let titles = {};
+    let names = {};
+    try {
+        titles = await resolveCourseTitles(plain.map((r) => r.course_id));
+        names = await resolveUserNames([...new Set(plain.flatMap((r) => toIdArray(r.teacher_ids)))]);
+    } catch (e) {
+        console.warn('[classes] enrich failed:', e.message);
+    }
+    return plain.map((r) => {
+        const tids = toIdArray(r.teacher_ids);
+        const cid = r.course_id == null ? null : String(r.course_id);
+        return {
+            ...r,
+            // numeric ids that don't resolve → null; free-text course_id → itself.
+            course_title: cid ? (titles[cid] || (/^\d+$/.test(cid) ? null : cid)) : null,
+            teacher_names: tids.map((id) => names[String(id)]).filter(Boolean),
+        };
+    });
+};
+
+const list = async ({ page = 1, search, per_page } = {}) => {
+    const limit = Math.min(Math.max(Number(per_page) || PER_PAGE, 1), MAX_PER_PAGE);
     const offset = (Number(page) - 1) * limit;
     try {
         const { count, rows } = await classRepo.paginate({ search, limit, offset });
         return {
             classes: {
-                data: rows,
+                data: await enrich(rows),
                 total: count,
                 per_page: limit,
                 current_page: Number(page),

@@ -1,0 +1,7 @@
+{
+  "watch": ["index.js", "src", "instrument.mjs"],
+  "ext": "js,mjs,cjs,json",
+  "ignore": ["src/**/*.test.js"],
+  "legacyWatch": true,
+  "delay": 400
+}

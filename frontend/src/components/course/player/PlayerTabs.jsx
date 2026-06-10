@@ -1,16 +1,13 @@
 import { useEffect, useState } from 'react';
 import { findCourseCertificate, issueCourseCertificate } from '@/api/course/courseApi';
-import { useAuth } from '@/hooks/useAuth';
 import LiveClassPane from '@/zoom-live-class/player/LiveClassPane';
 import ForumTab from '@/forum/ForumTab';
+import MyLearnings from './MyLearnings';
 import { sanitizeHtml } from '@/lib/sanitizeHtml';
-
-// Post-assessment score required to earn a certificate. Tweak here if the
-// course threshold changes; keep in sync with Certificate.tsx.
-const POST_ASSESSMENT_PASS_THRESHOLD = 50;
 
 const TABS = [
     { key: 'summary', label: 'Summary', icon: 'fa-blog' },
+    { key: 'notes', label: 'My notes', icon: 'fa-pen-to-square' },
     { key: 'live-class', label: 'Live class', icon: 'fa-video' },
     { key: 'discussion', label: 'Discussion', icon: 'fa-comments' },
     { key: 'certificate', label: 'Certificate', icon: 'fa-graduation-cap' },
@@ -39,6 +36,7 @@ export default function PlayerTabs({ course, lesson, progress, completedCount })
             </ul>
             <div className="p-5 text-gray-800">
                 {tab === 'summary' && <SummaryPane lesson={lesson} course={course} progress={progress} completedCount={completedCount} />}
+                {tab === 'notes' && <MyLearnings courseId={course.id} lessonId={lesson?.id} />}
                 {tab === 'live-class' && <LiveClassPane course={course} />}
                 {tab === 'discussion' && <ForumTab course={course} />}
                 {tab === 'certificate' && <CertificatePane progress={progress} course={course} />}
@@ -75,11 +73,8 @@ function Stat({ label, value }) {
 }
 
 function CertificatePane({ progress, course }) {
-    const { user } = useAuth();
-    const postScore = Number(user?.postScore);
     const courseDone = progress >= 100;
-    const passed = Number.isFinite(postScore) && postScore >= POST_ASSESSMENT_PASS_THRESHOLD;
-    const eligible = courseDone && passed;
+    const eligible = courseDone;
 
     const [cert, setCert] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -87,7 +82,7 @@ function CertificatePane({ progress, course }) {
     const [error, setError] = useState(null);
 
     // Look up an existing certificate for this (user, course) pair so a returning
-    // student sees Download immediately. Re-runs whenever eligibility changes.
+    // student sees Download immediately. Re-runs whenever progress changes.
     useEffect(() => {
         let alive = true;
         setLoading(true);
@@ -97,9 +92,9 @@ function CertificatePane({ progress, course }) {
             .catch(() => { if (alive) setCert(null); })
             .finally(() => { if (alive) setLoading(false); });
         return () => { alive = false; };
-    }, [course.id, progress, postScore]);
+    }, [course.id, progress]);
 
-    // Auto-issue only when BOTH gates pass: course complete AND post-assessment passed.
+    // Auto-issue as soon as the course is complete — no post-assessment gate.
     useEffect(() => {
         if (loading || cert || issuing || !eligible) return;
         setIssuing(true);
@@ -110,29 +105,17 @@ function CertificatePane({ progress, course }) {
     }, [eligible, cert, loading, issuing, course.id]);
 
     // When the student already has a cert, show it regardless of current
-    // gate state — they earned it in the past.
-    if (!cert && (!courseDone || !passed)) {
+    // progress — they earned it in the past.
+    if (!cert && !courseDone) {
         return (
             <div className="text-center py-8">
                 <i className="fa fa-graduation-cap text-[48px] text-gray-300 mb-3" />
                 <p className="text-gray-700 mb-1">Certificate not yet available</p>
-                <ul className="text-[13px] text-gray-500 inline-block text-left mt-2 space-y-1">
-                    <li className={courseDone ? 'text-green-600' : ''}>
-                        <i className={`fa ${courseDone ? 'fa-check-circle' : 'fa-circle-o'} mr-2`} />
-                        Complete the course
-                        {!courseDone && <span className="text-gray-400"> (currently {progress}%)</span>}
-                    </li>
-                    <li className={passed ? 'text-green-600' : ''}>
-                        <i className={`fa ${passed ? 'fa-check-circle' : 'fa-circle-o'} mr-2`} />
-                        Pass the post-assessment with at least {POST_ASSESSMENT_PASS_THRESHOLD}%
-                        {Number.isFinite(postScore) && !passed && (
-                            <span className="text-gray-400"> (currently {postScore}%)</span>
-                        )}
-                        {!Number.isFinite(postScore) && (
-                            <span className="text-gray-400"> (not attempted yet)</span>
-                        )}
-                    </li>
-                </ul>
+                <p className="text-[13px] text-gray-500 mt-2">
+                    <i className="fa fa-circle-o mr-2" />
+                    Complete the course to unlock your certificate
+                    <span className="text-gray-400"> (currently {progress}%)</span>
+                </p>
             </div>
         );
     }

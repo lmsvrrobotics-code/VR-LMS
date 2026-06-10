@@ -17,8 +17,8 @@ import {
   ChevronDown,
   Home,
   Mail,
+  Users,
   UserCircle,
-  GraduationCap,
   LayoutDashboard,
   LogOut,
 } from "lucide-react";
@@ -91,8 +91,8 @@ const Navbar = () => {
     dropdown?: boolean;
     highlight?: boolean;
   }[] = [
-    { name: "Summer Camp 2026", href: "/summer-camp", icon: GraduationCap, highlight: true },
     { name: "Home", href: "/", icon: Home },
+    { name: "About", href: "/about", icon: Users },
     { name: "Courses", href: "/vr-courses", icon: BookOpen, dropdown: true },
     { name: "Books", href: "/books", icon: Book, dropdown: true },
     { name: "Gallery", href: "/gallery", icon: ImageIcon },
@@ -137,25 +137,25 @@ const Navbar = () => {
     : "flex items-center justify-between h-16 lg:h-20";
   const logoSlotCls = isAdmin
     ? "w-[260px] shrink-0 flex items-center px-3"
-    : "";
+    : "shrink-0 flex items-center pr-6 lg:pr-10 mr-2";
 
   return (
     <nav className="sticky top-0 z-50 bg-card/80 backdrop-blur-md border-b border-border/50">
       <div className={isAdmin ? "" : "container-ngo"}>
         <div className={wrapperCls}>
-          {/* Logo */}
+          {/* Logo — big brand image (the highlight of the navbar). */}
           <Link
             to="/"
             onClick={(e) => scrollToTopWithOffset(e, "/")}
-            className={`flex flex-col leading-none transition-transform ${logoSlotCls}`}
+            className={`flex items-center transition-transform ${logoSlotCls}`}
+            aria-label="VR Robotics Academy — Home"
           >
-            <span className="font-heading text-xl font-extrabold tracking-tight">
-              <span className="text-gradient">VR</span>{" "}
-              <span className="text-foreground">Robotics Academy</span>
-            </span>
-            <span className="text-[9px] tracking-[0.25em] text-muted-foreground font-semibold uppercase">
-              Live in Future
-            </span>
+            <img
+              src="https://res.cloudinary.com/dicfqwlfq/image/upload/v1764505259/VR_Robotics_Logo_upscaled_1_rrrrn8.png"
+              alt="VR Robotics Academy"
+              className="h-16 lg:h-[72px] w-auto object-contain"
+              loading="eager"
+            />
           </Link>
 
           {/* Desktop Navigation */}

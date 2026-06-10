@@ -1,7 +1,11 @@
 const { StudentRecord } = require('../models');
 const { HttpError } = require('../middlewares/error');
 
-const KINDS = ['goal_primary', 'goal_academic', 'badge', 'spr', 'mark', 'exercise', 'quiz', 'project'];
+// 'evaluation' = post-class student performance evaluation authored by the
+// teacher. data = { ratings:{curiosity,participation,attentiveness,attention,
+// creativity,camera} (1-5), overall, feedback, stage, session }. Surfaced as
+// stats + per-student feedback in the admin dashboard.
+const KINDS = ['goal_primary', 'goal_academic', 'badge', 'spr', 'mark', 'exercise', 'quiz', 'project', 'evaluation'];
 
 // List a teacher's records for one student (optionally filtered by kind).
 const listForStudent = async (teacherId, studentId, kind) => {

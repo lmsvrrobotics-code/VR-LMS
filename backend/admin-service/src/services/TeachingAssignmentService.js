@@ -432,58 +432,110 @@ const revokeRelease = async ({ user, id, releaseId }) => {
 // Enforcement helper — used by the course player + the student "daily card".
 // ---------------------------------------------------------------------------
 
+// Ensure each of a course's teachers has a TeachingAssignment so they have a
+// surface to release lessons through. Idempotent (findOrCreate on the unique
+// course+teacher pair); an existing assignment — scoped or global — is left as
+// is. A freshly-created assignment has NO roster members, which the gate below
+// treats as GLOBAL: its releases apply to every student of the course. Called
+// best-effort from CourseService on create / teacher change, and by the
+// one-time backfill script. teacherIds may be an array or a JSON/CSV string.
+const ensureAssignmentsForCourse = async (courseId, teacherIds, clgId = null) => {
+    const cid = Number(courseId);
+    if (!cid) return { created: 0 };
+    const ids = normIds(
+        Array.isArray(teacherIds)
+            ? teacherIds
+            : (() => { try { return JSON.parse(teacherIds); } catch { return String(teacherIds || '').split(','); } })(),
+    );
+    let created = 0;
+    for (const teacher_id of ids) {
+        const [, wasCreated] = await TeachingAssignment.findOrCreate({
+            where: { course_id: cid, teacher_id },
+            defaults: { course_id: cid, teacher_id, clg_id: clgId || null, is_active: true },
+        });
+        if (wasCreated) created += 1;
+    }
+    return { created };
+};
+
 // For a (course, student): which lessons may the student see?
-//   { enforced:false }                  → course has NO teaching assignment;
-//                                          caller keeps legacy behaviour.
-//   { enforced:true, lessonIds:Set }    → delegated course; only these lesson
-//                                          ids are released to this student.
-// Anonymous / unknown students on a delegated course get an empty set.
+// Release-gating is now UNIVERSAL — every course is enforced, so a lesson is
+// hidden until a teacher releases it (free lessons stay visible; that rule lives
+// in computeGating, not here).
+//   { enforced:true, lessonIds:Set, rosterScoped:bool }
+// rosterScoped is true only when the student matched an explicit roster (a B2B
+// delegated assignment) — the caller uses that to skip the personal paywall for
+// school/batch students. A "global" assignment (one with no roster members) has
+// its releases applied to EVERY student of the course.
+// No assignment at all → enforced:true with an empty set (everything locked
+// until a teacher is assigned and releases) — the paywall still layers on top.
 const visibleLessonIdsForStudent = async (courseId, studentIdRaw) => {
     const cid = Number(courseId);
-    if (!cid) return { enforced: false, lessonIds: new Set() };
+    if (!cid) return { enforced: true, lessonIds: new Set(), rosterScoped: false };
 
     const assignments = await TeachingAssignment.findAll({
         where: { course_id: cid },
         attributes: ['id'],
         raw: true,
     });
-    if (!assignments.length) return { enforced: false, lessonIds: new Set() };
+    if (!assignments.length) return { enforced: true, lessonIds: new Set(), rosterScoped: false };
 
-    const studentId = String(studentIdRaw ?? '').trim();
-    if (!studentId) return { enforced: true, lessonIds: new Set() };
-
-    // Which of this course's assignments include this student?
     const assignmentIds = assignments.map((a) => a.id);
-    const myBatches = await BatchMember.findAll({
-        where: { user_id: studentId },
-        attributes: ['batch_id'],
+
+    // Classify each assignment as scoped (has ≥1 roster member) vs global (none).
+    const memberCounts = await AssignmentMember.findAll({
+        where: { teaching_assignment_id: { [Op.in]: assignmentIds } },
+        attributes: ['teaching_assignment_id', [sequelize.fn('COUNT', sequelize.col('id')), 'count']],
+        group: ['teaching_assignment_id'],
         raw: true,
     });
-    const myBatchRefs = myBatches.map((b) => String(b.batch_id));
+    const memberCountById = Object.fromEntries(
+        memberCounts.map((r) => [Number(r.teaching_assignment_id), Number(r.count) || 0]),
+    );
+    const globalIds = assignmentIds.filter((id) => !(memberCountById[Number(id)] > 0));
+    const scopedIds = assignmentIds.filter((id) => memberCountById[Number(id)] > 0);
 
-    const memberMatch = await AssignmentMember.findAll({
-        where: {
-            teaching_assignment_id: { [Op.in]: assignmentIds },
-            [Op.or]: [
-                { member_type: 'student', member_ref: studentId },
-                ...(myBatchRefs.length ? [{ member_type: 'batch', member_ref: { [Op.in]: myBatchRefs } }] : []),
-            ],
-        },
-        attributes: ['teaching_assignment_id'],
-        raw: true,
-    });
-    const matchedIds = matchedAssignmentIds(memberMatch);
-    if (!matchedIds.length) return { enforced: true, lessonIds: new Set() };
+    // Which SCOPED assignments include this student (batch or individual)?
+    let matchedScoped = [];
+    const studentId = String(studentIdRaw ?? '').trim();
+    if (studentId && scopedIds.length) {
+        const myBatches = await BatchMember.findAll({
+            where: { user_id: studentId },
+            attributes: ['batch_id'],
+            raw: true,
+        });
+        const myBatchRefs = myBatches.map((b) => String(b.batch_id));
+        const memberMatch = await AssignmentMember.findAll({
+            where: {
+                teaching_assignment_id: { [Op.in]: scopedIds },
+                [Op.or]: [
+                    { member_type: 'student', member_ref: studentId },
+                    ...(myBatchRefs.length ? [{ member_type: 'batch', member_ref: { [Op.in]: myBatchRefs } }] : []),
+                ],
+            },
+            attributes: ['teaching_assignment_id'],
+            raw: true,
+        });
+        matchedScoped = matchedAssignmentIds(memberMatch);
+    }
 
-    // Pull releases for the matched assignments, then let the pure helper decide
-    // which are visible now (not revoked, released_at in the past). Centralizing
-    // the date/revoke rule in activeReleasedLessonIds keeps it unit-testable.
+    // Visible releases = matched-scoped (this student's teacher) ∪ all global
+    // (course-wide) assignments. An anonymous student still sees global releases
+    // for free courses; the paywall (applied by the caller) handles paid ones.
+    const sourceIds = [...new Set([...matchedScoped, ...globalIds])];
+    if (!sourceIds.length) {
+        return { enforced: true, lessonIds: new Set(), rosterScoped: matchedScoped.length > 0 };
+    }
     const releases = await LessonRelease.findAll({
-        where: { teaching_assignment_id: { [Op.in]: matchedIds } },
+        where: { teaching_assignment_id: { [Op.in]: sourceIds } },
         attributes: ['lesson_id', 'released_at', 'revoked_at'],
         raw: true,
     });
-    return { enforced: true, lessonIds: activeReleasedLessonIds(releases) };
+    return {
+        enforced: true,
+        lessonIds: activeReleasedLessonIds(releases),
+        rosterScoped: matchedScoped.length > 0,
+    };
 };
 
 // Course ids this student is delegated (on a teacher's roster via batch or
@@ -510,6 +562,21 @@ const coursesForStudent = async (studentIdRaw) => {
     return [...new Set(rows.map((r) => Number(r.course_id)))];
 };
 
+// Distinct student ids rostered into ANY teaching assignment for a course
+// (individual + batch members across all of the course's assignments). Used to
+// size the per-course "class" for the course-details Class Rank.
+const studentsForCourse = async (courseIdRaw) => {
+    const cid = Number(courseIdRaw);
+    if (!cid) return [];
+    const assignments = await TeachingAssignment.findAll({ where: { course_id: cid }, attributes: ['id'], raw: true });
+    if (!assignments.length) return [];
+    const ids = new Set();
+    for (const a of assignments) {
+        for (const uid of await resolveRosterUserIds(a.id)) ids.add(String(uid));
+    }
+    return [...ids];
+};
+
 // Distinct students across ALL of a teacher's assignments (their roster, batch +
 // individual), with names — powers the teacher dashboard "Students" tab.
 const studentsByTeacher = async (teacherIdRaw) => {
@@ -528,10 +595,82 @@ const studentsByTeacher = async (teacherIdRaw) => {
     return idList.map((id) => ({ id, name: names[id]?.name || `Student ${id}` }));
 };
 
+// Per-course progress for ONE student across the teacher's courses — powers the
+// teacher dashboard "Students" tab (let the teacher see how the student is
+// doing). Progress is measured against RELEASED lessons (what the teacher has
+// unlocked), consistent with how a student can only complete released content.
+const studentProgressForTeacher = async (teacherIdRaw, studentIdRaw) => {
+    const tid = String(teacherIdRaw ?? '').trim();
+    const sid = String(studentIdRaw ?? '').trim();
+    if (!tid || !sid) return { courses: [] };
+
+    const assignments = await TeachingAssignment.findAll({
+        where: { teacher_id: tid },
+        attributes: ['id', 'course_id'],
+        raw: true,
+    });
+    if (!assignments.length) return { courses: [] };
+
+    const aIds = assignments.map((a) => a.id);
+    const aToCourse = Object.fromEntries(assignments.map((a) => [a.id, String(a.course_id)]));
+    const courseIds = [...new Set(assignments.map((a) => String(a.course_id)))];
+
+    const releaseRows = await LessonRelease.findAll({
+        where: { teaching_assignment_id: { [Op.in]: aIds } },
+        attributes: ['teaching_assignment_id', 'lesson_id', 'released_at', 'revoked_at'],
+        raw: true,
+    });
+    // Group releases by course, then resolve the active (released, not revoked,
+    // not future) set per course via the pure helper.
+    const releasesByCourse = {};
+    for (const r of releaseRows) {
+        const cid = aToCourse[r.teaching_assignment_id];
+        (releasesByCourse[cid] = releasesByCourse[cid] || []).push(r);
+    }
+    const releasedByCourse = {};
+    const allReleased = new Set();
+    for (const cid of courseIds) {
+        const ids = activeReleasedLessonIds(releasesByCourse[cid] || []);
+        releasedByCourse[cid] = ids;
+        for (const id of ids) allReleased.add(Number(id));
+    }
+
+    // Which of those released lessons has THIS student completed?
+    let completed = new Set();
+    if (allReleased.size) {
+        const rows = await LessonCompletion.findAll({
+            where: { user_id: sid, lesson_id: { [Op.in]: [...allReleased] } },
+            attributes: ['lesson_id'],
+            raw: true,
+        });
+        completed = new Set(rows.map((r) => Number(r.lesson_id)));
+    }
+
+    const { resolveCourseTitles } = require('../helpers/scheduleResolve');
+    const titles = await resolveCourseTitles(courseIds);
+
+    const courses = courseIds.map((cid) => {
+        const released = releasedByCourse[cid] || new Set();
+        const total = released.size;
+        let done = 0;
+        for (const id of released) if (completed.has(Number(id))) done += 1;
+        return {
+            course_id: cid,
+            course_title: titles[cid] || (/^\d+$/.test(cid) ? `Course #${cid}` : cid),
+            completed: done,
+            total,
+            percent: total ? Math.round((done / total) * 100) : 0,
+        };
+    });
+    return { courses };
+};
+
 module.exports = {
     listAssignments,
     coursesForStudent,
+    studentsForCourse,
     studentsByTeacher,
+    studentProgressForTeacher,
     createAssignment,
     deleteAssignment,
     addMembers,
@@ -543,4 +682,5 @@ module.exports = {
     revokeRelease,
     resolveRosterUserIds,
     visibleLessonIdsForStudent,
+    ensureAssignmentsForCourse,
 };

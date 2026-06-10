@@ -1,12 +1,14 @@
+import { useState } from "react";
+import axios from "axios";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { 
-  Mail, 
-  Phone, 
-  MapPin, 
+import {
+  Mail,
+  Phone,
+  MapPin,
   Clock,
   Users,
   Heart,
@@ -14,10 +16,41 @@ import {
   HelpCircle,
   Briefcase,
   Globe,
-  Send
+  Send,
+  CheckCircle2
 } from "lucide-react";
 
+const ADMIN_BASE = (import.meta.env.VITE_ADMIN_API_URL as string) || "http://localhost:5000";
+
 const Contact = () => {
+  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", subject: "", message: "" });
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!form.firstName.trim() || !form.email.trim() || !form.message.trim()) {
+      setError("Please fill in your name, email and message.");
+      return;
+    }
+    setSending(true);
+    try {
+      await axios.post(`${ADMIN_BASE}/api/public/contact`, form, { timeout: 30000 });
+      setSent(true);
+      setForm({ firstName: "", lastName: "", email: "", subject: "", message: "" });
+    } catch (err) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      setError(msg || "Something went wrong. Please try again.");
+    } finally {
+      setSending(false);
+    }
+  };
+
   const contactMethods = [
     {
       icon: Mail,
@@ -174,41 +207,59 @@ const Contact = () => {
               </div>
 
               <Card className="card-ngo border-0">
-                <CardContent className="p-6 space-y-6">
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="firstName">First Name</Label>
-                      <Input id="firstName" placeholder="Your first name" />
+                <CardContent className="p-6">
+                  {sent ? (
+                    <div className="text-center py-10 space-y-3">
+                      <div className="w-14 h-14 mx-auto rounded-full bg-green-50 flex items-center justify-center">
+                        <CheckCircle2 className="w-8 h-8 text-green-600" />
+                      </div>
+                      <h3 className="text-xl font-bold">Message sent!</h3>
+                      <p className="text-muted-foreground">Thanks for reaching out — we'll get back to you soon.</p>
+                      <Button variant="outline" onClick={() => setSent(false)}>Send another message</Button>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="lastName">Last Name</Label>
-                      <Input id="lastName" placeholder="Your last name" />
-                    </div>
-                  </div>
+                  ) : (
+                    <form onSubmit={submit} className="space-y-6">
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="firstName">First Name</Label>
+                          <Input id="firstName" placeholder="Your first name" value={form.firstName} onChange={set("firstName")} required />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="lastName">Last Name</Label>
+                          <Input id="lastName" placeholder="Your last name" value={form.lastName} onChange={set("lastName")} />
+                        </div>
+                      </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email Address</Label>
-                    <Input id="email" type="email" placeholder="your.email@example.com" />
-                  </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="email">Email Address</Label>
+                        <Input id="email" type="email" placeholder="your.email@example.com" value={form.email} onChange={set("email")} required />
+                      </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="subject">Subject</Label>
-                    <Input id="subject" placeholder="What is this regarding?" />
-                  </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="subject">Subject</Label>
+                        <Input id="subject" placeholder="What is this regarding?" value={form.subject} onChange={set("subject")} />
+                      </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="message">Message</Label>
-                    <Textarea 
-                      id="message" 
-                      placeholder="Tell us how we can help you..."
-                      rows={6}
-                    />
-                  </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="message">Message</Label>
+                        <Textarea
+                          id="message"
+                          placeholder="Tell us how we can help you..."
+                          rows={6}
+                          value={form.message}
+                          onChange={set("message")}
+                          required
+                        />
+                      </div>
 
-                  <Button className="w-full bg-gradient-hero border-0" size="lg">
-                    <Send className="w-4 h-4 mr-2" />
-                    Send Message
-                  </Button>
+                      {error && <p className="text-sm text-red-600">{error}</p>}
+
+                      <Button type="submit" disabled={sending} className="w-full bg-gradient-hero border-0" size="lg">
+                        <Send className="w-4 h-4 mr-2" />
+                        {sending ? "Sending…" : "Send Message"}
+                      </Button>
+                    </form>
+                  )}
                 </CardContent>
               </Card>
             </div>

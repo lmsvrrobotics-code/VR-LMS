@@ -34,6 +34,20 @@ const countStudents = async () => {
     }
 };
 
+// Teachers also live in the auth DB (role 'teacher'), same as students.
+const countTeachers = async () => {
+    try {
+        const [row] = await authDb.query(
+            `SELECT COUNT(*) AS c FROM users u JOIN roles r ON r."roleId" = u."roleId" WHERE r.role = 'teacher'`,
+            { type: QueryTypes.SELECT }
+        );
+        return Number(row.c || 0);
+    } catch (e) {
+        console.warn('[dashboard] teacher count failed:', e.message);
+        return 0;
+    }
+};
+
 const courseStatuses = () => Course.findAll({ attributes: ['status'] });
 
-module.exports = { safeCount, countStudents, courseStatuses };
+module.exports = { safeCount, countStudents, countTeachers, courseStatuses };

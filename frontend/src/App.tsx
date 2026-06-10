@@ -12,7 +12,6 @@ import About from "./pages/About";
 import Courses from "./pages/Courses";
 import CourseCatalog from "./pages/CourseCatalog";
 import VrCourses from "./pages/VrCourses";
-import SummerCamp from "./pages/SummerCamp";
 import Books from "./pages/Books";
 import Gallery from "./pages/Gallery";
 import Locations from "./pages/Locations";
@@ -55,12 +54,16 @@ import AdminCourseCreate from "./admin/pages/course/Create";
 import AdminCourseEdit from "./admin/pages/course/Edit";
 import AdminCouponIndex from "./admin/pages/coupon/Index";
 import AdminGalleryIndex from "./admin/pages/gallery/Index";
+import AdminDemoVideosIndex from "./admin/pages/demo-videos/Index";
+import AdminLocationsIndex from "./admin/pages/locations/Index";
 import AdminBooksIndex from "./admin/pages/books/Index";
 import AdminSlotsIndex from "./admin/pages/slots/Index";
 import AdminDemosIndex from "./admin/pages/demos/Index";
 import AdminClassesIndex from "./admin/pages/classes/Index";
-import AdminTimetableIndex from "./admin/pages/timetable/Index";
 import AdminCalendarIndex from "./admin/pages/calendar/Index";
+import AdminFeedbackIndex from "./admin/pages/feedback/Index";
+import AdminFeedbackFormsIndex from "./admin/pages/feedback-forms/Index";
+import AdminMessagesIndex from "./admin/pages/messages/Index";
 import AdminSettingsIndex from "./admin/pages/settings/Index";
 import AdminBatchesIndex from "./admin/pages/batch/Index";
 import AdminTeachingIndex from "./admin/pages/teaching/Index";
@@ -116,7 +119,6 @@ const App = () => (
             <Route path="/courses" element={<Layout><Courses /></Layout>} />
             <Route path="/courses/browse" element={<Layout><CourseCatalog /></Layout>} />
             <Route path="/vr-courses" element={<Layout><VrCourses /></Layout>} />
-            <Route path="/summer-camp" element={<Layout><SummerCamp /></Layout>} />
             <Route path="/books" element={<Layout><Books /></Layout>} />
             <Route path="/gallery" element={<Layout><Gallery /></Layout>} />
             <Route path="/locations" element={<Layout><Locations /></Layout>} />
@@ -177,13 +179,17 @@ const App = () => (
               <Route path="course/edit/:id" element={<AdminCourseEdit />} />
               <Route path="coupons" element={<AdminCouponIndex />} />
               <Route path="gallery" element={<AdminGalleryIndex />} />
+              <Route path="demo-videos" element={<AdminDemoVideosIndex />} />
+              <Route path="locations" element={<AdminLocationsIndex />} />
               <Route path="books" element={<AdminBooksIndex />} />
               <Route path="calendar" element={<AdminCalendarIndex />} />
+              <Route path="feedback" element={<AdminFeedbackIndex />} />
+              <Route path="feedback-forms" element={<AdminFeedbackFormsIndex />} />
+              <Route path="messages" element={<AdminMessagesIndex />} />
               <Route path="settings" element={<AdminSettingsIndex />} />
               <Route path="slots" element={<AdminSlotsIndex />} />
               <Route path="demos" element={<AdminDemosIndex />} />
               <Route path="classes" element={<AdminClassesIndex />} />
-              <Route path="timetable" element={<AdminTimetableIndex />} />
               <Route path="batches" element={<AdminBatchesIndex />} />
               <Route path="teaching" element={<AdminTeachingIndex />} />
               <Route path="leads" element={<AdminLeadsIndex />} />
