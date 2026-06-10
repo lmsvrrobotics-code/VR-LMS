@@ -144,10 +144,9 @@ export default function AdminCalendarIndex() {
       </div>
 
       {/* Stat strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
         <StatCard type="class" value={counts.class} label="Classes scheduled" icon={GraduationCap} />
         <StatCard type="demo" value={counts.demo} label="Demos scheduled" icon={Presentation} />
-        <StatCard type="slot" value={counts.slot} label="Slots scheduled" icon={MapPin} />
         <StatCard value={monthCount} label={`In ${format(date, 'MMMM yyyy')}`} icon={CalendarDays} />
       </div>
 
