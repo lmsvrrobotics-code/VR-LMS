@@ -25,7 +25,11 @@ Object.entries(serviceMap).forEach(([name, service]) => {
   // Full URL via <SVC>_SERVICE_URL (prod) or http://host:port (local dev).
   const target = targetFor(service);
   const proxy = httpProxy(target, {
-    preserveHostHdr: true,
+    // preserveHostHdr MUST stay false on Railway: the platform edge routes by the
+    // HTTP Host header, so forwarding Bastion's own host makes every proxied
+    // request loop back to Bastion ("Welcome to Bastion Server"). Letting
+    // express-http-proxy send the upstream's host routes to the real service.
+    preserveHostHdr: false,
     // Default proxy body limit is 1mb — too small for legitimate file uploads
     // (e.g. college ID proofs in pre-assessment registration). Match the
     // upstream's own multer cap so the proxy isn't the bottleneck.

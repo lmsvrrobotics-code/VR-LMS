@@ -45,7 +45,15 @@ const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
   const { user, loading, checkAuth } = useAuth();
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
 
+  // Hard gate: a protected page requires an actual auth token. Without one the
+  // visitor is logged out — period. This must not depend on a backend probe
+  // (a misbehaving/200 auth endpoint must never be able to leak gated content).
+  const hasToken =
+    typeof window !== "undefined" &&
+    Boolean(localStorage.getItem("accessToken") || localStorage.getItem("admin_token"));
+
   useEffect(() => {
+    if (!hasToken) return; // no token → don't even probe
     if (hasCheckedAuth || user || loading) return;
     (async () => {
       try { await checkAuth(); } finally { setHasCheckedAuth(true); }
@@ -53,7 +61,12 @@ const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
     // checkAuth intentionally omitted: AuthProvider recreates it on every
     // render, so including it would cause an infinite re-render loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasCheckedAuth, user, loading]);
+  }, [hasToken, hasCheckedAuth, user, loading]);
+
+  // No token = definitely not logged in → bounce to the auth screen.
+  if (!hasToken) {
+    return <Navigate to="/auth" replace />;
+  }
 
   if (loading || (!hasCheckedAuth && !user)) {
     return (
@@ -65,7 +78,7 @@ const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/auth" replace />;
   }
 
   if (requiredRole) {
