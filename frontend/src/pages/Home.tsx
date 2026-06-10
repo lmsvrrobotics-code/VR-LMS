@@ -159,15 +159,6 @@ const whyChoose = [
   { title: "Trusted by Schools", icon: ShieldCheck, desc: "Partnered with reputed institutions to deliver world-class robotics, coding, and AI education on campus." },
 ];
 
-const projects = [
-  { title: "Line-Following Robot", desc: "A robot that uses sensors to follow a path autonomously.", icon: Bot, tint: "from-rose-500 to-red-600" },
-  { title: "Obstacle-Avoiding Car", desc: "Self-driving car that navigates around obstacles.", icon: Cpu, tint: "from-blue-500 to-indigo-600" },
-  { title: "VR Puzzle Game", desc: "Immersive virtual reality puzzle game.", icon: Gamepad2, tint: "from-fuchsia-500 to-purple-600" },
-  { title: "Smart IoT Home", desc: "IoT project controlling lights and sensors.", icon: Wifi, tint: "from-teal-500 to-emerald-600" },
-  { title: "Robotic Arm", desc: "Programmable arm for picking and placing objects.", icon: Wrench, tint: "from-amber-500 to-orange-600" },
-  { title: "AI Chatbot", desc: "Conversational AI with natural language processing.", icon: Brain, tint: "from-violet-500 to-fuchsia-600" },
-];
-
 // ── Book Demo flow — ported from index.vrrobotics-backup.html ──
 // Uses THIS app's existing Supabase project (VITE_SUPABASE_URL) for the
 // confirm-booking / create-order edge functions; paid mode uses Razorpay (₹49).
@@ -733,20 +724,8 @@ const Home = () => {
               })}
             </div>
           ) : (
-            // Fallback defaults when no admin projects exist yet.
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {projects.map((p) => (
-                <Card key={p.title} className="card-ngo border-0 overflow-hidden">
-                  <div className={`h-40 bg-gradient-to-br ${p.tint} flex items-center justify-center`}>
-                    <p.icon className="w-14 h-14 text-white/90" />
-                  </div>
-                  <CardContent className="p-5 space-y-2">
-                    <h3 className="font-semibold text-lg">{p.title}</h3>
-                    <p className="text-muted-foreground text-sm">{p.desc}</p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            // No hardcoded placeholders — projects come from the admin panel.
+            <p className="text-center text-muted-foreground">Student projects will be showcased here soon.</p>
           )}
         </div>
       </section>
