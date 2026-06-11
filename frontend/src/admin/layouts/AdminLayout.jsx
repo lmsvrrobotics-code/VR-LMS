@@ -398,6 +398,12 @@ export default function AdminLayout() {
 
     const toggle = (key) => setOpen((o) => ({ ...o, [key]: !o[key] }));
 
+    // Mobile sidebar drawer — closed by default; the hamburger opens it as an
+    // overlay so it doesn't squish the content on small screens.
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+    // Close the drawer whenever the route changes (after tapping a nav link).
+    useEffect(() => { setSidebarOpen(false); }, [pathname, search]);
+
     // font-semibold is on the base class so every sidebar item — active or
     // not — renders semibold. Active state still gets the skin color; the
     // weight stays consistent so navigation feels uniform.
@@ -500,8 +506,41 @@ export default function AdminLayout() {
         <div className={`admin-theme min-h-screen flex flex-col bg-bodybg ${isDark ? 'dark admin-dark' : ''}`}>
             <Navbar />
 
-            <div className="flex flex-1">
-                <aside className="w-[260px] bg-white border-r border-border shrink-0 flex flex-col">
+            {/* Mobile-only bar with a button to open the sidebar drawer. */}
+            <div className="lg:hidden flex items-center gap-2 px-4 py-2.5 bg-white border-b border-border">
+                <button
+                    type="button"
+                    onClick={() => setSidebarOpen(true)}
+                    className="inline-flex items-center gap-2 text-[14px] font-semibold text-gray hover:text-skin"
+                    aria-label="Open menu"
+                >
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
+                    Menu
+                </button>
+            </div>
+
+            <div className="flex flex-1 relative">
+                {/* Backdrop (mobile only) when the drawer is open. */}
+                {sidebarOpen && (
+                    <div
+                        className="lg:hidden fixed inset-0 z-40 bg-black/40"
+                        onClick={() => setSidebarOpen(false)}
+                        aria-hidden="true"
+                    />
+                )}
+                <aside className={`w-[260px] bg-white border-r border-border shrink-0 flex flex-col
+                    fixed inset-y-0 left-0 z-50 transform transition-transform duration-200
+                    lg:static lg:translate-x-0 lg:z-auto
+                    ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+                    {/* Close button (mobile only). */}
+                    <button
+                        type="button"
+                        onClick={() => setSidebarOpen(false)}
+                        className="lg:hidden absolute top-3 right-3 text-gray hover:text-skin"
+                        aria-label="Close menu"
+                    >
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                    </button>
                     {/* Appearance / theme toggle pinned at the top of the sidebar. */}
                     <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border shrink-0">
                         <span className="text-[11px] uppercase tracking-wider text-gray font-semibold">Appearance</span>
@@ -615,7 +654,7 @@ export default function AdminLayout() {
                     lets wide content (e.g. data tables) push <main> past the
                     viewport and scroll the whole page. min-w-0 lets it shrink
                     so a page's own overflow-x container scrolls instead. */}
-                <main className="flex-1 min-w-0 p-6">
+                <main className="flex-1 min-w-0 p-4 lg:p-6">
                     <Outlet />
                 </main>
             </div>

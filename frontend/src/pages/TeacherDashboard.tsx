@@ -14,6 +14,8 @@ import FeedbackFormsView from "@/components/teacher/FeedbackFormsView";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useDashboardTheme } from "@/hooks/useDashboardTheme";
 import {
+  Menu,
+  X,
   Video,
   Calendar,
   LayoutDashboard,
@@ -1208,6 +1210,7 @@ const PendingFeedbackBanner = ({ teacherId, onGiveFeedback }: { teacherId?: stri
 
 const TeacherDashboard = () => {
   const [active, setActive] = useState("My Courses");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [data] = useState<DashboardData>(PLACEHOLDER_DATA);
   const { user } = useAuth();
   const { isDark } = useDashboardTheme();
@@ -1222,8 +1225,25 @@ const TeacherDashboard = () => {
 
   return (
     <div className={`min-h-screen flex bg-[#f4f4f5] dark:bg-[#0f0f14] ${isDark ? "dark teacher-dark" : ""}`}>
-      {/* Sidebar */}
-      <aside className="w-64 shrink-0 bg-gradient-to-b from-[#fff6ee] to-white dark:from-[#16161f] dark:to-[#101019] border-r border-orange-100 dark:border-white/10 flex flex-col sticky top-0 h-screen">
+      {/* Mobile top bar with menu button */}
+      <div className="lg:hidden fixed top-0 inset-x-0 z-30 flex items-center gap-2 px-4 h-14 bg-white dark:bg-[#16161f] border-b border-orange-100 dark:border-white/10">
+        <button type="button" onClick={() => setSidebarOpen(true)} aria-label="Open menu" className="text-muted-foreground hover:text-primary">
+          <Menu className="w-6 h-6" />
+        </button>
+        <span className="font-heading text-lg font-extrabold"><span className="text-gradient">VR</span> Robotics</span>
+      </div>
+      {/* Backdrop (mobile) */}
+      {sidebarOpen && (
+        <div className="lg:hidden fixed inset-0 z-40 bg-black/40" onClick={() => setSidebarOpen(false)} aria-hidden="true" />
+      )}
+      {/* Sidebar — drawer on mobile, static on desktop */}
+      <aside className={`w-64 shrink-0 bg-gradient-to-b from-[#fff6ee] to-white dark:from-[#16161f] dark:to-[#101019] border-r border-orange-100 dark:border-white/10 flex flex-col h-screen
+        fixed inset-y-0 left-0 z-50 transform transition-transform duration-200
+        lg:static lg:translate-x-0 lg:sticky lg:top-0
+        ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
+        <button type="button" onClick={() => setSidebarOpen(false)} aria-label="Close menu" className="lg:hidden absolute top-4 right-4 text-muted-foreground hover:text-primary">
+          <X className="w-6 h-6" />
+        </button>
         <div className="flex items-center justify-between gap-2 px-6 h-20 border-b border-orange-100 dark:border-white/10">
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-9 h-9 rounded-full bg-gradient-hero shrink-0" />
@@ -1240,7 +1260,7 @@ const TeacherDashboard = () => {
             return (
               <button
                 key={item.name}
-                onClick={() => setActive(item.name)}
+                onClick={() => { setActive(item.name); setSidebarOpen(false); }}
                 className={`w-full flex items-center gap-3 px-6 py-3 text-sm font-medium transition-colors ${
                   on
                     ? "bg-primary/10 text-primary border-r-4 border-primary"
@@ -1263,7 +1283,7 @@ const TeacherDashboard = () => {
       </aside>
 
       {/* Main */}
-      <main className="flex-1 overflow-y-auto p-6 lg:p-8 space-y-6">
+      <main className="flex-1 overflow-y-auto p-4 pt-[72px] lg:p-8 lg:pt-8 space-y-6">
         {/* Post-class nudge to evaluate students — shows on every tab. */}
         <PendingFeedbackBanner teacherId={user?.userId} onGiveFeedback={() => setActive("Students")} />
 
