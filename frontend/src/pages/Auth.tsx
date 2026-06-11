@@ -112,7 +112,7 @@ const Auth = () => {
           Learn Robotics &amp; AI faster — with clear guidance and real projects.
         </p>
         <img
-          src="https://res.cloudinary.com/dqcybkje5/image/upload/e_make_transparent:25,f_png/v1781151014/IMG-20260610-WA0005.jpg_1_ebvvbt.jpg"
+          src="https://res.cloudinary.com/dqcybkje5/image/upload/v1781159227/ChatGPT_Image_Jun_10_2026_05_15_27_PM_1_aeqt2n.png"
           alt="VR Robotics Academy students building a robot"
           className="w-full max-w-md object-contain"
           loading="lazy"
