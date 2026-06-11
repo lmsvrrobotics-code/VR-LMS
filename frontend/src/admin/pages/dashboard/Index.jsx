@@ -226,7 +226,7 @@ export default function Dashboard() {
                                     <p className="text-[12px] text-gray m-0">Teacher evaluations of students</p>
                                 </div>
                             </div>
-                            <Link to="/admin/feedback" className="text-[12px] text-skin font-semibold inline-flex items-center gap-1">View <ArrowUpRight className="w-3.5 h-3.5" /></Link>
+                            <Link to="/admin/feedback?tab=student" className="text-[12px] text-skin font-semibold inline-flex items-center gap-1">View <ArrowUpRight className="w-3.5 h-3.5" /></Link>
                         </div>
                         <div className="flex items-center gap-5 mb-3">
                             <div><span className="text-[22px] font-extrabold text-dark">{fb?.total_evaluations ?? 0}</span><span className="text-[12px] text-gray ml-1.5">evaluations</span></div>
@@ -249,7 +249,7 @@ export default function Dashboard() {
                                     <p className="text-[12px] text-gray m-0">Student ratings of classes</p>
                                 </div>
                             </div>
-                            <Link to="/admin/feedback" className="text-[12px] text-skin font-semibold inline-flex items-center gap-1">View <ArrowUpRight className="w-3.5 h-3.5" /></Link>
+                            <Link to="/admin/feedback?tab=teacher" className="text-[12px] text-skin font-semibold inline-flex items-center gap-1">View <ArrowUpRight className="w-3.5 h-3.5" /></Link>
                         </div>
                         <div className="flex items-center gap-5 mb-3">
                             <div><span className="text-[22px] font-extrabold text-dark">{tfb?.total_feedback ?? 0}</span><span className="text-[12px] text-gray ml-1.5">responses</span></div>

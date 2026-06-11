@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Star, Users, ClipboardList, RefreshCw, GraduationCap, MessageSquare } from 'lucide-react';
 import {
     feedbackStats, feedbackByStudent, listFeedback,
@@ -225,7 +226,10 @@ function FeedbackSection({ kind }) {
 }
 
 export default function AdminFeedbackIndex() {
-    const [tab, setTab] = useState('student');
+    const [searchParams] = useSearchParams();
+    // Open the tab requested by the URL (?tab=teacher) so the dashboard's
+    // "Teacher Ratings → View" lands on the matching data, not the default.
+    const [tab, setTab] = useState(searchParams.get('tab') === 'teacher' ? 'teacher' : 'student');
     const [tick, setTick] = useState(0); // bump to force a section reload on Refresh
     const tabs = useMemo(() => ([
         { key: 'student', label: 'Student Performance', icon: ClipboardList },
