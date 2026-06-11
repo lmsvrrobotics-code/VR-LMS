@@ -121,7 +121,7 @@ const Auth = () => {
         <img
           src="https://res.cloudinary.com/dqcybkje5/image/upload/e_trim:5/v1781159227/ChatGPT_Image_Jun_10_2026_05_15_27_PM_1_aeqt2n.png"
           alt="VR Robotics Academy students building a robot together"
-          className="relative z-10 w-full max-w-sm object-contain drop-shadow-2xl"
+          className="relative z-10 w-full max-w-xl object-contain drop-shadow-2xl -my-2"
           loading="lazy"
         />
 
