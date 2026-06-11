@@ -61,7 +61,7 @@ const Contact = () => {
     {
       icon: Phone,
       title: "Call Us",
-      primary: "+91 9491829495",
+      primary: "+91 7483430092",
       // secondary: "Mon-Fri 9AM-6PM EST",
       description: "Phone support available"
     },
