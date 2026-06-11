@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGri
 import { dashboardStats } from '../../api/admin';
 import { leadStats } from '../../api/leads';
 import { feedbackStats, teacherFeedbackStats } from '../../api/feedback';
+import { useDashboardTheme } from '../../../hooks/useDashboardTheme';
 
 // Small bar chart of per-attribute averages (0-5) for a feedback direction.
 const FeedbackChart = ({ data, color }) => (
@@ -27,10 +28,20 @@ const FeedbackChart = ({ data, color }) => (
 // background, left accent bar, and a hover lift. `accent` carries the metric's
 // solid color + a soft tint for the badge/background.
 const StatCard = ({ icon: Icon, count, label, to, accent }) => {
+    const { isDark } = useDashboardTheme();
     const card = (
         <div
             className="group relative overflow-hidden rounded-ol-12 border border-ebordermuted bg-white p-4 transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_18px_40px_-18px_rgba(0,0,0,0.25)]"
-            style={{ background: `linear-gradient(135deg, ${accent.tint} 0%, #ffffff 60%)` }}
+            style={{
+                // Dark mode: calm dark card with the metric's colour as a crisp
+                // outline (text stays light via the .admin-dark scope). Light mode
+                // keeps the soft tinted-to-white gradient.
+                background: isDark
+                    ? `linear-gradient(135deg, ${accent.tint} 0%, #16161f 60%)`
+                    : `linear-gradient(135deg, ${accent.tint} 0%, #ffffff 60%)`,
+                borderColor: isDark ? accent.solid : undefined,
+                borderWidth: isDark ? 1.5 : undefined,
+            }}
         >
             <span className="absolute left-0 top-0 h-full w-1.5" style={{ backgroundColor: accent.solid }} />
             <div className="flex items-start justify-between">
