@@ -447,8 +447,22 @@ const ensureAssignmentsForCourse = async (courseId, teacherIds, clgId = null) =>
             ? teacherIds
             : (() => { try { return JSON.parse(teacherIds); } catch { return String(teacherIds || '').split(','); } })(),
     );
+    if (!ids.length) return { created: 0 };
+
+    // Only real teachers may become a teaching assignment. A course's teacher_ids
+    // can accidentally carry a non-teacher id (e.g. an admin's id) — creating an
+    // assignment for it makes a phantom row no teacher can ever see (and the
+    // rostered students vanish). Filter to ids that are actually role='teacher'.
+    const validRows = await authDb.query(
+        `SELECT u."userId" FROM users u JOIN roles r ON r."roleId" = u."roleId"
+          WHERE r.role = 'teacher' AND u."userId" IN (:ids)`,
+        { replacements: { ids }, type: QueryTypes.SELECT }
+    );
+    const validTeacherIds = new Set(validRows.map((r) => String(r.userId)));
+
     let created = 0;
     for (const teacher_id of ids) {
+        if (!validTeacherIds.has(String(teacher_id))) continue; // skip non-teachers (e.g. admin id)
         const [, wasCreated] = await TeachingAssignment.findOrCreate({
             where: { course_id: cid, teacher_id },
             defaults: { course_id: cid, teacher_id, clg_id: clgId || null, is_active: true },
