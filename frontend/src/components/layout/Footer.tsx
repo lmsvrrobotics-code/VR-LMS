@@ -16,7 +16,7 @@ const explore = [
   { name: "Curriculum", href: "/#curriculum" },
   { name: "Certificates", href: "/#certs" },
   { name: "Why VR Robotics", href: "/#why" },
-  { name: "What Kids Learn", href: "/#learn" },
+  { name: "What Kids Learn", href: "/#curriculum" },
 ];
 
 const scrollTo = (href: string) => {

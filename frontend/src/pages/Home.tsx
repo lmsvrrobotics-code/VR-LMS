@@ -657,7 +657,7 @@ const Home = () => {
         <div className="container-ngo">
           <div className="text-center space-y-3 mb-14">
             <p className="text-primary font-semibold">Certificates</p>
-            <h2 className="text-3xl md:text-4xl font-bold">Recognized completion certificates</h2>
+            <h2 className="text-3xl md:text-4xl font-bold">Certificates our students earn</h2>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {certificates.map((c) => (
