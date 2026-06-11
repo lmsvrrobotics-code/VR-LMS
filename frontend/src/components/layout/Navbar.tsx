@@ -30,6 +30,8 @@ const Navbar = () => {
   // Which top-level dropdown is open (by name), or null.
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  // Which mobile dropdown (Courses / Books) is expanded — keeps the menu short.
+  const [mobileSub, setMobileSub] = useState<string | null>(null);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -302,29 +304,48 @@ const Navbar = () => {
 
         {/* Mobile Navigation */}
         {isMenuOpen && (
-          <div className="lg:hidden py-4 border-t border-border/50">
+          <div className="lg:hidden py-4 border-t border-border/50 max-h-[calc(100vh-5rem)] overflow-y-auto overscroll-contain">
+            {/* Auth button pinned at the TOP so it's always visible on mobile
+                (the menu below can be long with all the course/book sub-items). */}
+            {!user && (
+              <Link
+                to="/auth"
+                onClick={(e) => scrollToTopWithOffset(e, "/auth")}
+                className="flex items-center justify-center gap-2 w-full rounded-lg bg-primary px-5 py-3 mb-3 text-sm font-bold uppercase tracking-wide text-white hover:bg-primary/90 hover:text-white transition-colors"
+              >
+                <UserCircle className="w-5 h-5" />
+                <span>Login / Register</span>
+              </Link>
+            )}
             <div className="space-y-2">
               {navigation.map((item) =>
                 item.dropdown ? (
                   <div key={item.name} className="space-y-1">
-                    <Link
-                      to={item.href.split("#")[0]}
-                      onClick={(e) => scrollToTopWithOffset(e, item.href)}
-                      className="flex items-center px-3 py-3 font-medium text-muted-foreground hover:text-foreground"
+                    {/* Tap to expand/collapse — keeps the mobile menu short. */}
+                    <button
+                      type="button"
+                      onClick={() => setMobileSub(mobileSub === item.name ? null : item.name)}
+                      className="flex items-center justify-between w-full px-3 py-3 font-medium text-muted-foreground hover:text-foreground"
                     >
-                      <item.icon className="w-5 h-5 mr-2" />
-                      {item.name}
-                    </Link>
-                    {(dropdownItems[item.name] ?? []).map((sub) => (
-                      <Link
-                        key={sub.name}
-                        to={sub.href.split("#")[0]}
-                        onClick={(e) => scrollToTopWithOffset(e, sub.href)}
-                        className="block pl-10 pr-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-                      >
-                        {sub.name}
-                      </Link>
-                    ))}
+                      <span className="flex items-center">
+                        <item.icon className="w-5 h-5 mr-2" />
+                        {item.name}
+                      </span>
+                      <ChevronDown
+                        className={`w-4 h-4 transition-transform ${mobileSub === item.name ? "rotate-180" : ""}`}
+                      />
+                    </button>
+                    {mobileSub === item.name &&
+                      (dropdownItems[item.name] ?? []).map((sub) => (
+                        <Link
+                          key={sub.name}
+                          to={sub.href.split("#")[0]}
+                          onClick={(e) => scrollToTopWithOffset(e, sub.href)}
+                          className="block pl-10 pr-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                        >
+                          {sub.name}
+                        </Link>
+                      ))}
                   </div>
                 ) : (
                   <Link
@@ -342,9 +363,9 @@ const Navbar = () => {
                   </Link>
                 )
               )}
-              {/* Auth Buttons in Mobile */}
+              {/* Logged-in actions (logged-out Login/Register is pinned at top). */}
+              {user && (
               <div className="pt-4 space-y-2">
-                {user ? (
                   <>
                     <div className="flex items-center gap-3 px-3 py-2 border-t border-border/50 pt-4">
                       <span className="w-10 h-10 rounded-full bg-gradient-hero text-white text-sm font-semibold flex items-center justify-center">
@@ -379,18 +400,8 @@ const Navbar = () => {
                       <span>Logout</span>
                     </Button>
                   </>
-                ) : (
-                  /* New auth button (mobile) — same /auth login/signup flow. */
-                  <Link
-                    to="/auth"
-                    onClick={(e) => scrollToTopWithOffset(e, "/auth")}
-                    className="flex items-center justify-center gap-2 w-full rounded-lg bg-primary px-5 py-2.5 text-sm font-bold uppercase tracking-wide text-white hover:bg-primary/90 hover:text-white transition-colors"
-                  >
-                    <UserCircle className="w-5 h-5" />
-                    <span>Login / Register</span>
-                  </Link>
-                )}
               </div>
+              )}
             </div>
           </div>
         )}
