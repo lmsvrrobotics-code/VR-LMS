@@ -104,14 +104,20 @@ const Auth = () => {
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-gradient-subtle">
       {/* Left brand panel */}
-      <div className="hidden lg:flex flex-col justify-center gap-6 p-14 bg-gradient-hero text-white">
+      <div className="hidden lg:flex flex-col justify-center gap-5 p-14 bg-gradient-hero text-white">
         <Link to="/" className="font-heading text-3xl font-extrabold">
           VR Robotics Academy
         </Link>
         <p className="text-2xl font-semibold leading-snug max-w-md">
-          Learn Robotics & AI faster — with clear guidance and real projects.
+          Learn Robotics &amp; AI faster — with clear guidance and real projects.
         </p>
-        <p className="text-white/80 max-w-md">
+        <img
+          src="https://res.cloudinary.com/dqcybkje5/image/upload/v1781092126/IMG-20260610-WA0005.jpg_h6juf4.jpg"
+          alt="VR Robotics Academy students building real projects"
+          className="w-full max-w-md rounded-2xl shadow-2xl ring-1 ring-white/20 object-cover aspect-[4/3]"
+          loading="lazy"
+        />
+        <p className="text-white/85 max-w-md">
           Sign in to access your courses, or create an account as a student or a
           teacher to get started.
         </p>
