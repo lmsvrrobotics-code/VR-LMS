@@ -112,9 +112,9 @@ const Auth = () => {
           Learn Robotics &amp; AI faster — with clear guidance and real projects.
         </p>
         <img
-          src="https://res.cloudinary.com/dqcybkje5/image/upload/v1781092126/IMG-20260610-WA0005.jpg_h6juf4.jpg"
-          alt="VR Robotics Academy students building real projects"
-          className="w-full max-w-md rounded-2xl shadow-2xl ring-1 ring-white/20 object-cover aspect-[4/3]"
+          src="https://res.cloudinary.com/dqcybkje5/image/upload/v1781151014/IMG-20260610-WA0005.jpg_1_ebvvbt.jpg"
+          alt="VR Robotics Academy students building a robot"
+          className="w-full max-w-md object-contain mix-blend-screen"
           loading="lazy"
         />
         <p className="text-white/85 max-w-md">
