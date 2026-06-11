@@ -104,22 +104,40 @@ const Auth = () => {
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-gradient-subtle">
       {/* Left brand panel */}
-      <div className="hidden lg:flex flex-col justify-center gap-5 p-14 bg-gradient-hero text-white">
-        <Link to="/" className="font-heading text-3xl font-extrabold">
-          VR Robotics Academy
-        </Link>
-        <p className="text-2xl font-semibold leading-snug max-w-md">
-          Learn Robotics &amp; AI faster — with clear guidance and real projects.
-        </p>
+      <div className="relative hidden lg:flex flex-col justify-center items-center gap-6 p-14 bg-gradient-hero text-white overflow-hidden">
+        {/* soft glow accents for depth */}
+        <span className="pointer-events-none absolute -top-24 -left-24 w-72 h-72 rounded-full bg-white/10 blur-3xl" />
+        <span className="pointer-events-none absolute -bottom-24 -right-16 w-80 h-80 rounded-full bg-white/10 blur-3xl" />
+
+        <div className="relative z-10 w-full max-w-md text-center space-y-3">
+          <Link to="/" className="font-heading text-3xl font-extrabold inline-block">
+            VR Robotics Academy
+          </Link>
+          <p className="text-2xl font-bold leading-snug">
+            Where kids build real robots — and real confidence.
+          </p>
+        </div>
+
         <img
-          src="https://res.cloudinary.com/dqcybkje5/image/upload/v1781159227/ChatGPT_Image_Jun_10_2026_05_15_27_PM_1_aeqt2n.png"
-          alt="VR Robotics Academy students building a robot"
-          className="w-full max-w-md object-contain"
+          src="https://res.cloudinary.com/dqcybkje5/image/upload/e_trim:5/v1781159227/ChatGPT_Image_Jun_10_2026_05_15_27_PM_1_aeqt2n.png"
+          alt="VR Robotics Academy students building a robot together"
+          className="relative z-10 w-full max-w-sm object-contain drop-shadow-2xl"
           loading="lazy"
         />
-        <p className="text-white/85 max-w-md">
-          Sign in to access your courses, or create an account as a student or a
-          teacher to get started.
+
+        <div className="relative z-10 flex flex-wrap justify-center gap-2 max-w-md">
+          {["Hands-on projects", "Build real robots", "Coding & AI", "Ages 8–18"].map((t) => (
+            <span
+              key={t}
+              className="text-[13px] font-medium bg-white/15 backdrop-blur-sm border border-white/20 px-3 py-1.5 rounded-full"
+            >
+              {t}
+            </span>
+          ))}
+        </div>
+
+        <p className="relative z-10 text-white/85 text-sm text-center max-w-md">
+          Sign in to access your courses, or create an account to get started.
         </p>
       </div>
 
