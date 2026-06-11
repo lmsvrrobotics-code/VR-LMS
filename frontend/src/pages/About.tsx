@@ -51,8 +51,8 @@ const About = () => {
     {
       name: "Vamsi Mittapalli",
       role: "CEO & Founder · Robotics & AIoT Trainer",
-      description: "B.Tech in Electrical & Electronics Engineering and a Robotics Trainer at NxtWave, Vamsi founded VR Robotics Academy to close the gap between classroom theory and real-world building. He has led hands-on robotics workshops across multiple campuses and designed the project-based curriculum students learn on today.",
-      qual: "B.Tech — Electrical & Electronics Engineering · Robotics Trainer, NxtWave",
+      description: "B.Tech in Electrical & Electronics Engineering and a Robotics Trainer, Vamsi founded VR Robotics Academy to close the gap between classroom theory and real-world building. He has led hands-on robotics workshops across multiple campuses and designed the project-based curriculum students learn on today.",
+      qual: "B.Tech — Electrical & Electronics Engineering · Robotics Trainer",
       photo: "https://res.cloudinary.com/dqcybkje5/image/upload/v1777619263/vamshii2_tdbxjj.jpg",
       accent: "#FF6A00",
       featured: true,
