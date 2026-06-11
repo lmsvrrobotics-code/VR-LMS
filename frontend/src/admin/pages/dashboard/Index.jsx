@@ -33,21 +33,35 @@ const StatCard = ({ icon: Icon, count, label, to, accent }) => {
         <div
             className="group relative overflow-hidden rounded-ol-12 border border-ebordermuted bg-white p-4 transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_18px_40px_-18px_rgba(0,0,0,0.25)]"
             style={{
-                // Dark mode: calm dark card with the metric's colour as a crisp
-                // outline (text stays light via the .admin-dark scope). Light mode
-                // keeps the soft tinted-to-white gradient.
+                // Dark mode: a premium dark tile — depth gradient, the metric's
+                // colour as a crisp glowing outline, an accent halo + a top sheen
+                // for a subtle 3D look. Light mode keeps the soft tinted gradient.
                 background: isDark
-                    ? `linear-gradient(135deg, ${accent.tint} 0%, #16161f 60%)`
+                    ? `linear-gradient(150deg, ${accent.tint} 0%, #191b26 45%, #101219 100%)`
                     : `linear-gradient(135deg, ${accent.tint} 0%, #ffffff 60%)`,
                 borderColor: isDark ? accent.solid : undefined,
                 borderWidth: isDark ? 1.5 : undefined,
+                boxShadow: isDark
+                    ? `0 10px 30px -12px ${accent.solid}66, 0 0 0 1px ${accent.solid}33, inset 0 1px 0 rgba(255,255,255,0.06)`
+                    : undefined,
             }}
         >
+            {/* Diagonal sheen — only visible in dark mode for the glossy 3D feel */}
+            {isDark && (
+                <span
+                    className="pointer-events-none absolute -top-1/2 -left-1/4 h-[200%] w-1/2 rotate-12 opacity-60 transition-transform duration-500 group-hover:translate-x-[260%]"
+                    style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.07), transparent)' }}
+                />
+            )}
             <span className="absolute left-0 top-0 h-full w-1.5" style={{ backgroundColor: accent.solid }} />
             <div className="flex items-start justify-between">
                 <div
                     className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-sm"
-                    style={{ backgroundColor: accent.solid, color: '#fff' }}
+                    style={{
+                        backgroundColor: accent.solid,
+                        color: '#fff',
+                        boxShadow: isDark ? `0 6px 18px -6px ${accent.solid}cc` : undefined,
+                    }}
                 >
                     <Icon className="w-6 h-6" />
                 </div>
