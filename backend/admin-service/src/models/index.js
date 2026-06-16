@@ -62,8 +62,13 @@ const FeedbackForm = require('./FeedbackForm')(sequelize);
 const FeedbackResponse = require('./FeedbackResponse')(sequelize);
 // Public "Send us a Message" contact submissions (admin inbox).
 const ContactMessage = require('./ContactMessage')(sequelize);
+// Assignments and student submissions
+const Assignment = require('./Assignment')(sequelize);
+const AssignmentSubmission = require('./AssignmentSubmission')(sequelize);
+// Notifications for students and teachers
+const Notification = require('./Notification')(sequelize);
 
-const models = { Category, Course, SeoField, User, Lesson, Section, Question, QuizSubmission, Setting, LiveClass, Coupon, Certificate, PreAssessmentResult, UserProgress, LessonCompletion, LessonWatchProgress, Language, Forum, ForumReport, Program, Batch, BatchMember, BatchClass, EmailJob, Gallery, Book, Kit, BookOrder, KitOrder, Slot, SlotEnrollment, Demo, ClassSession, Project, Testimonial, Resource, ResourceCategory, TeacherFreeSchedule, StudentRecord, StudentLearning, TeachingAssignment, AssignmentMember, LessonRelease, Lead, Payment, AppSetting, Location, TeacherFeedback, DemoVideo, FeedbackForm, FeedbackResponse, ContactMessage };
+const models = { Category, Course, SeoField, User, Lesson, Section, Question, QuizSubmission, Setting, LiveClass, Coupon, Certificate, PreAssessmentResult, UserProgress, LessonCompletion, LessonWatchProgress, Language, Forum, ForumReport, Program, Batch, BatchMember, BatchClass, EmailJob, Gallery, Book, Kit, BookOrder, KitOrder, Slot, SlotEnrollment, Demo, ClassSession, Project, Testimonial, Resource, ResourceCategory, TeacherFreeSchedule, StudentRecord, StudentLearning, TeachingAssignment, AssignmentMember, LessonRelease, Lead, Payment, AppSetting, Location, TeacherFeedback, DemoVideo, FeedbackForm, FeedbackResponse, ContactMessage, Assignment, AssignmentSubmission, Notification };
 Object.values(models).forEach((m) => m.associate && m.associate(models));
 
 module.exports = { sequelize, ...models };

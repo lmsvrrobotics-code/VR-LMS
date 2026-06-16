@@ -1,0 +1,25 @@
+﻿module.exports = (sequelize, DataTypes) => {
+    const Assignment = sequelize.define('Assignment', {
+        id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+        batch_id: { type: DataTypes.STRING, allowNull: false },
+        course_id: { type: DataTypes.INTEGER, allowNull: false },
+        teacher_id: { type: DataTypes.STRING, allowNull: false },
+        title: { type: DataTypes.STRING, allowNull: false },
+        description: { type: DataTypes.TEXT },
+        instructions: { type: DataTypes.TEXT },
+        due_date: { type: DataTypes.DATE, allowNull: false },
+        max_score: { type: DataTypes.INTEGER, defaultValue: 100 },
+        file_url: { type: DataTypes.STRING },
+        status: { type: DataTypes.ENUM('draft', 'published', 'closed'), defaultValue: 'published' },
+        created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+        updated_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+    });
+
+    Assignment.associate = (models) => {
+        Assignment.belongsTo(models.Batch, { foreignKey: 'batch_id', targetKey: 'batch_id' });
+        Assignment.belongsTo(models.Course, { foreignKey: 'course_id' });
+        Assignment.hasMany(models.AssignmentSubmission, { foreignKey: 'assignment_id', onDelete: 'CASCADE' });
+    };
+
+    return Assignment;
+};

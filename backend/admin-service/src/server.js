@@ -46,6 +46,8 @@ const teachingRoutes = require('./routes/teaching.routes');
 const leadRoutes = require('./routes/lead.routes');
 const preAssessmentRoutes = require('./routes/preassessment.routes');
 const languageRoutes = require('./routes/language.routes');
+const assignmentRoutes = require('./routes/assignment.routes');
+const notificationRoutes = require('./routes/notification.routes');
 
 const app = express();
 
@@ -1090,6 +1092,10 @@ app.use('/api/admin', adminOnly, teacherRoutes);
 app.use('/api/admin', adminOnly, languageRoutes);
 app.use('/api/admin', adminOnly, adminBookOrderRoutes);
 app.use('/api/admin', adminOnly, adminKitOrderRoutes);
+app.use('/api/admin', auth, assignmentRoutes);
+app.use('/api/public', ...requireStudent, assignmentRoutes);
+app.use('/api/admin', auth, notificationRoutes);
+app.use('/api/public', ...requireStudent, notificationRoutes);
 
 // Public certificate routes — unauthenticated. Mirror the player flow which
 // also uses /api/public/* with an x-user-id header for student keying.
@@ -1566,6 +1572,17 @@ sequelize.authenticate()
         try {
             const { ContactMessage } = require('./models');
             await ContactMessage.sync();
+        } catch (e) {
+            console.warn('[contact-messages] table sync failed:', e.message);
+        }
+
+        // Assignments and submissions — teacher creates assignments for batches,
+        // students submit work, teachers grade. Idempotent .sync().
+        try {
+            const { Assignment, AssignmentSubmission, Notification } = require('./models');
+            await Assignment.sync();
+            await AssignmentSubmission.sync();
+            await Notification.sync();
         } catch (e) {
             console.warn('[contact-messages] table sync failed:', e.message);
         }
