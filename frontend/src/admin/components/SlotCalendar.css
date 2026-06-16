@@ -1,0 +1,180 @@
+﻿.slot-calendar {
+    width: 100%;
+    overflow-x: auto;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.calendar-grid {
+    display: grid;
+    grid-template-columns: 80px repeat(auto-fill, minmax(120px, 1fr));
+    gap: 1px;
+    background: #e9ecef;
+    padding: 1px;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.time-header, .days-header, .time-row {
+    display: contents;
+}
+
+.time-cell, .day-cell, .time-label, .slot-cell {
+    background: white;
+    padding: 12px 8px;
+    text-align: center;
+    font-size: 12px;
+    border: 1px solid #e9ecef;
+    min-height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.time-cell.header, .day-cell.header {
+    background: #f1f3f5;
+    font-weight: 600;
+    color: #495057;
+}
+
+.time-label {
+    background: #f8f9fa;
+    font-weight: 500;
+    padding: 8px;
+    font-size: 11px;
+}
+
+.slot-cell {
+    position: relative;
+    padding: 4px;
+    min-height: 100px;
+}
+
+.slot-block {
+    width: 100%;
+    padding: 8px 6px;
+    border-radius: 4px;
+    color: white;
+    font-size: 11px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    transition: all 0.2s ease;
+}
+
+.slot-block:hover {
+    transform: scale(1.05);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+.slot-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.slot-course {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.slot-time {
+    font-size: 10px;
+    opacity: 0.9;
+}
+
+.slot-capacity {
+    font-size: 10px;
+    opacity: 0.8;
+}
+
+.slot-status {
+    font-size: 9px;
+    font-weight: 500;
+    margin-top: 2px;
+}
+
+/* Status colors */
+.slot-block {
+    transition: background-color 0.2s;
+}
+
+/* Modal */
+.slot-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 400px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.modal-content h3 {
+    margin-top: 0;
+    margin-bottom: 16px;
+    color: #212529;
+}
+
+.modal-details {
+    margin-bottom: 20px;
+}
+
+.modal-details p {
+    margin: 8px 0;
+    font-size: 14px;
+    color: #495057;
+}
+
+.modal-details a {
+    color: #0066cc;
+    text-decoration: none;
+}
+
+.modal-details a:hover {
+    text-decoration: underline;
+}
+
+.btn-close {
+    width: 100%;
+    padding: 10px 16px;
+    background: #0066cc;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-close:hover {
+    background: #0052a3;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .calendar-grid {
+        grid-template-columns: 60px repeat(auto-fill, minmax(100px, 1fr));
+    }
+
+    .time-cell, .day-cell, .time-label, .slot-cell {
+        padding: 8px 4px;
+        font-size: 11px;
+        min-height: 70px;
+    }
+
+    .slot-block {
+        padding: 6px 4px;
+        font-size: 10px;
+    }
+}
