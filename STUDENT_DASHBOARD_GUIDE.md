@@ -136,13 +136,13 @@ DELETE /api/public/notifications/:id             → Delete notification
 
 ## 🚀 Quick Start Guide
 
-### For Students
+### For Students (Production)
+
+**Access**: https://vrroboticsacademy.com
 
 1. **Navigate to Student Dashboard**
-   ```
-   Import StudentDashboard in your routing
-   <Route path="/student-dashboard" element={<StudentDashboard />} />
-   ```
+   - Login with your credentials
+   - Click "Student Dashboard" or navigate to `/student-dashboard`
 
 2. **View Your Classes** (My Classes tab)
    - Select your batch from dropdown
@@ -159,6 +159,14 @@ DELETE /api/public/notifications/:id             → Delete notification
    - Bell icon shows unread count
    - Click to view all notifications
    - Mark as read individually or bulk
+
+### For Developers (Local Development)
+
+**Local URLs**:
+- Frontend: http://localhost:8080
+- Backend: http://localhost:5000
+
+See PRODUCTION_DEPLOYMENT_GUIDE.md for production URLs.
 
 ### For Teachers
 
