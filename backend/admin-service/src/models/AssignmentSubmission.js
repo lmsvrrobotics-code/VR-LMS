@@ -1,4 +1,6 @@
-﻿module.exports = (sequelize, DataTypes) => {
+﻿const { DataTypes } = require('sequelize');
+
+module.exports = (sequelize) => {
     const AssignmentSubmission = sequelize.define('AssignmentSubmission', {
         id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
         assignment_id: { type: DataTypes.INTEGER, allowNull: false },
@@ -15,6 +17,9 @@
         is_late: { type: DataTypes.BOOLEAN, defaultValue: false },
         created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
         updated_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+    }, {
+        tableName: 'assignment_submissions',
+        timestamps: false
     });
 
     AssignmentSubmission.associate = (models) => {

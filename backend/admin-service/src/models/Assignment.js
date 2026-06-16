@@ -1,4 +1,6 @@
-﻿module.exports = (sequelize, DataTypes) => {
+﻿const { DataTypes } = require('sequelize');
+
+module.exports = (sequelize) => {
     const Assignment = sequelize.define('Assignment', {
         id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
         batch_id: { type: DataTypes.STRING, allowNull: false },
@@ -13,6 +15,9 @@
         status: { type: DataTypes.ENUM('draft', 'published', 'closed'), defaultValue: 'published' },
         created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
         updated_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+    }, {
+        tableName: 'assignments',
+        timestamps: false
     });
 
     Assignment.associate = (models) => {
