@@ -1073,6 +1073,7 @@ app.use('/api/admin', adminOnly, locationRoutes);
 app.use('/api/admin', adminOnly, bookRoutes);
 app.use('/api/admin', adminOnly, kitRoutes);
 app.use('/api/admin', adminOnly, slotRoutes);
+app.use('/api/public', ...requireStudent, slotRoutes);
 app.use('/api/admin', adminOnly, demoRoutes);
 app.use('/api/admin', adminOnly, classRoutes);
 app.use('/api/admin', adminOnly, projectRoutes);
@@ -1436,15 +1437,15 @@ sequelize.authenticate()
         }
 
         // Slots — admin scheduling: a course + time window + assigned
-        // teachers/students. Same idempotent .sync() pattern creates the
-        // `slots` table on first run.
+        // teachers/students. Also includes SlotEnrollment for student bookings.
         try {
-            const { Slot } = require('./models');
+            const { Slot, SlotEnrollment } = require('./models');
             await Slot.sync();
-            // .sync() won't add columns to an existing table — self-heal the
-            // later-added meeting_link column (resolves via search_path to
-            // lms_admin). No-op once the column exists.
+            await SlotEnrollment.sync();
+            // Add columns if missing (idempotent)
             await sequelize.query('ALTER TABLE slots ADD COLUMN IF NOT EXISTS meeting_link TEXT');
+            await sequelize.query('ALTER TABLE slots ADD COLUMN IF NOT EXISTS topic VARCHAR(255)');
+            await sequelize.query('ALTER TABLE slots ADD COLUMN IF NOT EXISTS notes TEXT');
         } catch (e) {
             console.warn('[slots] table sync failed:', e.message);
         }

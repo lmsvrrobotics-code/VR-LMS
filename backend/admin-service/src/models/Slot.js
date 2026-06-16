@@ -1,26 +1,48 @@
-const { DataTypes } = require('sequelize');
+﻿const { DataTypes } = require('sequelize');
 
-// Scheduling slots created/managed by admins under Slots → Add/Manage Slots.
-// A slot ties a course to a time window and a set of teachers + students.
-// teacher_ids / student_ids hold the auth-service user ids (strings) as JSON
-// arrays; course_id is the lms_admin course id (stored as string for safety).
+// Time slot for a batch/course. Admin creates slots, students enroll.
+// Each slot represents a specific time window (e.g., 08:30 AM - 09:30 AM on 2025-06-16)
 module.exports = (sequelize) => {
     const Slot = sequelize.define('Slot', {
         id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-        name: { type: DataTypes.STRING(255), allowNull: false },
-        // Single course this slot is for.
-        course_id: { type: DataTypes.STRING(64), allowNull: true },
-        // Time window for the slot.
-        start_at: { type: DataTypes.DATE, allowNull: true },
-        end_at: { type: DataTypes.DATE, allowNull: true },
-        // Assigned auth-service user ids (role teacher / student) as JSON arrays.
-        teacher_ids: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
-        student_ids: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
-        // Optional Google Meet / class URL for the slot.
+        batch_id: { type: DataTypes.INTEGER, allowNull: false },
+        course_id: { type: DataTypes.INTEGER, allowNull: false },
+        // Slot date (YYYY-MM-DD)
+        slot_date: { type: DataTypes.DATEONLY, allowNull: false },
+        // Start time (HH:MM format, e.g., "08:30")
+        start_time: { type: DataTypes.STRING(5), allowNull: false },
+        // End time (HH:MM format, e.g., "09:30")
+        end_time: { type: DataTypes.STRING(5), allowNull: false },
+        // Maximum students that can enroll
+        capacity: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 30 },
+        // Number currently enrolled
+        enrolled_count: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+        // Status: available, full, cancelled
+        status: { type: DataTypes.ENUM('available', 'full', 'cancelled'), defaultValue: 'available' },
+        // Meeting link if online
         meeting_link: { type: DataTypes.TEXT, allowNull: true },
-        // 1 = active, 0 = hidden/draft. SMALLINT (Postgres has no TINYINT).
-        status: { type: DataTypes.SMALLINT, allowNull: false, defaultValue: 1 },
-    }, { tableName: 'slots', timestamps: true, createdAt: 'created_at', updatedAt: 'updated_at' });
+        // Topic/description
+        topic: { type: DataTypes.STRING(255), allowNull: true },
+        // Notes
+        notes: { type: DataTypes.TEXT, allowNull: true },
+    }, {
+        tableName: 'slots',
+        timestamps: true,
+        createdAt: 'created_at',
+        updatedAt: 'updated_at',
+        indexes: [
+            { fields: ['batch_id'] },
+            { fields: ['course_id'] },
+            { fields: ['slot_date'] },
+            { fields: ['status'] },
+        ],
+    });
+
+    Slot.associate = (models) => {
+        Slot.belongsTo(models.Batch, { foreignKey: 'batch_id', as: 'batch' });
+        Slot.belongsTo(models.Course, { foreignKey: 'course_id', as: 'course' });
+        Slot.hasMany(models.SlotEnrollment, { foreignKey: 'slot_id', as: 'enrollments' });
+    };
 
     return Slot;
 };

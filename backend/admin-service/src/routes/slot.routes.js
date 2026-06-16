@@ -1,14 +1,17 @@
-const router = require('express').Router();
+﻿const router = require('express').Router();
 const ctrl = require('../controllers/SlotController');
 
-// JSON CRUD (no file uploads). course_id + teacher_ids/student_ids arrays.
-// Enrolled students for a course (course-driven student picker in the form).
-router.get('/slots/course-students/:courseId', ctrl.courseStudents);
-router.get('/slots', ctrl.index);
-router.get('/slots/edit/:id', ctrl.show);
-router.post('/slots/store', ctrl.store);
-router.post('/slots/update/:id', ctrl.update);
-router.delete('/slots/delete/:id', ctrl.delete);
-router.get('/slots/status/:id', ctrl.status);
+// Admin: Create and manage slots
+router.post('/slots', ctrl.createSlot);                    // Create slot
+router.get('/slots', ctrl.listSlots);                      // List all slots
+router.get('/slots/by-date-range', ctrl.getSlotsByDateRange); // Get slots for calendar
+router.get('/slots/:slotId', ctrl.getSlot);                // Get slot details
+
+// Admin: Mark attendance
+router.patch('/slot-enrollments/:enrollmentId/attended', ctrl.markAttended);
+
+// Student: Enroll and manage
+router.post('/slots/:slotId/enroll', ctrl.enrollSlot);     // Enroll in slot
+router.delete('/slot-enrollments/:enrollmentId/slots/:slotId', ctrl.cancelEnrollment); // Cancel enrollment
 
 module.exports = router;
