@@ -1,15 +1,18 @@
 ﻿const AssignmentService = require('../services/AssignmentService');
-const { Assignment } = require('../models');
 
 class AssignmentController {
-    // Teacher creates assignment
+    // Teacher creates assignment (admin auth required)
     async createAssignment(req, res) {
         try {
             const { batch_id, course_id, title, description, instructions, due_date, max_score, file_url } = req.body;
-            const teacher_id = req.user?.id || req.headers['x-user-id'];
+            const teacher_id = req.authUser?.userId; // From verified JWT
 
             if (!batch_id || !course_id || !title || !due_date) {
-                return res.status(400).json({ error: 'Missing required fields' });
+                return res.status(400).json({ error: 'Missing required fields: batch_id, course_id, title, due_date' });
+            }
+
+            if (!teacher_id) {
+                return res.status(401).json({ error: 'Not authenticated' });
             }
 
             const assignment = await AssignmentService.createAssignment({
@@ -20,7 +23,7 @@ class AssignmentController {
                 description,
                 instructions,
                 due_date: new Date(due_date),
-                max_score,
+                max_score: max_score || 100,
                 file_url,
             });
 
@@ -31,10 +34,15 @@ class AssignmentController {
         }
     }
 
-    // Get assignments for batch
+    // Get assignments for batch (teacher/admin view)
     async getBatchAssignments(req, res) {
         try {
             const { batch_id } = req.params;
+
+            if (!batch_id) {
+                return res.status(400).json({ error: 'batch_id required' });
+            }
+
             const assignments = await AssignmentService.getAssignmentsByBatch(batch_id);
             res.json({ success: true, assignments });
         } catch (error) {
@@ -43,18 +51,16 @@ class AssignmentController {
         }
     }
 
-    // Get student assignments
+    // Get student assignments (student view - filtered by their batches)
     async getStudentAssignments(req, res) {
         try {
-            const student_id = req.user?.id || req.headers['x-user-id'];
-            const assignments = await Assignment.findAll({
-                include: [{
-                    model: require('../models').AssignmentSubmission,
-                    where: { student_id },
-                    required: false,
-                }],
-                order: [['due_date', 'DESC']],
-            });
+            const user_id = req.authUser?.userId; // From verified JWT
+
+            if (!user_id) {
+                return res.status(401).json({ error: 'Not authenticated' });
+            }
+
+            const assignments = await AssignmentService.getStudentAssignments(user_id);
             res.json({ success: true, assignments });
         } catch (error) {
             console.error('Error fetching assignments:', error);
@@ -62,21 +68,36 @@ class AssignmentController {
         }
     }
 
-    // Submit assignment
+    // Student submits assignment (requires verified JWT)
     async submitAssignment(req, res) {
         try {
             const { assignment_id } = req.params;
             const { submission_text, file_url } = req.body;
-            const student_id = req.body.student_id || req.headers['x-student-id'];
-            const user_id = req.user?.id || req.headers['x-user-id'];
+            const user_id = req.authUser?.userId; // From verified JWT
 
-            if (!assignment_id || !student_id) {
-                return res.status(400).json({ error: 'Missing required fields' });
+            if (!assignment_id) {
+                return res.status(400).json({ error: 'assignment_id required' });
+            }
+
+            if (!user_id) {
+                return res.status(401).json({ error: 'Not authenticated' });
+            }
+
+            if (!submission_text && !file_url) {
+                return res.status(400).json({ error: 'Submission must have text or file' });
+            }
+
+            // Get student_id from batch membership (don't trust request body)
+            const { BatchMember } = require('../models');
+            const member = await BatchMember.findOne({ where: { user_id } });
+
+            if (!member) {
+                return res.status(403).json({ error: 'Not a member of any batch' });
             }
 
             const submission = await AssignmentService.submitAssignment(
                 assignment_id,
-                student_id,
+                member.student_id, // Use verified student_id from membership
                 user_id,
                 { submission_text, file_url }
             );
@@ -88,42 +109,60 @@ class AssignmentController {
         }
     }
 
-    // Grade assignment (teacher only)
+    // Grade assignment (teacher only - verified in service)
     async gradeAssignment(req, res) {
         try {
             const { submission_id } = req.params;
             const { score, feedback } = req.body;
-            const graded_by = req.user?.id || req.headers['x-user-id'];
+            const graded_by_user_id = req.authUser?.userId; // From verified JWT
+
+            if (!submission_id) {
+                return res.status(400).json({ error: 'submission_id required' });
+            }
 
             if (score === undefined || score === null) {
                 return res.status(400).json({ error: 'Score is required' });
+            }
+
+            if (!graded_by_user_id) {
+                return res.status(401).json({ error: 'Not authenticated' });
             }
 
             const submission = await AssignmentService.gradeAssignment(
                 submission_id,
                 score,
                 feedback || '',
-                graded_by
+                graded_by_user_id
             );
 
             res.json({ success: true, submission });
         } catch (error) {
             console.error('Error grading assignment:', error);
-            res.status(500).json({ error: error.message });
+            res.status(error.message.includes('only the assignment teacher') ? 403 : 500).json({
+                error: error.message
+            });
         }
     }
 
-    // Get student submission
+    // Get student submission for an assignment
     async getStudentSubmission(req, res) {
         try {
             const { assignment_id } = req.params;
-            const student_id = req.headers['x-student-id'];
+            const user_id = req.authUser?.userId;
 
-            if (!student_id) {
-                return res.status(400).json({ error: 'student_id required' });
+            if (!assignment_id || !user_id) {
+                return res.status(400).json({ error: 'assignment_id and authentication required' });
             }
 
-            const submission = await AssignmentService.getStudentSubmission(assignment_id, student_id);
+            // Get student_id from batch membership
+            const { BatchMember } = require('../models');
+            const member = await BatchMember.findOne({ where: { user_id } });
+
+            if (!member) {
+                return res.status(403).json({ error: 'Not a member of any batch' });
+            }
+
+            const submission = await AssignmentService.getStudentSubmission(assignment_id, member.student_id);
             res.json({ success: true, submission });
         } catch (error) {
             console.error('Error fetching submission:', error);
@@ -131,10 +170,15 @@ class AssignmentController {
         }
     }
 
-    // Get submissions for assignment
+    // Get all submissions for an assignment (teacher view)
     async getAssignmentSubmissions(req, res) {
         try {
             const { assignment_id } = req.params;
+
+            if (!assignment_id) {
+                return res.status(400).json({ error: 'assignment_id required' });
+            }
+
             const submissions = await AssignmentService.getAssignmentSubmissions(assignment_id);
             res.json({ success: true, submissions });
         } catch (error) {

@@ -16,8 +16,9 @@ export default function MyCourses() {
         try {
             setLoading(true);
             const token = localStorage.getItem('token');
-            const headers = { Authorization: \Bearer \\ };
-            const response = await axios.get(\\/api/public/courses\, { headers });
+            const headers = { Authorization: `Bearer ${token}` };
+            // Fixed: Use /api/public/courses/my (student-filtered endpoint)
+            const response = await axios.get(`${API_BASE}/api/public/courses/my`, { headers });
             setCourses(response.data?.courses || []);
         } catch (error) {
             toast.error('Failed to load courses');
@@ -55,7 +56,7 @@ export default function MyCourses() {
                                 <span className="course-category">{course.Category?.name || 'General'}</span>
                                 <span className="course-lessons">{course.Lessons?.length || 0} Lessons</span>
                             </div>
-                            <a href={\/courses/\\} className="btn-view-course">
+                            <a href={`/courses/${course.id}`} className="btn-view-course">
                                 Continue Learning
                             </a>
                         </div>

@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 
@@ -18,8 +18,9 @@ export default function Profile() {
         try {
             setLoading(true);
             const token = localStorage.getItem('token');
-            const headers = { Authorization: \Bearer \\ };
-            const response = await axios.get(\\/api/admin/profile\, { headers });
+            const headers = { Authorization: `Bearer ${token}` };
+            // Fixed: Uses /api/public/profile endpoint
+            const response = await axios.get(`${API_BASE}/api/public/profile`, { headers });
             setUser(response.data?.user);
             setFormData(response.data?.user || {});
         } catch (error) {
@@ -34,8 +35,8 @@ export default function Profile() {
         e.preventDefault();
         try {
             const token = localStorage.getItem('token');
-            const headers = { Authorization: \Bearer \\ };
-            const response = await axios.patch(\\/api/admin/profile\, formData, { headers });
+            const headers = { Authorization: `Bearer ${token}` };
+            const response = await axios.patch(`${API_BASE}/api/public/profile`, formData, { headers });
             setUser(response.data?.user);
             setIsEditing(false);
             toast.success('Profile updated successfully');
@@ -78,8 +79,8 @@ export default function Profile() {
                             <span className="value">{user?.phone || 'Not provided'}</span>
                         </div>
                         <div className="detail-row">
-                            <span className="label">College:</span>
-                            <span className="value">{user?.college || 'Not provided'}</span>
+                            <span className="label">College/School:</span>
+                            <span className="value">{user?.clg_id || 'Not provided'}</span>
                         </div>
                         <button
                             className="btn-edit"
@@ -115,11 +116,11 @@ export default function Profile() {
                             />
                         </div>
                         <div className="form-group">
-                            <label>College</label>
+                            <label>College/School</label>
                             <input
                                 type="text"
-                                value={formData.college || ''}
-                                onChange={(e) => setFormData({ ...formData, college: e.target.value })}
+                                value={formData.clg_id || ''}
+                                onChange={(e) => setFormData({ ...formData, clg_id: e.target.value })}
                             />
                         </div>
                         <div className="form-actions">

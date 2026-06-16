@@ -1,15 +1,13 @@
-﻿import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import MyClasses from './tabs/MyClasses';
-import MyCourses from './tabs/MyCourses';
-import Assignments from './tabs/Assignments';
-import Profile from './tabs/Profile';
-import NotificationBell from '../NotificationBell';
+﻿import { useState } from 'react';
+import MyClasses from './student/MyClasses';
+import MyCourses from './student/MyCourses';
+import Assignments from './student/Assignments';
+import Profile from './student/Profile';
+import NotificationBell from '../components/NotificationBell';
 import '../styles/StudentDashboard.css';
 
 export default function StudentDashboard() {
     const [activeTab, setActiveTab] = useState('classes');
-    const [notificationCount, setNotificationCount] = useState(0);
 
     return (
         <div className="student-dashboard">
@@ -26,25 +24,25 @@ export default function StudentDashboard() {
             {/* Navigation Tabs */}
             <div className="dashboard-tabs">
                 <button
-                    className={\	ab-btn \\}
+                    className={`tab-btn ${activeTab === 'classes' ? 'active' : ''}`}
                     onClick={() => setActiveTab('classes')}
                 >
                     <i className="fi-rr-monitor" /> My Classes
                 </button>
                 <button
-                    className={\	ab-btn \\}
+                    className={`tab-btn ${activeTab === 'courses' ? 'active' : ''}`}
                     onClick={() => setActiveTab('courses')}
                 >
                     <i className="fi-rr-book" /> My Courses
                 </button>
                 <button
-                    className={\	ab-btn \\}
+                    className={`tab-btn ${activeTab === 'assignments' ? 'active' : ''}`}
                     onClick={() => setActiveTab('assignments')}
                 >
                     <i className="fi-rr-document" /> Assignments
                 </button>
                 <button
-                    className={\	ab-btn \\}
+                    className={`tab-btn ${activeTab === 'profile' ? 'active' : ''}`}
                     onClick={() => setActiveTab('profile')}
                 >
                     <i className="fi-rr-user" /> Profile

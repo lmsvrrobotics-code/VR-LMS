@@ -48,6 +48,8 @@ const preAssessmentRoutes = require('./routes/preassessment.routes');
 const languageRoutes = require('./routes/language.routes');
 const assignmentRoutes = require('./routes/assignment.routes');
 const notificationRoutes = require('./routes/notification.routes');
+const profileRoutes = require('./routes/profile.routes');
+const studentDataRoutes = require('./routes/student-routes');
 
 const app = express();
 
@@ -1096,6 +1098,8 @@ app.use('/api/admin', auth, assignmentRoutes);
 app.use('/api/public', ...requireStudent, assignmentRoutes);
 app.use('/api/admin', auth, notificationRoutes);
 app.use('/api/public', ...requireStudent, notificationRoutes);
+app.use('/api/public', ...requireStudent, profileRoutes);
+app.use('/api/public', ...requireStudent, studentDataRoutes);
 
 // Public certificate routes — unauthenticated. Mirror the player flow which
 // also uses /api/public/* with an x-user-id header for student keying.

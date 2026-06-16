@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import UpcomingClasses from '../../components/UpcomingClasses';
@@ -18,8 +18,9 @@ export default function MyClasses() {
         try {
             setLoading(true);
             const token = localStorage.getItem('token');
-            const headers = { Authorization: \Bearer \\ };
-            const response = await axios.get(\\/api/admin/batches\, { headers });
+            const headers = { Authorization: `Bearer ${token}` };
+            // Fixed: Use /api/public/batches/my (student-filtered endpoint)
+            const response = await axios.get(`${API_BASE}/api/public/batches/my`, { headers });
             setBatches(response.data?.batches || []);
             if (response.data?.batches?.length > 0) {
                 setSelectedBatch(response.data.batches[0].batch_id);
@@ -56,7 +57,7 @@ export default function MyClasses() {
                 >
                     {batches.map((batch) => (
                         <option key={batch.batch_id} value={batch.batch_id}>
-                            {batch.batch_id} - {batch.Course?.title || 'Unknown Course'}
+                            {batch.batch_id} - {batch.course?.title || 'Unknown Course'}
                         </option>
                     ))}
                 </select>

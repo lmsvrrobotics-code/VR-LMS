@@ -16,9 +16,22 @@
     });
 
     Assignment.associate = (models) => {
-        Assignment.belongsTo(models.Batch, { foreignKey: 'batch_id', targetKey: 'batch_id' });
-        Assignment.belongsTo(models.Course, { foreignKey: 'course_id' });
-        Assignment.hasMany(models.AssignmentSubmission, { foreignKey: 'assignment_id', onDelete: 'CASCADE' });
+        // batch_id is VARCHAR pointing to Batch.batch_id (unique string ID, not PK)
+        // This requires targetKey to specify the alternate column
+        Assignment.belongsTo(models.Batch, {
+            foreignKey: 'batch_id',
+            targetKey: 'batch_id',
+            as: 'batch'
+        });
+        Assignment.belongsTo(models.Course, {
+            foreignKey: 'course_id',
+            as: 'course'
+        });
+        Assignment.hasMany(models.AssignmentSubmission, {
+            foreignKey: 'assignment_id',
+            as: 'submissions',
+            onDelete: 'CASCADE'
+        });
     };
 
     return Assignment;
