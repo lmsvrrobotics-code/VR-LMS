@@ -54,6 +54,9 @@ export default function BasicTab({ course, onSave, formId }) {
         // Free public sample/teaser course — visible & playable to every
         // registered student (bypasses payment + release gating).
         is_marketing: !!course.is_marketing,
+        // Show on the public Home "Our Courses" preview. The admin flips this
+        // ON when the course build is complete and it's ready to market.
+        show_on_home: !!course.show_on_home,
     });
     const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
 
@@ -387,6 +390,21 @@ export default function BasicTab({ course, onSave, formId }) {
                 </label>
                 <div className="text-[12px] text-gray mt-1">
                     Turn on for a demo/teaser course (e.g. 2-3 sample videos). It bypasses payment and lesson release-gating so a newly-registered student can watch it in the normal course player and get attracted to VR Robotics.
+                </div>
+            </Row>
+
+            <Row label="Show on Home">
+                <label className="inline-flex items-center gap-2 cursor-pointer pt-2">
+                    <input
+                        type="checkbox"
+                        checked={f.show_on_home === true}
+                        onChange={(e) => set('show_on_home', e.target.checked)}
+                        className="accent-skin w-4 h-4"
+                    />
+                    <span className="text-[14px]">Publish this course to the Home page "Our Courses" section</span>
+                </label>
+                <div className="text-[12px] text-gray mt-1">
+                    Keep OFF while the course is under construction. The Home section stays hidden until at least one course is published here — flip it ON when the course is complete and ready to attract visitors.
                 </div>
             </Row>
         </form>

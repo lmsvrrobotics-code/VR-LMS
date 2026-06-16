@@ -53,6 +53,9 @@ export default function CourseCreate() {
         lectures_label: '',
         // Free public sample/teaser course (marketing) — '1' on, '0' off.
         is_marketing: '0',
+        // Show on the public Home "Our Courses" preview — '1' on, '0' off.
+        // Off by default: push to Home only once the course build is done.
+        show_on_home: '0',
         is_paid: '1',
         price: '',
         discount_flag: '',
@@ -368,6 +371,21 @@ export default function CourseCreate() {
                                 </label>
                                 <small className="text-gray text-[12px] block">
                                     A demo/teaser course (e.g. 2-3 sample videos) visible & fully playable to every registered student — bypasses payment and release-gating in the normal course player. Great for attracting new sign-ups.
+                                </small>
+                            </div>
+
+                            <div className="mb-3">
+                                <label className="inline-flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={form.show_on_home === '1'}
+                                        onChange={(e) => set('show_on_home', e.target.checked ? '1' : '0')}
+                                        className="accent-skin w-4 h-4"
+                                    />
+                                    <span className="ol-form-label m-0">Show on Home page</span>
+                                </label>
+                                <small className="text-gray text-[12px] block">
+                                    Publishes this course to the public Home "Our Courses" section. Leave OFF while the course is being built — the Home section stays hidden until at least one course is pushed here.
                                 </small>
                             </div>
 

@@ -165,7 +165,12 @@ const whyChoose = [
 const DEMO_SUPABASE_URL =
   (import.meta.env.VITE_SUPABASE_URL as string) || "https://mpqtuhgeuixsydofolwo.supabase.co";
 const DEMO_SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || "";
-const RAZORPAY_KEY_ID = "rzp_live_SYDFU4T2TTooyW";
+// Razorpay key id for the ₹49 Book-Demo checkout. From env so dev/staging
+// builds use a rzp_test_ key — the LIVE key was previously hardcoded here,
+// which meant every local test charged real money. key_id is safe to expose
+// to the browser (checkout needs it); only the secret must stay server-side.
+// Unset → the paid flow shows an error instead of opening live checkout.
+const RAZORPAY_KEY_ID = (import.meta.env.VITE_RAZORPAY_KEY_ID as string) || "";
 const DEMO_PRICE_PAISE = 4900;
 const GRADES = Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`);
 
@@ -232,6 +237,7 @@ const BookDemoModal = ({ onClose, mode = "paid" }: { onClose: () => void; mode?:
       const ok = await loadRazorpay();
       const w = window as unknown as { Razorpay?: new (o: RzpOptions) => RzpInstance };
       if (!ok || !w.Razorpay) { setError("Could not load payment. Please try again."); setSubmitting(false); return; }
+      if (!RAZORPAY_KEY_ID) { setError("Payments are not configured on this build. Please contact us to book."); setSubmitting(false); return; }
       const rzp = new w.Razorpay({
         key: RAZORPAY_KEY_ID, amount: DEMO_PRICE_PAISE, currency: "INR",
         name: "VR Robotics Academy", description: "Demo Session Booking — ₹49", order_id: order.order_id as string,
@@ -350,7 +356,11 @@ const Home = () => {
         if (!cancelled) setTestimonials([]);
       }
       try {
-        const { data } = await axios.get(`${ADMIN_BASE}/api/public/courses/catalog`, cacheBust);
+        // home=1 → only courses the admin explicitly published to the Home
+        // page ("Show on Home" toggle on the course form). While no course is
+        // published, this returns [] and the whole "Our Courses" section stays
+        // hidden — courses under construction never leak to visitors.
+        const { data } = await axios.get(`${ADMIN_BASE}/api/public/courses/catalog?home=1`, cacheBust);
         if (!cancelled) setCourses(Array.isArray(data) ? data : []);
       } catch {
         if (!cancelled) setCourses([]);

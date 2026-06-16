@@ -88,8 +88,13 @@ All colors MUST be HSL.
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    /* Keep the BRAND orange as primary in dark mode. The stock shadcn dark
+       palette set --primary to near-white, which made every "active" state
+       (nav links, selected items: text-primary + bg-primary/10) render
+       white-on-white — i.e. the navbar highlight disappeared after toggling
+       dark. Highlights must stay orange on both themes. */
+    --primary: 25 100% 50%;
+    --primary-foreground: 0 0% 100%;
 
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
@@ -105,7 +110,7 @@ All colors MUST be HSL.
 
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --ring: 25 100% 50%;
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;
@@ -189,6 +194,13 @@ All colors MUST be HSL.
   
   .text-muted-foreground {
     color: #3a3a3a !important;
+  }
+  /* The hardcoded charcoal above is the LIGHT-theme ink. Inside any dark
+     dashboard scope it left navbar links #3a3a3a on a near-black bar —
+     unreadable ("navbar not highlighted" in dark mode). Restore the token. */
+  .dark .text-muted-foreground,
+  .dark.text-muted-foreground {
+    color: hsl(var(--muted-foreground)) !important;
   }
   .rounded-md {
     border-radius: 20px!important;

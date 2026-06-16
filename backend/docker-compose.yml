@@ -12,25 +12,13 @@ services:
       - BASTION_ALLOWED_ORIGINS=${BASTION_ALLOWED_ORIGINS:-http://localhost:5173}
       - AUTH_SERVICE_HOST=auth-service
       - AUTH_SERVICE_PORT=8001
-      - COURSE_SERVICE_HOST=course-service
-      - COURSE_SERVICE_PORT=8002
       - ASSESSMENT_SERVICE_HOST=assessment-service
       - ASSESSMENT_SERVICE_PORT=8003
-      - ORGANISATION_SERVICE_HOST=organization-service
-      - ORGANISATION_SERVICE_PORT=8004
-      - COLLEGE_SERVICE_HOST=college-service
-      - COLLEGE_SERVICE_PORT=8005
-      - PAYMENT_SERVICE_HOST=payment-service
-      - PAYMENT_SERVICE_PORT=8006
       - ADMIN_SERVICE_HOST=admin-service
       - ADMIN_SERVICE_PORT=8007
     depends_on:
       - auth-service
-      - course-service
       - assessment-service
-      - organization-service
-      - college-service
-      - payment-service
       - admin-service
     networks:
       - lms-net
@@ -48,19 +36,6 @@ services:
     networks:
       - lms-net
 
-  course-service:
-    build: ./course-service
-    container_name: course-service
-    restart: unless-stopped
-    env_file:
-      - ./course-service/.env
-    environment:
-      - PORT=8002
-    expose:
-      - "8002"
-    networks:
-      - lms-net
-
   assessment-service:
     build: ./assessment-service
     container_name: assessment-service
@@ -71,45 +46,6 @@ services:
       - PORT=8003
     expose:
       - "8003"
-    networks:
-      - lms-net
-
-  organization-service:
-    build: ./organization-service
-    container_name: organization-service
-    restart: unless-stopped
-    env_file:
-      - ./organization-service/.env
-    environment:
-      - PORT=8004
-    expose:
-      - "8004"
-    networks:
-      - lms-net
-
-  college-service:
-    build: ./college-service
-    container_name: college-service
-    restart: unless-stopped
-    env_file:
-      - ./college-service/.env
-    environment:
-      - PORT=8005
-    expose:
-      - "8005"
-    networks:
-      - lms-net
-
-  payment-service:
-    build: ./payment-service
-    container_name: payment-service
-    restart: unless-stopped
-    env_file:
-      - ./payment-service/.env
-    environment:
-      - PORT=8006
-    expose:
-      - "8006"
     networks:
       - lms-net
 

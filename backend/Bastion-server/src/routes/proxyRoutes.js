@@ -56,12 +56,29 @@ Object.entries(serviceMap).forEach(([name, service]) => {
       }
       return headers;
     },
+    // Upstream died mid-request (crashed between health probes, connection
+    // reset, timeout). Without this handler the error falls through to
+    // Express's default HTML error page. Respond with a clean 502 JSON and
+    // immediately re-probe the service so the health map reflects reality
+    // now — not at the next periodic check.
+    proxyErrorHandler: (err, res, next) => {
+      healthMonitor.checkOne(name).catch(() => {});
+      if (res.headersSent) return next(err);
+      return res.status(502).json({
+        error: `${service.path} did not respond`,
+        details: err.code || err.message || 'Upstream error',
+        retryHint: 'The service is being re-probed; retry after a few seconds.',
+      });
+    },
   });
 
   router.use(`/v1/${service.path}`, (req, res, next) => {
     const status = healthMonitor.getStatus(name);
 
-    if (!status || !status.healthy) {
+    // No status yet = the startup probe hasn't finished. Forward optimistically
+    // instead of 503ing the boot race — if the upstream really is down the
+    // proxyErrorHandler above returns a clean 502 and marks it for re-probe.
+    if (status && !status.healthy) {
       console.warn(`[Bastion] ${service.path} is DOWN (last checked: ${status?.lastChecked ?? 'never'})`);
       return res.status(503).json({
         error: `${service.path} unavailable`,

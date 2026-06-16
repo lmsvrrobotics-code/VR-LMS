@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { getToken } from '../../api/client';
 
 const TABS = [
     { key: 'basic', label: 'Basic' },
@@ -8,11 +7,12 @@ const TABS = [
     { key: 'social', label: 'Social Links' },
 ];
 
-// college-service direct (port 8005). Returns [{ clgId, clgName, ... }].
-// We hit it from here so the School dropdown stays the same source of
-// truth as the student profile dropdown — every admin assigned a college
-// is guaranteed to use a real clgId that students can also pick.
-const COLLEGE_SERVICE = import.meta.env.VITE_COLLEGE_SERVICE_URL || 'http://localhost:8005';
+// School dropdown source: admin-service /api/public/colleges — the same
+// endpoint the student profile dropdown uses, so every admin assigned a
+// college is guaranteed a real clgId students can also pick. (Previously
+// this hit the legacy college-service on :8005, which isn't deployed in
+// production — the dropdown silently came up empty there.)
+const ADMIN_API = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:5000';
 
 export default function AdminForm({ admin, onSubmit, submitLabel = 'Save' }) {
     const [tab, setTab] = useState(admin ? 'basic' : 'login');
@@ -38,14 +38,11 @@ export default function AdminForm({ admin, onSubmit, submitLabel = 'Save' }) {
     const [photo, setPhoto] = useState(null);
     const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
 
-    // Load colleges once for the dropdown. The admin token is accepted by
-    // college-service because both services share JWT_ACCESS_SECRET.
+    // Load colleges once for the dropdown (public read — no token needed).
     useEffect(() => {
         let alive = true;
-        const token = getToken();
-        if (!token) return;
         axios
-            .get(`${COLLEGE_SERVICE}/all`, { headers: { Authorization: `Bearer ${token}` } })
+            .get(`${ADMIN_API}/api/public/colleges`)
             .then((res) => { if (alive) setColleges(Array.isArray(res.data) ? res.data : []); })
             .catch((err) => {
                 if (!alive) return;
@@ -53,7 +50,7 @@ export default function AdminForm({ admin, onSubmit, submitLabel = 'Save' }) {
                 setCollegesError(
                     status
                         ? `Failed to load schools (HTTP ${status}). School dropdown will be empty.`
-                        : 'Could not reach college-service. School dropdown will be empty.'
+                        : 'Could not reach the server. School dropdown will be empty.'
                 );
             });
         return () => { alive = false; };

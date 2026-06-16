@@ -518,6 +518,11 @@ const remove = async (id) => {
             .deleteUser(uid)
             .catch((e) => console.warn('[student] Supabase delete failed:', e.message));
     }
+    // No FK links lms_admin rows to this profile — sweep the student's
+    // progress/records/memberships explicitly so the delete doesn't strand
+    // orphans (payments are intentionally kept — financial records).
+    const { sweepStudentData } = require('./IntegritySweep');
+    await sweepStudentData(id);
     return { message: 'Student removed successfully' };
 };
 

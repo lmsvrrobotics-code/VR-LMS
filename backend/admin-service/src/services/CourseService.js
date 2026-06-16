@@ -447,6 +447,9 @@ const create = async ({ body, files = {}, userId }) => {
         lectures_label: b.lectures_label ? String(b.lectures_label).trim() : null,
         // Free public sample/teaser course toggle.
         is_marketing: toBool(b.is_marketing, false),
+        // "Show on Home" — admin pushes a finished course to the public
+        // home "Our Courses" preview. Off by default for new courses.
+        show_on_home: toBool(b.show_on_home, false),
         is_paid: b.is_paid,
         price: b.price || 0,
         discount_flag: b.discount_flag || 0,
@@ -586,6 +589,7 @@ const update = async ({ id, body, files = {} }) => {
         if (b.score_max !== undefined) data.score_max = b.score_max === '' || b.score_max === null ? null : Number(b.score_max);
         if (b.lectures_label !== undefined) data.lectures_label = b.lectures_label ? String(b.lectures_label).trim() : null;
         if (b.is_marketing !== undefined) data.is_marketing = toBool(b.is_marketing, false);
+        if (b.show_on_home !== undefined) data.show_on_home = toBool(b.show_on_home, false);
         data.status = b.status;
         // Only overwrite the teacher assignment when the form actually
         // sent one. Previously, partial Basic-tab saves submitted an empty
@@ -742,6 +746,12 @@ const remove = async (id) => {
     removeFile(course.banner);
     removeFile(course.preview);
     await course.destroy();
+
+    // No FK covers the rest: clear student progress for this course, the
+    // teacher-delegation chain, and the program JSONB course_ids arrays so
+    // deleted courses don't linger as stale references. Best-effort.
+    const { scrubCourseRefs } = require('./IntegritySweep');
+    await scrubCourseRefs(id);
     return { success: 'Course deleted successfully' };
 };
 

@@ -17,13 +17,19 @@ const baseOptions = {
     logging: false,
     schema: authSchema,
     define: { underscored: false, freezeTableName: true },
-    pool: { max: 5, min: 0, acquire: 60000, idle: 10000 },
+    // Secondary handle — login profile lookups + dashboard aggregates. Lower
+    // ceiling than the primary pool; tune via DB_AUTH_POOL_MAX if profile
+    // loads ever queue under login bursts.
+    pool: { max: Number(process.env.DB_AUTH_POOL_MAX || 10), min: 0, acquire: 60000, idle: 10000 },
     retry: {
         max: 2,
         match: [/ECONNRESET/, /ETIMEDOUT/, /SequelizeConnectionError/],
     },
     dialectOptions: {
         ssl: { require: true, rejectUnauthorized: false },
+        // Startup-parameter search_path — survives transaction-pooler session
+        // resets that would drop the afterConnect SET (see database.js).
+        options: `-c search_path="${authSchema}",public`,
     },
     // `schema` above only scopes Sequelize MODEL queries. The raw SQL in
     // TeacherService / StudentService / dashboard aggregates uses

@@ -49,8 +49,21 @@ const registerSchema = z.object({
 
 const loginSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(8)
+  // Login must NOT enforce the new-account length rule: legacy/admin-created
+  // accounts can have shorter passwords and must still reach Supabase, which
+  // is the actual verifier. Only require that something was typed.
+  password: z.string().min(1, 'Password is required')
 });
+
+// Turn a ZodError into one clean, human sentence. Without this, err.message
+// is the raw JSON dump of every issue ("[ { \"origin\": \"string\", ... } ]")
+// and we were returning that straight to the browser.
+function validationMessage(err) {
+  const issue = err?.issues?.[0];
+  if (!issue) return 'Invalid input';
+  const field = issue.path?.join('.') || 'input';
+  return `${field}: ${issue.message}`;
+}
 
 // ======================
 // Helpers
@@ -185,6 +198,9 @@ export async function register(req, res) {
     return res.status(201).json(shapeUserResponse(profile, role, signin.session));
 
   } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(422).json({ error: validationMessage(err) });
+    }
     console.error('Register error:', err);
     return res.status(400).json({ error: err.message });
   }
@@ -218,6 +234,9 @@ export async function login(req, res) {
     return res.json(shapeUserResponse(profile, role, data.session));
 
   } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(422).json({ error: validationMessage(err) });
+    }
     if (err.status === 403) return res.status(403).json({ error: err.message });
     console.error('Login error:', err);
     return res.status(400).json({ error: err.message });

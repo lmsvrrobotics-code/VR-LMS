@@ -68,6 +68,12 @@ exports.byColleges = asyncHandler(async (req, res) => {
     const ids = Array.isArray(raw)
         ? raw
         : String(raw).split(',').map((s) => s.trim()).filter(Boolean);
+    // Root admin always also sees "independent" batches (built from individual
+    // students, not tied to any school) so they can be targeted from the
+    // course/program batch dropdowns. School admins stay scoped to their own.
+    const isRoot = req.user?.is_root_admin || req.user?.role === 'root'
+        || !(req.user?.college_id || req.user?.collegeId);
+    if (isRoot && !ids.includes('independent')) ids.push('independent');
     res.json(await service.listByColleges({ clgIds: ids }));
 });
 

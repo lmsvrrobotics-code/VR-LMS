@@ -46,10 +46,28 @@ app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 // Routes
 app.use('/api', routes);
 
-app.use('/', (req,res) => {
+app.get('/', (_req, res) => {
   res.send('Welcome to Bastion Server');
 });
 
+// Anything not matched above is an unknown route — say so. The old catch-all
+// answered 200 "Welcome" to every typo'd path/method, which masked broken
+// client URLs and made uptime checks useless.
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not found', path: req.originalUrl });
+});
+
 attachErrorHandler(app);
+
+// Final JSON error handler. Sentry's handler (above) only reports — without
+// this, errors fall through to Express's default HTML error page (stack
+// trace in dev). Must be last and must keep the 4-arg signature.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, _next) => {
+  const status = err.status || err.statusCode || 500;
+  if (status >= 500) console.error('[Bastion] unhandled error:', err);
+  if (res.headersSent) return;
+  res.status(status).json({ error: status >= 500 ? 'Internal server error' : err.message });
+});
 
 export default app;

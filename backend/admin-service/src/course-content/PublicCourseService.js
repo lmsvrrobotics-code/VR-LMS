@@ -875,7 +875,7 @@ const submitQuiz = async ({ quiz_id, user_id, score, total, answers }) => {
 // (which is the student-facing, college- and batch-scoped catalog) so this
 // preview can render on the anonymous home page without leaking enrolment
 // scope or pulling the heavier per-student progress hydration.
-const catalog = async ({ limit = 12, classFrom = null, classTo = null, track = null, search = null } = {}) => {
+const catalog = async ({ limit = 12, classFrom = null, classTo = null, track = null, search = null, homeOnly = false } = {}) => {
     // Optional class-bucket filter [classFrom, classTo]. The admin assigns a
     // course to one discrete bucket (e.g. "8–12" or "12–18"), and the navbar
     // filters by those same buckets, so we use CONTAINMENT (the course range
@@ -891,6 +891,10 @@ const catalog = async ({ limit = 12, classFrom = null, classTo = null, track = n
     const hasFilter = present(classFrom) && present(classTo) && Number.isFinite(cf) && Number.isFinite(ct);
 
     const where = { status: 'active' };
+    // Home preview: only courses the admin explicitly pushed to the Home page
+    // ("Show on Home" toggle). The full /courses/browse catalog and the navbar
+    // dropdown filters are NOT affected — they keep listing every active course.
+    if (homeOnly) where.show_on_home = true;
     if (hasFilter) {
         const { Op } = require('sequelize');
         where[Op.and] = [

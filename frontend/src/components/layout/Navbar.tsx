@@ -114,12 +114,10 @@ const Navbar = () => {
     { name: "All Courses", href: "/courses/browse" },
   ];
 
-  // Sub-items under the "Books" dropdown.
+  // Sub-items under the "Books" dropdown — includes Books and Kits sections.
   const bookItems = [
     { name: "All Books", href: "/books" },
-    { name: "Robotics", href: "/books?category=robotics" },
-    { name: "AI & Coding", href: "/books?category=ai-coding" },
-    { name: "Electronics", href: "/books?category=electronics" },
+    { name: "Robotics Kits", href: "/books?tab=kits" },
   ];
 
   // Map each dropdown nav item to its sub-items.

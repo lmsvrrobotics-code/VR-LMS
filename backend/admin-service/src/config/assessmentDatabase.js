@@ -25,6 +25,9 @@ const baseOptions = {
     },
     dialectOptions: {
         ssl: { require: true, rejectUnauthorized: false },
+        // Startup-parameter search_path — survives transaction-pooler session
+        // resets that would drop the afterConnect SET (see database.js).
+        options: `-c search_path="${assessmentSchema}",public`,
     },
     // Pin search_path so raw queries (Manage Students' selectedProgram join)
     // resolve to lucy_devdb rather than the default public schema.

@@ -12,7 +12,7 @@
 const fs   = require('fs');
 const path = require('path');
 const sharp = require('sharp');
-const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const env = require('../config/env');
 
@@ -136,6 +136,25 @@ function buildKey(prefix, title, ext) {
     return `${cleanPrefix}/${slug}-${Date.now()}.${ext}`;
 }
 
+// List object keys under a prefix (paginated). Used by the DB backup job to
+// find existing backup dates for pruning / "did today run already" checks.
+async function listKeys(prefix) {
+    const out = [];
+    let token;
+    do {
+        const res = await getClient().send(new ListObjectsV2Command({
+            Bucket: env.r2.bucket,
+            Prefix: prefix,
+            ContinuationToken: token,
+        }));
+        for (const o of res.Contents || []) {
+            out.push({ key: o.Key, size: o.Size, lastModified: o.LastModified });
+        }
+        token = res.IsTruncated ? res.NextContinuationToken : undefined;
+    } while (token);
+    return out;
+}
+
 module.exports = {
     uploadFile,
     uploadBuffer,
@@ -143,4 +162,5 @@ module.exports = {
     signedGetUrl,
     buildKey,
     publicUrlFor,
+    listKeys,
 };

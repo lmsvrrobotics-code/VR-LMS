@@ -22,6 +22,10 @@ module.exports = (sequelize) => {
         // registered student (bypasses payment + release gating) to attract
         // new sign-ups. Managed by the "Marketing course" toggle on the course.
         is_marketing: { type: DataTypes.BOOLEAN, defaultValue: false },
+        // Show on the public Home "Our Courses" preview. OFF by default so a
+        // course under construction never leaks to the home page — the admin
+        // pushes it there explicitly once the course build is complete.
+        show_on_home: { type: DataTypes.BOOLEAN, defaultValue: false },
         price: { type: DataTypes.FLOAT, defaultValue: 0 },
         discounted_price: { type: DataTypes.FLOAT, defaultValue: 0 },
         discount_flag: { type: DataTypes.BOOLEAN, defaultValue: false },

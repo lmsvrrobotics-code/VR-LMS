@@ -1,3 +1,6 @@
+// Only services on the production path are routed. The legacy
+// course/organisation/college/payment services were removed — admin-service
+// owns courses, payments and colleges now (see /api/public + /api/admin).
 const serviceMap = {
   auth: {
     path: 'auth',
@@ -5,35 +8,11 @@ const serviceMap = {
     host: process.env.AUTH_SERVICE_HOST || 'localhost',
     port: process.env.AUTH_SERVICE_PORT || 8001,
   },
-  course: {
-    path: 'course',
-    url: process.env.COURSE_SERVICE_URL || '',
-    host: process.env.COURSE_SERVICE_HOST || 'localhost',
-    port: process.env.COURSE_SERVICE_PORT || 8002,
-  },
   assessment: {
     path: 'assessment',
     url: process.env.ASSESSMENT_SERVICE_URL || '',
     host: process.env.ASSESSMENT_SERVICE_HOST || 'localhost',
     port: process.env.ASSESSMENT_SERVICE_PORT || 8003,
-  },
-  organisation: {
-    path: 'organisation',
-    url: process.env.ORG_SERVICE_URL || process.env.ORGANISATION_SERVICE_URL || '',
-    host: process.env.ORGANISATION_SERVICE_HOST || 'localhost',
-    port: process.env.ORGANISATION_SERVICE_PORT || 8004,
-  },
-  college: {
-    path: 'college',
-    url: process.env.COLLEGE_SERVICE_URL || '',
-    host: process.env.COLLEGE_SERVICE_HOST || 'localhost',
-    port: process.env.COLLEGE_SERVICE_PORT || 8005,
-  },
-  payment: {
-    path: 'payment',
-    url: process.env.PAYMENT_SERVICE_URL || '',
-    host: process.env.PAYMENT_SERVICE_HOST || 'localhost',
-    port: process.env.PAYMENT_SERVICE_PORT || 8006,
   },
   admin: {
     path: 'admin',

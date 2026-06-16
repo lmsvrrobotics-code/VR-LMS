@@ -123,7 +123,9 @@ const App = () => (
             <Route path="/gallery" element={<Layout><Gallery /></Layout>} />
             <Route path="/locations" element={<Layout><Locations /></Layout>} />
             <Route path="/teacher" element={<TeacherDashboard />} />
-            <Route path="/auth" element={<Auth />} />
+            {/* Auth keeps the public navbar (Layout) so visitors can get back
+                to Home/Courses from the login screen. */}
+            <Route path="/auth" element={<Layout><Auth /></Layout>} />
             <Route path="/contact" element={<Layout><Contact /></Layout>} />
             <Route path="/register" element={<Layout><Register /></Layout>} />
             <Route path="/faqs" element={<Layout><FAQs /></Layout>} />

@@ -8,7 +8,8 @@ canonical flow.
 ## A. Secrets & config (.env per service)
 - [ ] `JWT_SECRET` — long random (≥24 chars). **admin-service refuses to boot in prod if weak.**
 - [ ] `SUPABASE_JWT_SECRET` + Supabase URL — on admin, auth, Bastion.
-- [ ] `DATABASE_URL` — Supabase **pooler** endpoint (`...pooler.supabase.com:6543`). ✅ already pooler.
+- [ ] `DATABASE_URL` — Supabase **SESSION pooler** endpoint (`...pooler.supabase.com:5432`). ⚠️ NOT the 6543 transaction pooler — it can reset the per-connection `search_path` the raw SQL relies on ("relation does not exist" errors under load).
+- [ ] **Backups: enable Supabase PITR or daily scheduled backups** (Dashboard → Project Settings → Database → Backups). Everything else on this list is recoverable; lost data isn't. Verify a restore point exists BEFORE go-live.
 - [ ] `REDIS_URL` — Upstash. ✅ already set (verified connecting).
 - [ ] `BUNNY_STREAM_LIBRARY_ID / API_KEY / CDN_HOSTNAME` (+ **`BUNNY_STREAM_TOKEN_KEY`** to turn on signed playback).
 - [ ] `R2_*` (account, bucket, access keys).

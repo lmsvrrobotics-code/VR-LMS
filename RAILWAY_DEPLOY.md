@@ -32,7 +32,10 @@ they carry the heavy load.
 NODE_ENV=production
 JWT_SECRET=<long random — boot FAILS in prod if weak>
 SUPABASE_JWT_SECRET=<from Supabase>
-DATABASE_URL=<Supabase POOLER url: ...pooler.supabase.com:6543/postgres>
+DATABASE_URL=<Supabase SESSION pooler url: ...pooler.supabase.com:5432/postgres>
+# ⚠️ Use port 5432 (SESSION pooler), NOT 6543: raw SQL relies on a per-connection
+# search_path which transaction pooling (6543) can reset between transactions
+# ("relation does not exist" errors). Session pooling keeps it for the connection.
 REDIS_URL=<Upstash rediss://...>            # caching (already used)
 BUNNY_STREAM_LIBRARY_ID / API_KEY / CDN_HOSTNAME
 BUNNY_STREAM_TOKEN_KEY=<pull-zone token key>  # turns ON signed playback
@@ -68,7 +71,7 @@ VITE_BASTION_API_URL=https://<bastion-public-url>
 ---
 
 ## Database connection pooling (critical at scale)
-- Use the **Supabase pooler** endpoint (port 6543) in `DATABASE_URL` — you already do ✅.
+- Use the **Supabase SESSION pooler** endpoint (port **5432**) in `DATABASE_URL`. Avoid the transaction pooler (6543): it can reset the per-connection `search_path` the raw SQL depends on.
 - Keep each instance's Sequelize pool **small** (max ~5–10). Math: `services × replicas × pool ≤ pooler limit`. With 2 services × 3 replicas × 5 = 30 connections — safe. Don't run big pools on many replicas.
 
 ## Scaling for ~10k students

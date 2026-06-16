@@ -25,6 +25,9 @@ const BatchMember = require('./BatchMember')(sequelize);
 const EmailJob = require('./EmailJob')(sequelize);
 const Gallery = require('./Gallery')(sequelize);
 const Book = require('./Book')(sequelize);
+const Kit = require('./Kit')(sequelize);
+const BookOrder = require('./BookOrder')(sequelize);
+const KitOrder = require('./KitOrder')(sequelize);
 const Slot = require('./Slot')(sequelize);
 const Demo = require('./Demo')(sequelize);
 const ClassSession = require('./ClassSession')(sequelize);
@@ -58,7 +61,7 @@ const FeedbackResponse = require('./FeedbackResponse')(sequelize);
 // Public "Send us a Message" contact submissions (admin inbox).
 const ContactMessage = require('./ContactMessage')(sequelize);
 
-const models = { Category, Course, SeoField, User, Lesson, Section, Question, QuizSubmission, Setting, LiveClass, Coupon, Certificate, PreAssessmentResult, UserProgress, LessonCompletion, LessonWatchProgress, Language, Forum, ForumReport, Program, Batch, BatchMember, EmailJob, Gallery, Book, Slot, Demo, ClassSession, Project, Testimonial, Resource, ResourceCategory, TeacherFreeSchedule, StudentRecord, StudentLearning, TeachingAssignment, AssignmentMember, LessonRelease, Lead, Payment, AppSetting, Location, TeacherFeedback, DemoVideo, FeedbackForm, FeedbackResponse, ContactMessage };
+const models = { Category, Course, SeoField, User, Lesson, Section, Question, QuizSubmission, Setting, LiveClass, Coupon, Certificate, PreAssessmentResult, UserProgress, LessonCompletion, LessonWatchProgress, Language, Forum, ForumReport, Program, Batch, BatchMember, EmailJob, Gallery, Book, Kit, BookOrder, KitOrder, Slot, Demo, ClassSession, Project, Testimonial, Resource, ResourceCategory, TeacherFreeSchedule, StudentRecord, StudentLearning, TeachingAssignment, AssignmentMember, LessonRelease, Lead, Payment, AppSetting, Location, TeacherFeedback, DemoVideo, FeedbackForm, FeedbackResponse, ContactMessage };
 Object.values(models).forEach((m) => m.associate && m.associate(models));
 
 module.exports = { sequelize, ...models };

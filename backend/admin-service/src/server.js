@@ -24,6 +24,10 @@ const galleryRoutes = require('./routes/gallery.routes');
 const demoVideoRoutes = require('./routes/demoVideo.routes');
 const locationRoutes = require('./routes/location.routes');
 const bookRoutes = require('./routes/book.routes');
+const kitRoutes = require('./routes/kit.routes');
+const bookKitOrderRoutes = require('./routes/bookKitOrders.routes');
+const adminBookOrderRoutes = require('./routes/adminBookOrders.routes');
+const adminKitOrderRoutes = require('./routes/adminKitOrders.routes');
 const slotRoutes = require('./routes/slot.routes');
 const demoRoutes = require('./routes/demo.routes');
 const classRoutes = require('./routes/class.routes');
@@ -160,6 +164,30 @@ app.get('/uploads/*', (req, res) => {
 
 app.get(['/api/health', '/health'], (_req, res) => res.json({ ok: true, service: 'admin-service' }));
 
+// Deep health for uptime monitors (UptimeRobot / Railway healthcheck / Grafana):
+// pings Postgres and reports Redis state so degradation is visible BEFORE
+// students feel it. Kept separate from /health (above) which must stay
+// instant for load-balancer probes. 503 when the DB is unreachable.
+app.get('/health/deep', async (_req, res) => {
+    const out = {
+        service: 'admin-service',
+        uptime_s: Math.round(process.uptime()),
+        db: 'unknown',
+        cache: cache.isEnabled() ? 'enabled' : 'disabled',
+    };
+    try {
+        await Promise.race([
+            sequelize.query('SELECT 1'),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('db ping timeout')), 3000)),
+        ]);
+        out.db = 'ok';
+        return res.json({ ok: true, ...out });
+    } catch (e) {
+        out.db = `down: ${e.message}`;
+        return res.status(503).json({ ok: false, ...out });
+    }
+});
+
 // Service-to-service email enqueue. Used today by assessment-service to
 // queue a "you've registered for pre-assessment" mail without having to own
 // a second DB connection into lms_admin.email_jobs. Guarded by a shared
@@ -179,8 +207,14 @@ const { enqueue: enqueueEmail } = require('./jobs/emailQueue');
 app.post('/api/internal/email/enqueue', express.json({ limit: '1mb' }), async (req, res) => {
     const expected = env.internalSecret;
     if (!expected) return res.status(503).json({ error: 'Internal endpoints disabled' });
-    const provided = req.headers['x-internal-secret'];
-    if (!provided || provided !== expected) {
+    const provided = String(req.headers['x-internal-secret'] || '');
+    // Constant-time compare — a plain !== leaks how many leading characters
+    // matched through response timing, letting the secret be recovered
+    // byte-by-byte. Hash both sides first so lengths always match.
+    const crypto = require('crypto');
+    const a = crypto.createHash('sha256').update(provided).digest();
+    const b = crypto.createHash('sha256').update(expected).digest();
+    if (!provided || !crypto.timingSafeEqual(a, b)) {
         return res.status(401).json({ error: 'Unauthorised' });
     }
     try {
@@ -208,6 +242,26 @@ app.post('/api/internal/email/enqueue', express.json({ limit: '1mb' }), async (r
     }
 });
 
+// --- Public read caching ------------------------------------------------------
+// The anonymous home/dashboard lists (gallery, books, locations, projects,
+// testimonials, demo-videos, colleges, catalog) are identical for every visitor
+// and were hitting Postgres on every request. At 5k users that's the bulk of
+// read traffic, so they're served through a short shared Redis cache (no-op
+// without REDIS_URL). Browser caching stays disabled (no-store) — freshness is
+// controlled server-side: any successful admin WRITE flushes the whole pub:*
+// keyspace below, so admins still see their edits immediately while students
+// read from cache.
+const PUB_TTL = 30; // seconds
+const flushPublicCache = (req, res, next) => {
+    if (req.method !== 'GET') {
+        res.on('finish', () => {
+            if (res.statusCode < 400) cache.del('pub:*').catch?.(() => {});
+        });
+    }
+    next();
+};
+app.use('/api/admin', flushPublicCache);
+
 // Public read-only endpoints — no auth required
 const categoryService = require('./services/CategoryService');
 app.get('/api/public/categories', async (req, res, next) => {
@@ -230,7 +284,7 @@ app.get('/api/public/gallery', async (_req, res, next) => {
         // with a conditional GET, getting 304 Not Modified and re-rendering an
         // older (e.g. empty) body, so newly added items wouldn't appear.
         res.set('Cache-Control', 'no-store');
-        res.json(await galleryService.listPublic());
+        res.json(await cache.wrap('pub:gallery', PUB_TTL, () => galleryService.listPublic()));
     } catch (e) { next(e); }
 });
 
@@ -240,7 +294,7 @@ const demoVideoService = require('./services/DemoVideoService');
 app.get('/api/public/demo-videos', async (_req, res, next) => {
     try {
         res.set('Cache-Control', 'no-store');
-        res.json(await demoVideoService.listPublic());
+        res.json(await cache.wrap('pub:demo-videos', PUB_TTL, () => demoVideoService.listPublic()));
     } catch (e) { next(e); }
 });
 
@@ -250,7 +304,7 @@ const locationService = require('./services/LocationService');
 app.get('/api/public/locations', async (_req, res, next) => {
     try {
         res.set('Cache-Control', 'no-store');
-        res.json(await locationService.listPublic());
+        res.json(await cache.wrap('pub:locations', PUB_TTL, () => locationService.listPublic()));
     } catch (e) { next(e); }
 });
 
@@ -327,7 +381,7 @@ app.get('/api/public/student-records/by-teacher/:teacherId', ...requireTeacherSe
 app.post('/api/public/student-records', ...requireTeacherWrite, async (req, res, next) => {
     try { res.json(await studentRecordSvc.create(req.body)); } catch (e) { next(e); }
 });
-app.put('/api/public/student-records/:id', async (req, res, next) => {
+app.put('/api/public/student-records/:id', ...requireTeacherWrite, async (req, res, next) => {
     try { res.json(await studentRecordSvc.update(req.params.id, req.body)); } catch (e) { next(e); }
 });
 app.delete('/api/public/student-records/:id', ...requireTeacherWrite, async (req, res, next) => {
@@ -480,14 +534,22 @@ app.post('/api/public/payments/order', ...requireStudent, paymentCtrl.createOrde
 app.post('/api/public/payments/verify', ...requireStudent, paymentCtrl.verify);
 app.post('/api/public/payments/webhook', paymentCtrl.webhook);
 
+// Book & Kit orders — Razorpay payments for books and kits (requireStudent applies to orders/verify, webhook is open).
+const orderCtrl = require('./controllers/BookKitOrderController');
+app.post('/api/public/books-orders/order', ...requireStudent, orderCtrl.createBookOrder);
+app.post('/api/public/books-orders/verify', ...requireStudent, orderCtrl.verifyBookPayment);
+app.post('/api/public/kits-orders/order', ...requireStudent, orderCtrl.createKitOrder);
+app.post('/api/public/kits-orders/verify', ...requireStudent, orderCtrl.verifyKitPayment);
+app.post('/api/public/book-kit-orders/webhook', orderCtrl.webhook);
+
 // Public student projects + testimonials — drive the Home page sections.
 const projectService = require('./services/ProjectService');
 app.get('/api/public/projects', async (_req, res, next) => {
-    try { res.set('Cache-Control', 'no-store'); res.json(await projectService.listPublic()); } catch (e) { next(e); }
+    try { res.set('Cache-Control', 'no-store'); res.json(await cache.wrap('pub:projects', PUB_TTL, () => projectService.listPublic())); } catch (e) { next(e); }
 });
 const testimonialService = require('./services/TestimonialService');
 app.get('/api/public/testimonials', async (_req, res, next) => {
-    try { res.set('Cache-Control', 'no-store'); res.json(await testimonialService.listPublic()); } catch (e) { next(e); }
+    try { res.set('Cache-Control', 'no-store'); res.json(await cache.wrap('pub:testimonials', PUB_TTL, () => testimonialService.listPublic())); } catch (e) { next(e); }
 });
 
 // Public books list — drives the Home → Books page. Only visible items.
@@ -496,7 +558,17 @@ const bookService = require('./services/BookService');
 app.get('/api/public/books', async (_req, res, next) => {
     try {
         res.set('Cache-Control', 'no-store');
-        res.json(await bookService.listPublic());
+        res.json(await cache.wrap('pub:books', PUB_TTL, () => bookService.listPublic()));
+    } catch (e) { next(e); }
+});
+
+// Public kits list — drives the Home → Books → Kits page. Only visible items.
+// Admins manage these under Books → Add/Manage Kits; new kits appear here.
+const kitService = require('./services/KitService');
+app.get('/api/public/kits', async (_req, res, next) => {
+    try {
+        res.set('Cache-Control', 'no-store');
+        res.json(await cache.wrap('pub:kits', PUB_TTL, () => kitService.listPublic()));
     } catch (e) { next(e); }
 });
 
@@ -505,7 +577,10 @@ app.get('/api/public/books', async (_req, res, next) => {
 const collegeService = require('./services/CollegeService');
 app.get('/api/public/colleges', async (_req, res, next) => {
     try {
-        const { colleges } = await collegeService.list({ per_page: 1000 });
+        const colleges = await cache.wrap('pub:colleges', 60, async () => {
+            const r = await collegeService.list({ per_page: 1000 });
+            return r.colleges;
+        });
         res.json(colleges);
     } catch (e) { next(e); }
 });
@@ -610,7 +685,13 @@ app.get('/api/public/courses', async (req, res, next) => {
     // never sent clgId).
     const collegeAware = 'clgId' in req.query;
     try {
-        const real = await publicCourseService.list(req.query);
+        // Shared per-query cache (clgId/search/paging) — the dashboard course
+        // list is the same for every student of a college, so don't rebuild it
+        // per request. Flushed by any admin write (pub:* invalidation above).
+        const real = await cache.wrap(
+            `pub:courses:${JSON.stringify(req.query)}`, PUB_TTL,
+            () => publicCourseService.list(req.query),
+        );
         if (collegeAware || real?.data?.length) return res.json(real);
         return courseContentCtrl.list(req, res, next);
     } catch (e) {
@@ -630,7 +711,7 @@ app.get('/api/public/courses/catalog', async (req, res, next) => {
     try {
         // Public marketing list, hammered on every homepage load and identical
         // for everyone → cache 60s to shield Postgres. No per-user data here.
-        const args = { limit: req.query.limit, classFrom: req.query.classFrom, classTo: req.query.classTo, track: req.query.track, search: req.query.search };
+        const args = { limit: req.query.limit, classFrom: req.query.classFrom, classTo: req.query.classTo, track: req.query.track, search: req.query.search, homeOnly: String(req.query.home || '') === '1' };
         const key = `pub:catalog:${JSON.stringify(args)}`;
         const data = await cache.wrap(key, 60, () => publicCourseService.catalog(args));
         res.set('Cache-Control', 'no-store');
@@ -857,6 +938,18 @@ app.get('/api/public/course-progress', ...attachVerifiedId, async (req, res) => 
     }
 });
 
+// Admin login brute-force guard. The login endpoint was the ONLY
+// unauthenticated admin surface with no rate limit — an attacker could
+// hammer passwords at full speed. 10 attempts/minute per IP is generous for
+// humans (typos) and useless for brute force. Successful logins don't count
+// against the limit so a busy admin isn't locked out by their own activity.
+const adminLoginLimiter = rateLimit({
+    ...rlOpts, max: 10, skipSuccessfulRequests: true,
+    store: makeStore('rl:alogin:'),
+    message: { error: 'Too many login attempts — try again in a minute.' },
+});
+app.use('/api/admin/auth/login', adminLoginLimiter);
+
 // Public auth endpoints (login is unauthenticated; me/logout require token)
 app.use('/api/admin', authRoutes);
 
@@ -977,6 +1070,7 @@ app.use('/api/admin', adminOnly, galleryRoutes);
 app.use('/api/admin', adminOnly, demoVideoRoutes);
 app.use('/api/admin', adminOnly, locationRoutes);
 app.use('/api/admin', adminOnly, bookRoutes);
+app.use('/api/admin', adminOnly, kitRoutes);
 app.use('/api/admin', adminOnly, slotRoutes);
 app.use('/api/admin', adminOnly, demoRoutes);
 app.use('/api/admin', adminOnly, classRoutes);
@@ -991,6 +1085,8 @@ app.use('/api/admin', adminOnly, collegeRoutes);
 app.use('/api/admin', adminOnly, studentRoutes);
 app.use('/api/admin', adminOnly, teacherRoutes);
 app.use('/api/admin', adminOnly, languageRoutes);
+app.use('/api/admin', adminOnly, adminBookOrderRoutes);
+app.use('/api/admin', adminOnly, adminKitOrderRoutes);
 
 // Public certificate routes — unauthenticated. Mirror the player flow which
 // also uses /api/public/* with an x-user-id header for student keying.
@@ -1099,6 +1195,16 @@ const start = () => {
         emailWorker.start();
     } catch (e) {
         console.warn('[email-worker] failed to start:', e.message);
+    }
+
+    // Nightly logical DB backup → R2 (db-backups/<date>/...). No-op when R2
+    // isn't configured or DB_BACKUP_DISABLED=true. Manual run:
+    //   node src/scripts/backupNow.js
+    try {
+        const dbBackup = require('./jobs/dbBackup');
+        dbBackup.start();
+    } catch (e) {
+        console.warn('[db-backup] failed to start:', e.message);
     }
 
     // app.listen() returns asynchronously — bind failures (EADDRINUSE,
@@ -1219,6 +1325,10 @@ sequelize.authenticate()
             await ensureCourseCol('lectures_label', 'lectures_label VARCHAR(255)');
             // Free public sample/teaser flag (marketing courses).
             await ensureCourseCol('is_marketing', 'is_marketing BOOLEAN NOT NULL DEFAULT FALSE');
+            // Admin-controlled "push to Home page" flag. Default FALSE so the
+            // home "Our Courses" section stays empty (hidden) until the admin
+            // explicitly publishes a finished course to it.
+            await ensureCourseCol('show_on_home', 'show_on_home BOOLEAN NOT NULL DEFAULT FALSE');
         } catch (e) {
             console.warn('[courses] column check failed:', e.message);
         }
@@ -1281,8 +1391,35 @@ sequelize.authenticate()
         try {
             const { Book } = require('./models');
             await Book.sync();
+            // Add price column if missing (idempotent)
+            await sequelize.query('ALTER TABLE books ADD COLUMN IF NOT EXISTS price DECIMAL(10, 2) NOT NULL DEFAULT 0');
         } catch (e) {
             console.warn('[books] table sync failed:', e.message);
+        }
+
+        // Kits — robotics kits shown on the public Kits page (Home → Books → Kits).
+        // Same idempotent .sync() pattern; creates the `kits` table on first run.
+        try {
+            const { Kit } = require('./models');
+            await Kit.sync();
+        } catch (e) {
+            console.warn('[kits] table sync failed:', e.message);
+        }
+
+        // Book Orders — tracks book purchases via Razorpay.
+        try {
+            const { BookOrder } = require('./models');
+            await BookOrder.sync();
+        } catch (e) {
+            console.warn('[book-orders] table sync failed:', e.message);
+        }
+
+        // Kit Orders — tracks kit purchases via Razorpay.
+        try {
+            const { KitOrder } = require('./models');
+            await KitOrder.sync();
+        } catch (e) {
+            console.warn('[kit-orders] table sync failed:', e.message);
         }
 
         // Slots — admin scheduling: a course + time window + assigned
@@ -1471,6 +1608,17 @@ sequelize.authenticate()
             await ensureProgramCol('batch_ids', 'batch_ids JSONB');
         } catch (e) {
             console.warn('[programs] column check failed:', e.message);
+        }
+
+        // Hot-path indexes (idempotent CREATE INDEX IF NOT EXISTS). Model
+        // index definitions only materialise via .sync(), which boot skips
+        // for existing tables — this guarantees the player/progress/paywall/
+        // leaderboard lookups stay indexed at 5k-user scale. Best-effort.
+        try {
+            const { ensureIndexes } = require('./scripts/ensureIndexes');
+            await ensureIndexes();
+        } catch (e) {
+            console.warn('[indexes] ensure failed:', e.message);
         }
 
         // lucy_devdb.colleges.isActive: per-school access toggle driven

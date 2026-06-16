@@ -14,6 +14,8 @@ module.exports = (sequelize) => {
         description: { type: DataTypes.TEXT, allowNull: true },
         // R2 public URL for the cover image.
         cover_url: { type: DataTypes.TEXT, allowNull: true },
+        // Price in rupees. Admin sets this; students pay exactly this amount.
+        price: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
         // Optional external "Order Now" link; null → public page uses /contact.
         buy_url: { type: DataTypes.TEXT, allowNull: true },
         // Display ordering — lower shows first; ties break on newest.

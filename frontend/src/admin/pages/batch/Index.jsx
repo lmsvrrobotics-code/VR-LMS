@@ -12,6 +12,12 @@ import { listColleges } from '../../api/college';
  */
 const VALID_TABS = ['manage', 'add'];
 
+// Pseudo-school for batches formed from INDIVIDUAL students (no school).
+// The backend treats clgId='independent' as "any student is eligible", so the
+// admin can mix students from anywhere — or students with no school at all —
+// into one batch and assign it to courses/programs like any school batch.
+const INDEPENDENT_OPTION = { value: 'independent', label: 'Independent students (no school)' };
+
 export default function AdminBatchesIndex() {
     const [params, setParams] = useSearchParams();
     const tab = VALID_TABS.includes(params.get('tab')) ? params.get('tab') : 'manage';
@@ -27,15 +33,24 @@ export default function AdminBatchesIndex() {
         listColleges({ per_page: 1000 })
             .then((res) => {
                 if (!alive) return;
-                const list = (res?.colleges || res?.data || res || []).map((c) => ({
+                const schools = (res?.colleges || res?.data || res || []).map((c) => ({
                     value: String(c.clgId ?? c.id ?? c.clg_id ?? ''),
                     label: c.clgName ?? c.name ?? c.college_name ?? `School ${c.clgId ?? c.id}`,
                 })).filter((c) => c.value);
+                // "Independent students" is always offered — batches can be
+                // formed from individual students even when no school exists.
+                const list = [INDEPENDENT_OPTION, ...schools];
                 setColleges(list);
-                // Auto-select the first college so the page is immediately usable.
-                if (list.length && !clgId) setClgId(list[0].value);
+                // Auto-select the first option so the page is immediately usable
+                // (Independent when there are no schools yet).
+                if (!clgId) setClgId(list[0].value);
             })
-            .catch((e) => setCollegesError(e?.response?.data?.error || 'Failed to load schools'))
+            .catch((e) => {
+                setCollegesError(e?.response?.data?.error || 'Failed to load schools');
+                // Even if the schools lookup fails, independent batches still work.
+                setColleges([INDEPENDENT_OPTION]);
+                if (!clgId) setClgId(INDEPENDENT_OPTION.value);
+            })
             .finally(() => { if (alive) setCollegesLoading(false); });
         return () => { alive = false; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -69,10 +84,9 @@ export default function AdminBatchesIndex() {
                                 disabled={collegesLoading || colleges.length === 0}
                             >
                                 {collegesLoading && <option>Loading schools…</option>}
-                                {!collegesLoading && colleges.length === 0 && <option value="">No schools found</option>}
                                 {!collegesLoading && colleges.length > 0 && (
                                     <>
-                                        <option value="">— Select a school —</option>
+                                        <option value="">— Select —</option>
                                         {colleges.map((c) => (
                                             <option key={c.value} value={c.value}>{c.label}</option>
                                         ))}
@@ -109,9 +123,9 @@ export default function AdminBatchesIndex() {
             {!clgId ? (
                 <div className="ol-card rounded-ol-8">
                     <div className="ol-card-body py-12 px-6 text-center">
-                        <p className="text-[15px] font-semibold text-dark mb-1">Select a school</p>
+                        <p className="text-[15px] font-semibold text-dark mb-1">Select a school — or "Independent students"</p>
                         <p className="text-[13px] text-gray">
-                            Batches belong to a college. Pick one above to add or manage its batches.
+                            School batches contain that school's students. "Independent students (no school)" lets you form a batch from any individual students.
                         </p>
                     </div>
                 </div>

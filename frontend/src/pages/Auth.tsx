@@ -102,7 +102,9 @@ const Auth = () => {
   const working = busy || loading;
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2 bg-gradient-subtle">
+    // Height accounts for the sticky navbar above (h-16 / lg:h-20) so the
+    // split-screen fills the remaining viewport without forcing a scroll.
+    <div className="min-h-[calc(100vh-4rem)] lg:min-h-[calc(100vh-5rem)] grid lg:grid-cols-2 bg-gradient-subtle">
       {/* Left brand panel */}
       <div className="relative hidden lg:flex flex-col justify-center items-center gap-6 p-14 bg-gradient-hero text-white overflow-hidden">
         {/* soft glow accents for depth */}

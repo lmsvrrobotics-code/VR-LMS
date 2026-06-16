@@ -59,6 +59,14 @@ const normIds = (raw) => {
     return out;
 };
 
+// Sentinel "college" for batches built from individual students with no
+// school. Stored in batches.clg_id like a real college id, so every existing
+// query (list, members, programs.batch_ids, teaching delegation rosters)
+// works on independent batches unchanged. The student scope is what differs:
+// an independent batch may contain ANY student, from any school or none.
+const INDEPENDENT_CLG = 'independent';
+const isIndependent = (clgId) => String(clgId || '') === INDEPENDENT_CLG;
+
 // Build a short, deterministic prefix from a college name. Strips spaces,
 // punctuation and case, then caps at 12 chars so the final batch name stays
 // readable. Empty / unknown college → falls back to the clgId.
@@ -112,7 +120,9 @@ const filterValidStudents = async ({ clgId, userIds }) => {
     // match what eligibleStudents() offers, otherwise a no-school student the
     // admin picked would be silently dropped on save. With no college, accept
     // any student so a batch can mix students freely.
-    const scope = clgId
+    // Independent batches mix students freely — no college scope at all.
+    const scoped = clgId && !isIndependent(clgId);
+    const scope = scoped
         ? `AND (u."collegeId" = :clgId OR u."collegeId" IS NULL)`
         : '';
     const rows = await authDb.query(
@@ -122,7 +132,7 @@ const filterValidStudents = async ({ clgId, userIds }) => {
           WHERE r.role = 'student'
             ${scope}
             AND u."userId" IN (:userIds)`,
-        { replacements: { clgId: clgId || null, userIds }, type: QueryTypes.SELECT }
+        { replacements: { clgId: scoped ? clgId : null, userIds }, type: QueryTypes.SELECT }
     );
     return rows.map((r) => String(r.userId));
 };
@@ -217,10 +227,14 @@ const create = async ({ clgId, body }) => {
     // Prepend the college shortcode to the typed name so the resulting batch
     // names are unique across colleges (e.g. "ABC - Batch 1" vs
     // "STJOSEPHCOLLEG - Batch 1"). Idempotent — if admin types the prefix
-    // themselves, we don't double it.
-    const clgName = await fetchCollegeName(clgId);
-    const prefix = buildCollegePrefix(clgName, clgId);
-    const name = applyCollegePrefix(rawName, prefix);
+    // themselves, we don't double it. Independent batches keep the name as
+    // typed — there's no school to prefix with.
+    let name = rawName;
+    if (!isIndependent(clgId)) {
+        const clgName = await fetchCollegeName(clgId);
+        const prefix = buildCollegePrefix(clgName, clgId);
+        name = applyCollegePrefix(rawName, prefix);
+    }
 
     // Reject duplicate name within this school so admins don't end up with
     // two "AI Frontier - Jan 2026" rows that confuse the dropdown.
@@ -292,6 +306,10 @@ const remove = async ({ clgId, id }) => {
     // would confuse later counts.
     await BatchMember.destroy({ where: { batch_id: batch.id } });
     await batch.destroy();
+    // Scrub stale references: program/course JSONB batch_ids arrays + any
+    // teacher-delegation roster rows targeting this batch. Best-effort.
+    const { scrubBatchRefs } = require('./IntegritySweep');
+    await scrubBatchRefs(batch.id);
     return { message: 'Batch deleted' };
 };
 
@@ -352,8 +370,10 @@ const removeMember = async ({ clgId, id, userId }) => {
 const eligibleStudents = async ({ clgId }) => {
     // Show this college's students PLUS unassigned (no-school) students — many
     // students now self-sign-up with no college (B2C), and they were invisible
-    // here before. When no college is given, return every student.
-    const where = clgId
+    // here before. Independent batches (and no college at all) see EVERY
+    // student, so the admin can form a batch from any mix of individuals.
+    const scoped = clgId && !isIndependent(clgId);
+    const where = scoped
         ? `r.role = 'student' AND (u."collegeId" = :clgId OR u."collegeId" IS NULL)`
         : `r.role = 'student'`;
     const rows = await authDb.query(
@@ -362,7 +382,7 @@ const eligibleStudents = async ({ clgId }) => {
            JOIN roles r ON r."roleId" = u."roleId"
           WHERE ${where}
           ORDER BY u.name ASC`,
-        { replacements: { clgId: clgId || null }, type: QueryTypes.SELECT }
+        { replacements: { clgId: scoped ? clgId : null }, type: QueryTypes.SELECT }
     );
     return { students: rows };
 };
