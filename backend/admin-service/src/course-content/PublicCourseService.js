@@ -3,13 +3,11 @@ const sectionRepo = require('../repositories/SectionRepository');
 const lessonRepo = require('../repositories/LessonRepository');
 const questionRepo = require('../repositories/QuestionRepository');
 const quizSubmissionRepo = require('../repositories/QuizSubmissionRepository');
-const { User, Course, BatchMember, Lesson, LessonCompletion, Payment, UserProgress } = require('../models');
+const { User, Course, BatchMember, Lesson, LessonCompletion, UserProgress } = require('../models');
 const watchStore = require('./watchStore');
 const teachingSvc = require('../services/TeachingAssignmentService');
 const { computeGating } = require('../services/teachingLogic');
 const bunny = require('../services/BunnyStream');
-const paymentSvc = require('../services/PaymentService');
-const { isPaywalled } = require('../services/paymentLogic');
 const cache = require('../config/cache');
 const { QueryTypes, Op } = require('sequelize');
 const authDb = require('../config/authDatabase');
@@ -383,15 +381,10 @@ const detailsBySlug = async (slug, clgId = null, verifiedUserId = null) => {
     const creator = await resolveTeacher(course);
 
     const sanitized = sanitizeCourse(course, sections, lessons, creator);
-    // Mark whether the verified student already owns (paid for) this course so
-    // the UI shows "Go to Course" instead of a misleading "Buy" button.
-    sanitized.purchased = verifiedUserId ? await paymentSvc.hasPaid(verifiedUserId, course.id) : false;
-
     // "Assigned" = an admin/teacher delegated this course to the student via an
-    // explicit roster (individual or batch). These students bypass the paywall
-    // (same rule the player uses: rosterScoped skips payment), so the details
-    // page should offer "Go to Course" instead of "Buy this course". A global
-    // (rosterless) assignment does NOT count — those are still paywalled.
+    // explicit roster (individual or batch), OR the student is enrolled in a program
+    // that includes this course. This determines if the student can access the course.
+    // Only students with admin-granted access see "Go to Course"; others see locked lessons.
     sanitized.assigned = false;
     if (verifiedUserId) {
         try {
@@ -419,7 +412,7 @@ const detailsBySlug = async (slug, clgId = null, verifiedUserId = null) => {
     sanitized.progress = progress;
 
     // Class rank + earned score. The "class" = everyone TAKING this course
-    // (roster ∪ enrolled ∪ paid), so a student gets a live position the moment
+    // (roster ∪ enrolled ∪ admin-assigned), so a student gets a live position the moment
     // they're in the class — even before earning points (tie-broken by score).
     // Earned score comes from the per-course leaderboard (lessons + quizzes).
     // Only a viewer who is actually in the class gets a rank; others see "—".
@@ -430,20 +423,18 @@ const detailsBySlug = async (slug, clgId = null, verifiedUserId = null) => {
     if (verifiedUserId) {
         try {
             const rankingSvc = require('../services/RankingService');
-            const [lb, enrolledRows, paidRows, rosterIds] = await Promise.all([
+            const [lb, enrolledRows, rosterIds] = await Promise.all([
                 rankingSvc.build({ courseId: course.id, meUserId: verifiedUserId, limit: 100 }),
                 UserProgress.findAll({ where: { course_id: course.id, enrolled: true }, attributes: ['user_id'], raw: true }),
-                Payment.findAll({ where: { course_id: course.id, status: 'paid' }, attributes: ['user_id'], raw: true }),
                 teachingSvc.studentsForCourse(course.id),
             ]);
 
             const classIds = new Set();
             enrolledRows.forEach((r) => r.user_id && classIds.add(String(r.user_id)));
-            paidRows.forEach((r) => r.user_id && classIds.add(String(r.user_id)));
             rosterIds.forEach((id) => classIds.add(String(id)));
 
             const meId = String(verifiedUserId);
-            const viewerInClass = sanitized.purchased || sanitized.assigned || classIds.has(meId);
+            const viewerInClass = sanitized.assigned || classIds.has(meId);
             if (viewerInClass) classIds.add(meId);
 
             const myScore = lb.me?.score || 0;
@@ -474,21 +465,23 @@ const detailsBySlug = async (slug, clgId = null, verifiedUserId = null) => {
 const myCourses = async (userIdRaw) => {
     const uid = String(userIdRaw ?? '').trim();
     if (!uid) return { courses: [] };
-    // Cache per-student (60s). Invalidated immediately on payment (PaymentService)
+    // Cache per-student (60s). Invalidated immediately on admin actions
     // so a buyer sees their course at once; delegation/enrollment changes show
     // within the TTL.
     return cache.wrap(`mycourses:${uid}`, 60, () => myCoursesUncached(uid));
 };
 
 const myCoursesUncached = async (uid) => {
-    const [paidRows, enrolledRows, delegatedIds] = await Promise.all([
-        Payment.findAll({ where: { user_id: uid, status: 'paid' }, attributes: ['course_id'], raw: true }),
+    // "My courses" now only includes courses the admin has granted access to:
+    // - Enrolled (program membership)
+    // - Delegated (teaching assignment or roster member)
+    // Payment-based access has been removed.
+    const [enrolledRows, delegatedIds] = await Promise.all([
         UserProgress.findAll({ where: { user_id: uid, enrolled: true }, attributes: ['course_id'], raw: true }),
         teachingSvc.coursesForStudent(uid),
     ]);
 
     const ids = new Set();
-    for (const r of paidRows) if (r.course_id) ids.add(Number(r.course_id));
     for (const r of enrolledRows) if (r.course_id) ids.add(Number(r.course_id));
     for (const c of delegatedIds) ids.add(Number(c));
     if (!ids.size) return { courses: [] };
@@ -711,37 +704,13 @@ const playerData = async (slug, lessonIdRaw, userIdRaw, { verifiedUserId = null,
         console.warn('[playerData] release-gating failed:', e.message);
     }
 
-    // --- Paywall (paid courses) -------------------------------------------
-    // A paid course (is_paid + price > 0) only serves its lessons to a student
-    // who has PAID (verified identity). Free lessons stay open as a preview.
-    // Independent of delegation: a paid course can also be teacher-released.
-    let paywalled = false;
-    // Same bypass as release-gating: the course's own teacher/admins — and
-    // marketing/sample courses (free teaser) — are never paywalled.
-    if (!bypassGating) try {
-        // B2B roster students (school/batch) are governed by teacher releases,
-        // not by personal payment — don't double-gate them. Everyone else
-        // (B2C / global release) still hits the paywall ON TOP of release-gating,
-        // so a paid lesson needs BOTH payment and a teacher release to unlock.
-        const effectivePrice = Number(course.discounted_price) > 0
-            ? Number(course.discounted_price) : Number(course.price || 0);
-        const paid = verifiedUserId ? await paymentSvc.hasPaid(verifiedUserId, course.id) : false;
-        if (!rosterScoped && isPaywalled({ isPaid: course.is_paid, price: effectivePrice, hasPaid: paid })) {
-            paywalled = true;
-            const freeIds = new Set(flatLessons.filter((l) => l.is_free).map((l) => Number(l.id)));
-            for (const l of flatLessons) {
-                if (!freeIds.has(Number(l.id)) && !lockedLessonIds.includes(l.id)) lockedLessonIds.push(l.id);
-            }
-            if (lesson && !freeIds.has(Number(lesson.id))) {
-                lesson.locked = true;
-                lesson.lesson_src = '';
-                lesson.attachment = '';
-                if (Array.isArray(lesson.questions)) lesson.questions = [];
-            }
-        }
-    } catch (e) {
-        console.warn('[playerData] paywall check failed:', e.message);
-    }
+    // --- Admin-Controlled Access (removed payment) ----------------------------
+    // Courses are now admin-controlled: students/teachers can only access if the
+    // admin has granted them enrollment or a teaching assignment. No payment walls.
+    // This is enforced by the release-gating logic above (teacher delegation +
+    // batch enrollment). Students without access see locked lessons until the
+    // admin adds them to the roster or teaching assignment.
+    const paywalled = false;
 
     // Sign the (still-served) video URL with a short-lived Bunny token so a
     // leaked/shared link expires and a revoked student can't keep playing one
@@ -961,10 +930,6 @@ const catalog = async ({ limit = 12, classFrom = null, classTo = null, track = n
             class_to: c.class_to,
             lesson_count: a.count,
             total_duration_secs: a.secs,
-            // Lets the dashboard decide "Go to Course" (free) vs "Buy this
-            // course" (paid + not yet accessible). Course attribute, not
-            // per-user, so it's safe in the shared/cached catalog.
-            is_paid: c.is_paid ?? 0,
             // Free sample/teaser → always playable, shown with a "Free sample" badge.
             is_marketing: !!c.is_marketing,
         };
