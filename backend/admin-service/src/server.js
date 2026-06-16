@@ -38,6 +38,7 @@ const programRoutes = require('./routes/program.routes');
 const certificateRoutes = require('./routes/certificate.routes');
 const collegeDashboardRoutes = require('./routes/collegeDashboard.routes');
 const batchRoutes = require('./routes/batch.routes');
+const batchNewRoutes = require('./routes/batchNew.routes');
 const collegeRoutes = require('./routes/college.routes');
 const studentRoutes = require('./routes/student.routes');
 const teacherRoutes = require('./routes/teacher.routes');
@@ -1081,6 +1082,7 @@ app.use('/api/admin', adminOnly, programRoutes);
 app.use('/api/admin', adminOnly, certificateRoutes);
 app.use('/api/admin', adminOnly, collegeDashboardRoutes);
 app.use('/api/admin', adminOnly, batchRoutes);
+app.use('/api/admin', adminOnly, batchNewRoutes);
 app.use('/api/admin', adminOnly, collegeRoutes);
 app.use('/api/admin', adminOnly, studentRoutes);
 app.use('/api/admin', adminOnly, teacherRoutes);
@@ -1365,13 +1367,24 @@ sequelize.authenticate()
             console.warn('[programs] table sync failed:', e.message);
         }
 
-        // Batches — named cohorts of students inside a college. Created from
-        // the School Dashboard's Add/Manage Batches tabs. Member rows live
-        // in the linked batch_members table; both are created on first run.
+        // Batches — cohorts of students assigned to a course with a teacher.
+        // Batch ID format: CourseName_DDMMYY_Count (e.g., Scratch_160625_01)
+        // Members tracked in batch_members (with joined/removed dates).
+        // Classes tracked in batch_classes (with support for temporary teachers).
         try {
-            const { Batch, BatchMember } = require('./models');
+            const { Batch, BatchMember, BatchClass } = require('./models');
             await Batch.sync();
             await BatchMember.sync();
+            await BatchClass.sync();
+            // Add batch_id column if missing (idempotent)
+            await sequelize.query('ALTER TABLE batches ADD COLUMN IF NOT EXISTS batch_id VARCHAR(64) UNIQUE');
+            await sequelize.query('ALTER TABLE batches ADD COLUMN IF NOT EXISTS course_id INTEGER');
+            await sequelize.query('ALTER TABLE batches ADD COLUMN IF NOT EXISTS teacher_id VARCHAR(64)');
+            // Add student_id and other fields to batch_members if missing
+            await sequelize.query('ALTER TABLE batch_members ADD COLUMN IF NOT EXISTS student_id VARCHAR(128) UNIQUE');
+            await sequelize.query('ALTER TABLE batch_members ADD COLUMN IF NOT EXISTS joined_date DATE');
+            await sequelize.query('ALTER TABLE batch_members ADD COLUMN IF NOT EXISTS removed_date DATE');
+            await sequelize.query('ALTER TABLE batch_members ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT \'active\'');
         } catch (e) {
             console.warn('[batches] table sync failed:', e.message);
         }

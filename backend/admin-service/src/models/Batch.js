@@ -1,17 +1,19 @@
 const { DataTypes } = require('sequelize');
 
-// A Batch is a named cohort of students at a single college. Owned by a
-// college (clg_id refers to colleges.clgId in lucy_devdb). Members live in
-// the batch_members link table — kept separate so the same student can
-// belong to multiple batches over time without rewriting the user row.
+// A Batch is a cohort of students assigned to one course with one teacher.
+// Batch ID format: CourseName_DDMMYY_Count (e.g., Scratch_160625_01)
+// Members are tracked in batch_members table. Teachers can be temporary
+// (for individual classes when primary teacher is absent).
 module.exports = (sequelize) => {
     const Batch = sequelize.define('Batch', {
         id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-        clg_id: { type: DataTypes.STRING(64), allowNull: false },
-        name: { type: DataTypes.STRING(160), allowNull: false },
-        // Free-form label admins use ("AI Frontier - Jan 2026"). Optional —
-        // kept distinct from `name` so admins can rename without losing the
-        // descriptive note.
+        // Unique batch identifier: CourseName_DDMMYY_Count (e.g., Scratch_160625_01)
+        batch_id: { type: DataTypes.STRING(64), allowNull: false, unique: true },
+        course_id: { type: DataTypes.INTEGER, allowNull: false },
+        teacher_id: { type: DataTypes.STRING(64), allowNull: false },
+        // College/school association (optional, for multi-org support)
+        clg_id: { type: DataTypes.STRING(64), allowNull: true },
+        // Free-form description (e.g., "Section A - Advanced Scratch")
         description: { type: DataTypes.STRING(500) },
         start_date: { type: DataTypes.DATEONLY, allowNull: true },
         end_date: { type: DataTypes.DATEONLY, allowNull: true },
@@ -21,8 +23,18 @@ module.exports = (sequelize) => {
         timestamps: true,
         createdAt: 'created_at',
         updatedAt: 'updated_at',
-        indexes: [{ fields: ['clg_id'] }],
+        indexes: [
+            { fields: ['batch_id'] },
+            { fields: ['course_id'] },
+            { fields: ['teacher_id'] },
+            { fields: ['clg_id'] },
+        ],
     });
+
+    Batch.associate = (models) => {
+        Batch.belongsTo(models.Course, { foreignKey: 'course_id', as: 'course' });
+        Batch.hasMany(models.BatchMember, { foreignKey: 'batch_id', as: 'members' });
+    };
 
     return Batch;
 };
