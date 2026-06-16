@@ -1,0 +1,261 @@
+﻿.assignment-card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    overflow: hidden;
+    transition: all 0.2s ease;
+}
+
+.assignment-card:hover {
+    border-color: #d1d5db;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.assignment-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 16px;
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+    cursor: pointer;
+}
+
+.assignment-title-section {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.assignment-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.badge-urgent {
+    background: #fee2e2;
+    color: #991b1b;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.badge-warning {
+    background: #fef3c7;
+    color: #92400e;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.badge-submitted {
+    background: #dbeafe;
+    color: #0c4a6e;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.badge-graded {
+    background: #dcfce7;
+    color: #166534;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.btn-toggle {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 20px;
+    color: #6b7280;
+    padding: 0;
+    margin-left: 12px;
+    flex-shrink: 0;
+}
+
+.btn-toggle:hover {
+    color: #1f2937;
+}
+
+.assignment-details {
+    padding: 16px;
+    animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        max-height: 0;
+    }
+    to {
+        opacity: 1;
+        max-height: 1000px;
+    }
+}
+
+.assignment-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 16px;
+    padding: 16px;
+    background: #f9fafb;
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+.meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.meta-item .label {
+    font-size: 12px;
+    color: #6b7280;
+    font-weight: 600;
+}
+
+.meta-item .value {
+    font-size: 16px;
+    color: #1f2937;
+    font-weight: 600;
+}
+
+.meta-item .value.score {
+    color: #059669;
+}
+
+.assignment-description,
+.assignment-instructions {
+    margin-bottom: 16px;
+}
+
+.assignment-description h4,
+.assignment-instructions h4,
+.teacher-feedback h4,
+.submission-form h4 {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.assignment-description p,
+.assignment-instructions p,
+.teacher-feedback p {
+    margin: 0;
+    font-size: 14px;
+    color: #4b5563;
+    line-height: 1.6;
+}
+
+.teacher-feedback {
+    padding: 12px;
+    background: #eff6ff;
+    border-left: 4px solid #0084ff;
+    border-radius: 6px;
+    margin-bottom: 16px;
+}
+
+.teacher-feedback p {
+    color: #0c4a6e;
+}
+
+.submission-form {
+    margin-top: 16px;
+    padding: 16px;
+    background: #f9fafb;
+    border-radius: 8px;
+}
+
+.submission-form form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.submission-form textarea {
+    padding: 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    resize: vertical;
+}
+
+.submission-form textarea:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.submission-form input[type="file"] {
+    padding: 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.btn-submit {
+    padding: 10px 16px;
+    background: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-submit:hover {
+    background: #1d4ed8;
+}
+
+.btn-submit:disabled {
+    background: #d1d5db;
+    cursor: not-allowed;
+}
+
+.submission-status {
+    padding: 12px;
+    background: #dcfce7;
+    border-left: 4px solid #059669;
+    border-radius: 6px;
+}
+
+.submission-status p {
+    margin: 0;
+    font-size: 14px;
+    color: #166534;
+    font-weight: 500;
+}
+
+@media (max-width: 768px) {
+    .assignment-header {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .btn-toggle {
+        margin-left: 0;
+        align-self: flex-end;
+    }
+
+    .assignment-meta {
+        grid-template-columns: 1fr;
+    }
+}
