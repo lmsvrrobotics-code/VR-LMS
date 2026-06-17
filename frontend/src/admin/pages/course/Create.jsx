@@ -83,7 +83,7 @@ export default function CourseCreate() {
     const [selectedBatchIds, setSelectedBatchIds] = useState([]);
 
     // Teacher dropdown source — admin teachers API
-    // (GET /api/admin/manage/teachers). Loaded once on mount; small list,
+    // (GET `${API_BASE}/api/admin/manage/teachers). Loaded once on mount; small list`
     // so we pull everything in a single request.
     const [teachers, setTeachers] = useState([]);
     const [teachersLoading, setTeachersLoading] = useState(true);

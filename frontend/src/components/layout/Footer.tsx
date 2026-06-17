@@ -6,7 +6,6 @@ import {
   Sparkles,
   FacebookIcon,
   InstagramIcon,
-  LinkedinIcon,
   YoutubeIcon,
 } from "lucide-react";
 
@@ -51,10 +50,9 @@ const Footer = () => {
               <Sparkles className="w-4 h-4" /> Live in Future
             </div>
             <div className="flex items-center gap-4 pt-1">
-              <a href="https://www.linkedin.com/" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors"><LinkedinIcon className="w-5 h-5" /></a>
-              <a href="https://www.facebook.com/" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors"><FacebookIcon className="w-5 h-5" /></a>
-              <a href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors"><YoutubeIcon className="w-5 h-5" /></a>
-              <a href="https://www.instagram.com/" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors"><InstagramIcon className="w-5 h-5" /></a>
+              <a href="https://www.facebook.com/61580082415242/" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors"><FacebookIcon className="w-5 h-5" /></a>
+              <a href="https://www.youtube.com/@VRRobotics/videos" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors"><YoutubeIcon className="w-5 h-5" /></a>
+              <a href="https://www.instagram.com/vr_robotics_academy?igsh=MTJnb2NhcXp0N29yeg==" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors"><InstagramIcon className="w-5 h-5" /></a>
             </div>
           </div>
 
@@ -82,9 +80,9 @@ const Footer = () => {
               <Mail className="w-5 h-5 text-primary shrink-0" />
               vrroboticsacademy@gmail.com
             </a>
-            <a href="tel:+917483430092" className="flex items-center gap-3 hover:text-primary transition-colors">
+            <a href="tel:+919182363638" className="flex items-center gap-3 hover:text-primary transition-colors">
               <Phone className="w-5 h-5 text-primary shrink-0" />
-              +91 74834 30092
+              +91 91823 63638
             </a>
             <p className="flex items-start gap-3">
               <MapPin className="w-5 h-5 text-primary mt-0.5 shrink-0" />

@@ -370,7 +370,7 @@ export default function AdminLayout() {
         p.startsWith('/admin/courses?') ||
         p === '/admin/teaching' ||
         p.startsWith('/admin/teaching?') ||
-        /^\/admin\/course\/edit\/\d+/.test(p);
+        /^\/admin\/course\/edit\/\d+$/.test(p);
 
     useEffect(() => {
         if (isTeacher) {

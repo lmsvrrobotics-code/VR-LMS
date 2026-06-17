@@ -2,7 +2,7 @@
 import axios from 'axios';
 import { format, isBefore, addMinutes } from 'date-fns';
 
-const API_BASE = (import.meta.env.VITE_ADMIN_API_URL as string) || 'http://localhost:5000';
+const API_BASE = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:5000';
 
 // Display upcoming classes for a batch
 // Shows: time, teacher, course, join button, teaching aids
@@ -21,7 +21,7 @@ export default function UpcomingClasses({ batchId }) {
                 futureDate.setDate(futureDate.getDate() + 30); // Next 30 days
                 const futureStr = futureDate.toISOString().split('T')[0];
 
-                const res = await axios.get(\\/api/public/slots/by-date-range\, {
+                const res = await axios.get(`${API_BASE}/api/public/slots/by-date-range`, {
                     params: {
                         batchId,
                         startDate: today,
@@ -33,12 +33,12 @@ export default function UpcomingClasses({ batchId }) {
                 const now = new Date();
                 const upcoming = (res.data.slots || [])
                     .filter(s => {
-                        const slotEnd = new Date(\\T\\);
+                        const slotEnd = new Date(`${s.slot_date}T${s.end_time}`);
                         return isBefore(now, slotEnd);
                     })
                     .sort((a, b) => {
-                        const aTime = new Date(\\T\\);
-                        const bTime = new Date(\\T\\);
+                        const aTime = new Date(`${a.slot_date}T${a.start_time}`);
+                        const bTime = new Date(`${b.slot_date}T${b.start_time}`);
                         return aTime - bTime;
                     })
                     .slice(0, 5); // Show top 5 upcoming
@@ -57,7 +57,7 @@ export default function UpcomingClasses({ batchId }) {
 
     // Check if class can be joined (within 15 min before start)
     const canJoin = (slotDate, startTime) => {
-        const classTime = new Date(\\T\\);
+        const classTime = new Date(`${slotDate}T${startTime}`);
         const now = new Date();
         const fifteenMinBefore = addMinutes(classTime, -15);
         return isBefore(fifteenMinBefore, now);
@@ -82,7 +82,7 @@ export default function UpcomingClasses({ batchId }) {
             <div className="classes-grid">
                 {slots.map((slot) => {
                     const isJoinable = canJoin(slot.slot_date, slot.start_time);
-                    const classTime = new Date(\\T\\);
+                    const classTime = new Date(`${slot.slot_date}T${slot.start_time}`);
 
                     return (
                         <div key={slot.id} className="class-card">

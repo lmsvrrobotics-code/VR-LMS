@@ -1,6 +1,6 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
-import '../styles/NotificationBell.css';
+import './styles/NotificationBell.css';
 
 const API_BASE = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:5000';
 
@@ -11,16 +11,16 @@ export default function NotificationBell() {
 
     useEffect(() => {
         fetchNotifications();
-        const interval = setInterval(fetchNotifications, 30000); // Poll every 30 seconds
+        const interval = setInterval(fetchNotifications, 30000);
         return () => clearInterval(interval);
     }, []);
 
     const fetchNotifications = async () => {
         try {
             const token = localStorage.getItem('token');
-            const headers = { Authorization: \Bearer \\ };
+            const headers = { Authorization: `Bearer ${token}` };
             const response = await axios.get(
-                \\/api/public/notifications\,
+                `${API_BASE}/api/public/notifications`,
                 { headers }
             );
             const notifs = response.data?.rows || [];
@@ -34,9 +34,9 @@ export default function NotificationBell() {
     const markAsRead = async (notificationId) => {
         try {
             const token = localStorage.getItem('token');
-            const headers = { Authorization: \Bearer \\ };
+            const headers = { Authorization: `Bearer ${token}` };
             await axios.patch(
-                \\/api/public/notifications/\/read\,
+                `${API_BASE}/api/public/notifications/${notificationId}/read`,
                 {},
                 { headers }
             );
@@ -49,9 +49,9 @@ export default function NotificationBell() {
     const markAllAsRead = async () => {
         try {
             const token = localStorage.getItem('token');
-            const headers = { Authorization: \Bearer \\ };
+            const headers = { Authorization: `Bearer ${token}` };
             await axios.patch(
-                \\/api/public/notifications/mark-all-read\,
+                `${API_BASE}/api/public/notifications/mark-all-read`,
                 {},
                 { headers }
             );
@@ -102,12 +102,11 @@ export default function NotificationBell() {
                             notifications.map((notif) => (
                                 <div
                                     key={notif.id}
-                                    className={\
-otification-item \\}
+                                    className="notification-item"
                                     onClick={() => !notif.is_read && markAsRead(notif.id)}
                                 >
                                     <div className="notif-icon">
-                                        <i className={\i-rr \\} />
+                                        <i className="fi-rr-bell" />
                                     </div>
                                     <div className="notif-content">
                                         <p className="notif-title">{notif.title}</p>

@@ -1,7 +1,7 @@
 ﻿import { useState } from 'react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
-import '../styles/AssignmentCard.css';
+import './styles/AssignmentCard.css';
 
 const API_BASE = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:5000';
 
@@ -28,12 +28,12 @@ export default function AssignmentCard({ assignment, onUpdate }) {
         try {
             setIsSubmitting(true);
             const token = localStorage.getItem('token');
-            const headers = { Authorization: \Bearer \\ };
+            const headers = { Authorization: `Bearer ${token}` };
             const userId = localStorage.getItem('userId');
             const studentId = localStorage.getItem('studentId');
 
             const response = await axios.post(
-                \\/api/public/assignments/\/submit\,
+                `${API_BASE}/api/public/assignments/submit`,
                 {
                     submission_text: submissionText,
                     student_id: studentId,
@@ -76,7 +76,7 @@ export default function AssignmentCard({ assignment, onUpdate }) {
                     className="btn-toggle"
                     onClick={() => setIsOpen(!isOpen)}
                 >
-                    <i className={\i-rr-chevron-\\} />
+                    <i className="icon" />
                 </button>
             </div>
 

@@ -356,7 +356,7 @@ function parseElements(html) {
             if (!text) return;
             const style = n.getAttribute('style') || '';
             const get = (k) => {
-                const m = style.match(new RegExp(`${k}\\s*:\\s*([^;]+)`));
+                const m = style.match(new RegExp(`${k}\s*:\s*([^;]+)`));
                 return m ? m[1].trim() : null;
             };
             const ff = get('font-family');

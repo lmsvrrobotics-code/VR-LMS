@@ -106,7 +106,7 @@ const [loadingProfile, setLoadingProfile] = useState(true);
   }, []);
 
 
-  // KPI counts come from /api/public/student/overview-stats (authoritative,
+  // KPI counts come from `${API_BASE}/api/public/student/overview-stats (authoritative`
   // keyed on the logged-in student's userId), not from the public courses list.
   const quickStats = [
     { label: "Active Programs", value: stats.active_programs, icon: BookOpen, color: "bg-blue-500" },

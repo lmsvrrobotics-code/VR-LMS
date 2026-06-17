@@ -16,7 +16,7 @@ const resolveUploadUrl = (src) => {
     const s = String(src || '').trim();
     if (!s) return s;
     if (/^(https?:|blob:|data:)/i.test(s)) return s;
-    return `${ADMIN_BASE.replace(/\/$/, '')}/${s.replace(/^\/+/, '')}`;
+    return `${ADMIN_BASE.replace(/\/+$/, '')}/${s.replace(/^\/+/, '')}`;
 };
 
 const LessonTypeIcon = ({ type }) => {

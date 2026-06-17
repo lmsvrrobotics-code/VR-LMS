@@ -105,7 +105,7 @@ export default function Dashboard() {
 
     // Build chart rows (short labels) from a feedback stats payload.
     const chartData = (stats) => (stats?.attributes || []).map((a) => ({
-        short: a.label.split(/[\s/&]+/)[0].slice(0, 8),
+        short: a.label.split(/[s/&]+/)[0].slice(0, 8),
         label: a.label,
         value: stats?.per_attribute?.[a.key] ?? 0,
     }));

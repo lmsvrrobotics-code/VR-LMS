@@ -32,7 +32,7 @@ const BUCKETS: { label: string; cls: string; track: string }[] = [
 
 const parseBucket = (raw: string | null): { from: number; to: number } | null => {
   if (!raw) return null;
-  const m = /^(\d{1,2})-(\d{1,2})$/.exec(raw.trim());
+  const m = /^(d{1,2})-(d{1,2})$/.exec(raw.trim());
   if (!m) return null;
   return { from: Number(m[1]), to: Number(m[2]) };
 };

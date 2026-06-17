@@ -26,8 +26,8 @@ const ACCEPTED_MIME = ["application/pdf", "image/jpeg", "image/jpg", "image/png"
 const ACCEPTED_EXT = [".pdf", ".jpg", ".jpeg", ".png"];
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB — matches the backend cap.
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PHONE_REGEX = /^[0-9+\-\s()]{7,20}$/;
+const EMAIL_REGEX = /^[^s@]+@[^s@]+\.[^s@]+$/;
+const PHONE_REGEX = /^[0-9+-s()]{7,20}$/;
 
 type FormState = {
   fullName: string;
@@ -283,7 +283,7 @@ export function PreAssessmentOnboardingModal({
                   placeholder="+91 98765 43210"
                   value={form.phoneNumber}
                   onChange={(e) =>
-                    update("phoneNumber", e.target.value.replace(/[^0-9+\-\s()]/g, ""))
+                    update("phoneNumber", e.target.value.replace(/[^0-9+-s()]/g, ""))
                   }
                   aria-invalid={!!errors.phoneNumber}
                 />

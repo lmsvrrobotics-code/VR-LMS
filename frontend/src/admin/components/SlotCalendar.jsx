@@ -23,7 +23,7 @@ export default function SlotCalendar({ batchId, courseId, startDate, endDate }) 
                 if (batchId) params.batchId = batchId;
                 if (courseId) params.courseId = courseId;
 
-                const res = await axios.get(\\/api/admin/slots/by-date-range\, { params });
+                const res = await axios.get(`${API_BASE}/api/admin/slots/by-date-range`, { params });
                 setSlots(res.data.slots || []);
             } catch (e) {
                 console.error('Failed to fetch slots', e);
@@ -39,7 +39,7 @@ export default function SlotCalendar({ batchId, courseId, startDate, endDate }) 
     const timeSlots = useMemo(() => {
         const times = [];
         for (let h = 8; h <= 20; h++) {
-            times.push(\\:00\);
+            times.push(`${h.toString().padStart(2, '0')}:00`);
         }
         return times;
     }, []);

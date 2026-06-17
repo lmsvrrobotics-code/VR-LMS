@@ -25,7 +25,7 @@ export default function CreateSlotForm({ batchId, onSlotCreated }) {
     useEffect(() => {
         const fetchCourses = async () => {
             try {
-                const res = await axios.get(\\/api/admin/courses\, { params: { per_page: 100 } });
+                const res = await axios.get(`${API_BASE}/api/admin/courses`, { params: { per_page: 100 } });
                 setCourses(res.data?.courses?.data || []);
             } catch (e) {
                 console.error('Failed to load courses');
@@ -53,7 +53,7 @@ export default function CreateSlotForm({ batchId, onSlotCreated }) {
 
         setSubmitting(true);
         try {
-            await axios.post(\\/api/admin/slots\, {
+            await axios.post(`${API_BASE}/api/admin/slots`, {
                 batchId: Number(formData.batchId),
                 courseId: Number(formData.courseId),
                 slotDate: formData.slotDate,

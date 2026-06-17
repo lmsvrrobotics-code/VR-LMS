@@ -14,7 +14,7 @@ import {
 } from '../../api/certificate';
 import { BsThreeDotsVertical } from 'react-icons/bs';
 
-const ASSET_BASE = (import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:5000').replace(/\/$/, '');
+const ASSET_BASE = (import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:5000').replace(/\/+$/, '');
 const resolveImage = (path) => {
     if (!path) return '';
     if (/^https?:\/\//i.test(path)) return path;

@@ -36,8 +36,8 @@ export default function TeacherAssignments() {
         try {
             setLoading(true);
             const token = localStorage.getItem('token');
-            const headers = { Authorization: \Bearer \\ };
-            const response = await axios.get(\\/api/admin/batches\, { headers });
+            const headers = { Authorization: `Bearer ${token}` };
+            const response = await axios.get(`${API_BASE}/api/admin/batches`, { headers });
             setBatches(response.data?.batches || []);
             if (response.data?.batches?.length > 0) {
                 setSelectedBatch(response.data.batches[0].batch_id);
@@ -53,9 +53,9 @@ export default function TeacherAssignments() {
     const fetchAssignments = async () => {
         try {
             const token = localStorage.getItem('token');
-            const headers = { Authorization: \Bearer \\ };
+            const headers = { Authorization: `Bearer ${token}` };
             const response = await axios.get(
-                \\/api/admin/batches/\/assignments\,
+                `${API_BASE}/api/admin/batches/${selectedBatch}/assignments`,
                 { headers }
             );
             setAssignments(response.data?.assignments || []);
@@ -68,9 +68,9 @@ export default function TeacherAssignments() {
     const fetchSubmissions = async (assignmentId) => {
         try {
             const token = localStorage.getItem('token');
-            const headers = { Authorization: \Bearer \\ };
+            const headers = { Authorization: `Bearer ${token}` };
             const response = await axios.get(
-                \\/api/admin/assignments/\/submissions\,
+                `${API_BASE}/api/admin/assignments/${assignmentId}/submissions`,
                 { headers }
             );
             setSubmissions(response.data?.submissions || []);
@@ -84,10 +84,10 @@ export default function TeacherAssignments() {
         e.preventDefault();
         try {
             const token = localStorage.getItem('token');
-            const headers = { Authorization: \Bearer \\ };
+            const headers = { Authorization: `Bearer ${token}` };
             const teacherId = localStorage.getItem('userId');
 
-            await axios.post(\\/api/admin/assignments\, {
+            await axios.post(`${API_BASE}/api/admin/assignments`, {
                 batch_id: selectedBatch,
                 course_id: batches.find(b => b.batch_id === selectedBatch)?.course_id,
                 teacher_id: teacherId,
@@ -111,10 +111,10 @@ export default function TeacherAssignments() {
 
         try {
             const token = localStorage.getItem('token');
-            const headers = { Authorization: \Bearer \\ };
+            const headers = { Authorization: `Bearer ${token}` };
 
             await axios.patch(
-                \\/api/admin/submissions/\/grade\,
+                `${API_BASE}/api/admin/submissions/${selectedSubmission.id}/grade`,
                 {
                     score: parseInt(gradingForm.score),
                     feedback: gradingForm.feedback,
@@ -267,11 +267,11 @@ export default function TeacherAssignments() {
                                         <td>{submission.student_id}</td>
                                         <td>{new Date(submission.submitted_date).toLocaleDateString()}</td>
                                         <td>
-                                            <span className={\adge badge-\\}>
+                                            <span className="icon">
                                                 {submission.status}
                                             </span>
                                         </td>
-                                        <td>{submission.score ? \\/100\ : '-'}</td>
+                                        <td>{submission.score ? `${submission.score}/100` : '-'}</td>
                                         <td>
                                             <button
                                                 className="btn-grade"

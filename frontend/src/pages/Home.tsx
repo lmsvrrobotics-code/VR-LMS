@@ -210,7 +210,7 @@ const BookDemoModal = ({ onClose, mode = "paid" }: { onClose: () => void; mode?:
   const set = (k: string, v: string) => setForm((s) => ({ ...s, [k]: v }));
 
   const phoneE164 = () => {
-    let p = form.phone.replace(/\s/g, "");
+    let p = form.phone.replace(/s/g, "");
     if (p.length === 10 && !p.startsWith("+")) p = "+91" + p;
     else if (!p.startsWith("+") && p.length > 10) p = "+" + p;
     return p;

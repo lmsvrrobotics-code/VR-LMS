@@ -52,7 +52,7 @@ const Auth = () => {
         setError("Passwords do not match.");
         return;
       }
-      if (!/^\d{10,15}$/.test(phone.trim())) {
+      if (!/^d{10,15}$/.test(phone.trim())) {
         setError("Enter a valid phone number (10-15 digits).");
         return;
       }

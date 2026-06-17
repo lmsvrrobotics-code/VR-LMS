@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import vrRoboticsLogo from "@/assets/vrrobotics_logo.png";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -151,7 +152,7 @@ const Navbar = () => {
             aria-label="VR Robotics Academy — Home"
           >
             <img
-              src="https://res.cloudinary.com/dicfqwlfq/image/upload/v1764505259/VR_Robotics_Logo_upscaled_1_rrrrn8.png"
+              src={vrRoboticsLogo}
               alt="VR Robotics Academy"
               className="h-16 lg:h-[72px] w-auto object-contain"
               loading="eager"
