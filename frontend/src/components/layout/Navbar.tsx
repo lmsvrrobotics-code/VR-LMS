@@ -189,17 +189,15 @@ const Navbar = () => {
                     className="min-w-[220px]"
                   >
                     {(dropdownItems[item.name] ?? []).map((sub) => (
-                      <DropdownMenuItem asChild key={sub.name}>
-                        <Link
-                          to={sub.href.split("#")[0]}
-                          onClick={(e) => {
-                            scrollToTopWithOffset(e, sub.href);
-                            setOpenDropdown(null); // CLOSE DROPDOWN
-                          }}
-                          className="cursor-pointer"
-                        >
-                          {sub.name}
-                        </Link>
+                      <DropdownMenuItem
+                        key={sub.name}
+                        onClick={() => {
+                          navigate(sub.href.split("#")[0]);
+                          setOpenDropdown(null);
+                          setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 100);
+                        }}
+                      >
+                        {sub.name}
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuContent>
