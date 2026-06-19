@@ -32,7 +32,8 @@ ALTER TABLE lms_admin.programs ADD COLUMN IF NOT EXISTS batch_ids JSONB;
 
 -- ---- lms_admin.users / slots / resources ----------------------------------
 ALTER TABLE lms_admin.users ADD COLUMN IF NOT EXISTS is_root_admin BOOLEAN NOT NULL DEFAULT FALSE;
-ALTER TABLE lms_admin.slots ADD COLUMN IF NOT EXISTS meeting_link TEXT;
+-- NOTE: slots table is created at boot-time by Model.sync(), not in migrations,
+-- so we don't ALTER it here. The boot code (server.js) handles column ensures.
 ALTER TABLE lms_admin.resources ADD COLUMN IF NOT EXISTS resource_category_id INTEGER;
 ALTER TABLE lms_admin.resources ADD COLUMN IF NOT EXISTS course_id INTEGER;
 ALTER TABLE lms_admin.resources ADD COLUMN IF NOT EXISTS section VARCHAR(255);
