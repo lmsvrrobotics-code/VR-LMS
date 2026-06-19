@@ -2,10 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { storeCourse } from '../../api/course';
-import { listTeachers } from '../../api/teacher';
 import { listLanguages } from '../../api/language';
-import CollegeMultiSelect from '../../components/CollegeMultiSelect';
-import BatchMultiSelect from '../../components/BatchMultiSelect';
 
 const STATUS_RADIOS = [
     { id: 'status_active', value: 'active', label: 'Active', color: 'text-success', ring: 'focus:ring-success' },
@@ -48,14 +45,6 @@ export default function CourseCreate() {
         // Class-access range (Class 1–12). Empty = open to all classes.
         class_from: '',
         class_to: '',
-        // Course-details stats card: admin-set Score "out of" + Lectures label.
-        score_max: '',
-        lectures_label: '',
-        // Free public sample/teaser course (marketing) — '1' on, '0' off.
-        is_marketing: '0',
-        // Show on the public Home "Our Courses" preview — '1' on, '0' off.
-        // Off by default: push to Home only once the course build is done.
-        show_on_home: '0',
         is_paid: '1',
         price: '',
         discount_flag: '',
@@ -67,46 +56,14 @@ export default function CourseCreate() {
         // it doesn't. Drives the "Certificate" badge on the public course
         // details page. Defaults to '1' to preserve the prior always-on UX.
         has_certificate: '1',
-        // Auth-service userId of the teacher selected from the dropdown.
-        // Sent as teachers[] on submit so the backend stores it in
-        // course.teacher_ids (CourseService.create line 181).
-        teacher_id: '',
     });
     const [thumbnail, setThumbnail] = useState(null);
     const [submitting, setSubmitting] = useState(false);
-    // Colleges this course is offered at. Mirrors the Category form's
-    // mandatory-multi-select pattern so cross-entity college filtering is
-    // consistent. Sent as clgIds[] on submit.
-    const [selectedClgIds, setSelectedClgIds] = useState([]);
-    // Batch IDs scoped to selectedClgIds. BatchMultiSelect prunes invalid
-    // entries when colleges change, so we don't have to here.
-    const [selectedBatchIds, setSelectedBatchIds] = useState([]);
-
-    // Teacher dropdown source — admin teachers API
-    // (GET `${API_BASE}/api/admin/manage/teachers). Loaded once on mount; small list`
-    // so we pull everything in a single request.
-    const [teachers, setTeachers] = useState([]);
-    const [teachersLoading, setTeachersLoading] = useState(true);
-    const [teachersError, setTeachersError] = useState(null);
 
     const [languages, setLanguages] = useState([]);
     const [languagesLoading, setLanguagesLoading] = useState(true);
 
-    const loadTeachers = () => {
-        setTeachersLoading(true);
-        setTeachersError(null);
-        listTeachers({ per_page: 1000 })
-            .then((r) => setTeachers(r?.teachers || []))
-            .catch((e) =>
-                setTeachersError(
-                    e?.response?.data?.error || e?.message || 'Failed to load teachers'
-                )
-            )
-            .finally(() => setTeachersLoading(false));
-    };
-
     useEffect(() => {
-        loadTeachers();
         setLanguagesLoading(true);
         listLanguages()
             .then((r) => setLanguages(r?.languages || []))
@@ -118,21 +75,11 @@ export default function CourseCreate() {
 
     const submit = async (e) => {
         e.preventDefault();
-        // Teacher + Schools are OPTIONAL at creation. A teacher (or several) is
-        // assigned later via Teacher Assignments; Schools only apply to B2B/
-        // school-delegated courses. A B2C paid course needs neither.
         setSubmitting(true);
         const fd = new FormData();
-        // teacher_id is the form-state key; we send it on the wire as
-        // teachers[] (CourseService expects body.teachers as an array
-        // and JSON-stringifies it into course.teacher_ids).
         Object.entries(form).forEach(([k, v]) => {
-            if (k === 'teacher_id') return;
             fd.append(k, v);
         });
-        if (form.teacher_id) fd.append('teachers[]', form.teacher_id);
-        selectedClgIds.forEach((id) => fd.append('clgIds[]', id));
-        selectedBatchIds.forEach((id) => fd.append('batchIds[]', id));
         if (thumbnail) fd.append('thumbnail', thumbnail);
 
         try {
@@ -320,142 +267,8 @@ export default function CourseCreate() {
                                 </select>
                             </div>
 
-                            {/* Course-details stats card: admin-set Score "out
-                                of" + Lectures label. Both optional. */}
-                            <div className="mb-3">
-                                <label className="ol-form-label" htmlFor="score_max">
-                                    Score (out of)
-                                </label>
-                                <input
-                                    id="score_max"
-                                    type="number"
-                                    min="0"
-                                    className="ol-form-control"
-                                    name="score_max"
-                                    value={form.score_max}
-                                    onChange={(e) => set('score_max', e.target.value)}
-                                    placeholder="e.g. 50"
-                                />
-                                <small className="text-gray text-[12px]">
-                                    Maximum points for the Score row on course-details. The student's earned points come from the course leaderboard (lessons + quizzes). Leave blank to hide the max.
-                                </small>
-                            </div>
 
-                            <div className="mb-3">
-                                <label className="ol-form-label" htmlFor="lectures_label">
-                                    Lectures
-                                </label>
-                                <input
-                                    id="lectures_label"
-                                    type="text"
-                                    className="ol-form-control"
-                                    name="lectures_label"
-                                    value={form.lectures_label}
-                                    onChange={(e) => set('lectures_label', e.target.value)}
-                                    placeholder="e.g. 2 Hours/ Week"
-                                />
-                                <small className="text-gray text-[12px]">
-                                    Free text shown on the "Lectures" row of the course-details stats card. Leave blank to show "—".
-                                </small>
-                            </div>
 
-                            <div className="mb-3">
-                                <label className="inline-flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={form.is_marketing === '1'}
-                                        onChange={(e) => set('is_marketing', e.target.checked ? '1' : '0')}
-                                        className="accent-skin w-4 h-4"
-                                    />
-                                    <span className="ol-form-label m-0">Marketing course (free sample)</span>
-                                </label>
-                                <small className="text-gray text-[12px] block">
-                                    A demo/teaser course (e.g. 2-3 sample videos) visible & fully playable to every registered student — bypasses payment and release-gating in the normal course player. Great for attracting new sign-ups.
-                                </small>
-                            </div>
-
-                            <div className="mb-3">
-                                <label className="inline-flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={form.show_on_home === '1'}
-                                        onChange={(e) => set('show_on_home', e.target.checked ? '1' : '0')}
-                                        className="accent-skin w-4 h-4"
-                                    />
-                                    <span className="ol-form-label m-0">Show on Home page</span>
-                                </label>
-                                <small className="text-gray text-[12px] block">
-                                    Publishes this course to the public Home "Our Courses" section. Leave OFF while the course is being built — the Home section stays hidden until at least one course is pushed here.
-                                </small>
-                            </div>
-
-                            {/* Teacher — sourced from the admin teacher API
-                                (auth-service users with role='teacher'). Required:
-                                a course must have an assigned teacher. Disabled
-                                while loading / on fetch error so the form can't be
-                                submitted with an invalid value. */}
-                            <div className="mb-3">
-                                <label className="ol-form-label" htmlFor="teacher_id">
-                                    Teacher <span className="text-gray text-[12px] font-normal">(optional — assign later in Teacher Assignments)</span>
-                                </label>
-                                <select
-                                    id="teacher_id"
-                                    className="ol-form-control"
-                                    name="teacher_id"
-                                    disabled={teachersLoading || !!teachersError}
-                                    value={form.teacher_id}
-                                    onChange={(e) => set('teacher_id', e.target.value)}
-                                >
-                                    <option value="">
-                                        {teachersLoading
-                                            ? 'Loading teachers…'
-                                            : teachersError
-                                                ? 'Failed to load teachers'
-                                                : teachers.length === 0
-                                                    ? 'No teachers available — add one first'
-                                                    : 'Select an teacher'}
-                                    </option>
-                                    {teachers.map((ins) => {
-                                        const label = ins.name || ins.email || ins.id;
-                                        const sub = ins.expertise ? ` — ${ins.expertise}` : '';
-                                        return (
-                                            <option key={ins.id} value={ins.id}>
-                                                {label}{sub}
-                                            </option>
-                                        );
-                                    })}
-                                </select>
-                                {teachersError && (
-                                    <div className="text-[13px] text-danger mt-1">
-                                        {teachersError}{' '}
-                                        <button
-                                            type="button"
-                                            onClick={loadTeachers}
-                                            className="text-skin underline ml-1"
-                                        >
-                                            Retry
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="mb-3">
-                                {/* Optional: only for school/batch-delegated courses.
-                                    A B2C paid course needs no school. */}
-                                <CollegeMultiSelect
-                                    label="Schools (optional)"
-                                    value={selectedClgIds}
-                                    onChange={setSelectedClgIds}
-                                />
-                            </div>
-
-                            <div className="mb-3">
-                                <BatchMultiSelect
-                                    clgIds={selectedClgIds}
-                                    value={selectedBatchIds}
-                                    onChange={setSelectedBatchIds}
-                                />
-                            </div>
 
                             <div className="mb-3">
                                 <label className="ol-form-label">

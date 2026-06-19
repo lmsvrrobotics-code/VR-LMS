@@ -266,6 +266,7 @@ function BookForm({ initial, onSubmit, submitLabel }) {
         title: initial?.title || '',
         subtitle: initial?.subtitle || '',
         description: initial?.description || '',
+        price: initial?.price ?? 0,
         buy_url: initial?.buy_url || '',
         sort_order: initial?.sort_order ?? 0,
         status: initial?.status === undefined ? '1' : String(initial.status),
@@ -290,7 +291,7 @@ function BookForm({ initial, onSubmit, submitLabel }) {
     return (
         <form onSubmit={submit} encType="multipart/form-data">
             <div className="mb-3">
-                <label className="ol-form-label">Title<span className="text-danger ms-1">*</span></label>
+                <label className="ol-form-label">Book Name<span className="text-danger ms-1">*</span></label>
                 <input className="ol-form-control" required value={form.title} onChange={(e) => set('title', e.target.value)} placeholder="e.g. Autonomous Robot with Arduino" />
             </div>
             <div className="mb-3">
@@ -299,12 +300,12 @@ function BookForm({ initial, onSubmit, submitLabel }) {
             </div>
             <div className="mb-3">
                 <label className="ol-form-label">Description</label>
-                <textarea className="ol-form-control" rows="3" value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="Short context about this book" />
+                <textarea className="ol-form-control" rows="3" value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="What's this book about?" />
             </div>
             <div className="mb-3 grid grid-cols-2 gap-3">
                 <div>
-                    <label className="ol-form-label">Order link</label>
-                    <input className="ol-form-control" value={form.buy_url} onChange={(e) => set('buy_url', e.target.value)} placeholder="Leave blank to use Contact page" />
+                    <label className="ol-form-label">Price (₹)</label>
+                    <input type="number" step="0.01" className="ol-form-control" value={form.price} onChange={(e) => set('price', e.target.value)} placeholder="e.g. 499" />
                 </div>
                 <div>
                     <label className="ol-form-label">Sort order</label>
@@ -312,10 +313,15 @@ function BookForm({ initial, onSubmit, submitLabel }) {
                 </div>
             </div>
             <div className="mb-3">
+                <label className="ol-form-label">Razorpay Order Link<span className="text-danger ms-1">*</span></label>
+                <input className="ol-form-control" required value={form.buy_url} onChange={(e) => set('buy_url', e.target.value)} placeholder="e.g. https://razorpay.com/l/abcd1234" />
+                <p className="text-[12px] text-gray mt-1">Paste your Razorpay payment link here</p>
+            </div>
+            <div className="mb-3">
                 <label className="ol-form-label">Status</label>
                 <select className="ol-form-control" value={form.status} onChange={(e) => set('status', e.target.value)}>
-                    <option value="1">Active (visible on site)</option>
-                    <option value="0">Hidden</option>
+                    <option value="1">Active (visible & sellable)</option>
+                    <option value="0">Hidden (draft)</option>
                 </select>
             </div>
             <div className="mb-3">

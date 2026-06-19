@@ -387,6 +387,18 @@ const eligibleStudents = async ({ clgId }) => {
     return { students: rows };
 };
 
+// Assign temporary teacher to a batch class
+const assignTemporaryTeacher = async (batchId, classId, temporaryTeacherId) => {
+    // TODO: Implement when BatchClass model is ready
+    return { message: 'Temporary teacher assigned (stub)' };
+};
+
+// Release a lesson to batch members
+const releaseLesson = async (batchId, lessonId, releasedBy) => {
+    // TODO: Implement when BatchLessonRelease model is ready
+    return { message: 'Lesson released to batch (stub)' };
+};
+
 module.exports = {
     list,
     listByColleges,
@@ -397,4 +409,6 @@ module.exports = {
     addMembers,
     removeMember,
     eligibleStudents,
+    assignTemporaryTeacher,
+    releaseLesson,
 };

@@ -10,7 +10,6 @@ export default function BatchForm({ onCreated, clgId }) {
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState('');
     const [isActive, setIsActive] = useState(true);
     const [selectedIds, setSelectedIds] = useState([]);
     const [submitting, setSubmitting] = useState(false);
@@ -54,7 +53,6 @@ export default function BatchForm({ onCreated, clgId }) {
         setName('');
         setDescription('');
         setStartDate('');
-        setEndDate('');
         setIsActive(true);
         setSelectedIds([]);
         setSearch('');
@@ -65,16 +63,12 @@ export default function BatchForm({ onCreated, clgId }) {
         e.preventDefault();
         setError('');
         if (!name.trim()) return setError('Batch name is required');
-        if (startDate && endDate && startDate > endDate) {
-            return setError('End date must be after the start date');
-        }
         setSubmitting(true);
         try {
             await createBatch({
                 name: name.trim(),
                 description: description.trim() || null,
                 start_date: startDate || null,
-                end_date: endDate || null,
                 is_active: isActive,
                 userIds: selectedIds,
             }, clgId);
@@ -148,29 +142,16 @@ export default function BatchForm({ onCreated, clgId }) {
                         />
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-[13px] font-semibold text-dark mb-1">
-                                Start Date
-                            </label>
-                            <input
-                                type="date"
-                                className="ol-form-control w-full"
-                                value={startDate}
-                                onChange={(e) => setStartDate(e.target.value)}
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-[13px] font-semibold text-dark mb-1">
-                                End Date
-                            </label>
-                            <input
-                                type="date"
-                                className="ol-form-control w-full"
-                                value={endDate}
-                                onChange={(e) => setEndDate(e.target.value)}
-                            />
-                        </div>
+                    <div>
+                        <label className="block text-[13px] font-semibold text-dark mb-1">
+                            Start Date
+                        </label>
+                        <input
+                            type="date"
+                            className="ol-form-control w-full"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                        />
                     </div>
 
                     <div>

@@ -505,13 +505,6 @@ const Home = () => {
                 <div className="p-5 flex flex-col flex-1">
                   <h3 className="font-semibold text-lg mb-1">{m.name}</h3>
                   <p className="text-muted-foreground text-sm leading-relaxed flex-1">{m.desc}</p>
-                  <button
-                    type="button"
-                    onClick={() => setDemoOpen(true)}
-                    className="mt-4 inline-flex items-center gap-1 text-primary font-semibold text-sm hover:gap-2 transition-all self-start"
-                  >
-                    Book Demo <ArrowRight className="w-4 h-4" />
-                  </button>
                 </div>
               </div>
             ))}
@@ -835,6 +828,7 @@ const Home = () => {
           </div>
         </section>
       )}
+
 
       {/* ───────────── Gallery preview ───────────── */}
       {gallery.length > 0 && (

@@ -6,9 +6,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { updateProfile, changePassword } from "@/api/authApi";
 import { uploadStudentPhoto } from "@/api/leadApi";
 import { toast } from "react-toastify";
-// The teacher's assigned courses + lesson-release UI (same component the admin
-// shell uses; it auto-detects the teacher role → shows release, no create form).
-import TeachingAssignmentsIndex from "@/admin/pages/teaching/Index";
+// REMOVED: TeachingAssignmentsIndex (teaching assignment feature removed)
+// Replaced by Batch Management System
 import ScheduleCalendar, { type ScheduleEvent } from "@/components/schedule/ScheduleCalendar";
 import FeedbackFormsView from "@/components/teacher/FeedbackFormsView";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
@@ -1418,8 +1417,11 @@ const TeacherDashboard = () => {
         ) : active === "Demos" ? (
           <DemosView teacherId={user?.userId} />
         ) : active === "My Courses" ? (
-          // admin-theme wrapper so the shared component's ol-* styles apply here
-          <div className="admin-theme"><TeachingAssignmentsIndex /></div>
+          // Teaching assignment feature removed - replaced by Batch Management System
+          <div className="p-6 text-center text-gray-500">
+            <p>This feature is being transitioned to the new Batch Management System.</p>
+            <p className="text-sm mt-2">Please contact admin for course assignments.</p>
+          </div>
         ) : active === "Classes" ? (
           <ClassesView teacherId={user?.userId} />
         ) : active === "Calendar" ? (

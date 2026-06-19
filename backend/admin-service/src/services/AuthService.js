@@ -4,6 +4,7 @@ const { QueryTypes } = require('sequelize');
 const env = require('../config/env');
 const authDb = require('../config/authDatabase');
 const userRepo = require('../repositories/UserRepository');
+const { User } = require('../models');
 const { HttpError } = require('../middlewares/error');
 
 // Block login when the admin's college has been revoked from Manage Schools
@@ -41,7 +42,7 @@ const sanitize = (u) => {
 let cachedRootId = null;
 const getRootId = async () => {
     if (cachedRootId !== null) return cachedRootId;
-    cachedRootId = await userRepo.findRootAdminId();
+    cachedRootId = await userRepo.findRootAdminId(); // returns the id (integer)
     return cachedRootId;
 };
 
@@ -95,7 +96,8 @@ const login = async ({ email, password }) => {
 };
 
 const me = async (userId) => {
-    const user = await userRepo.findById(userId);
+    // userId is the 'id' field (integer) from the JWT
+    const user = await User.findOne({ where: { id: userId } });
     if (!user) throw new HttpError(404, 'User not found');
     const rootId = await getRootId();
     return { ...sanitize(user), is_root_admin: user.id === rootId || user.is_root_admin === true };

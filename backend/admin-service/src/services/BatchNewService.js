@@ -3,33 +3,29 @@ const { HttpError } = require('../middlewares/error');
 const { Op } = require('sequelize');
 
 // Generate batch ID: CourseName_DDMMYY_Count
-// Example: Scratch_160625_01, Scratch_160625_02, etc.
 const generateBatchId = async (courseId) => {
     const course = await Course.findByPk(courseId, { attributes: ['title'] });
     if (!course) throw new HttpError(404, 'Course not found');
 
-    // Extract course name (first 10 chars, uppercase, alphanumeric only)
     const courseName = String(course.title || 'Course')
         .substring(0, 15)
         .replace(/[^a-zA-Z0-9]/g, '')
         .toUpperCase();
 
-    // Today's date: DDMMYY
     const now = new Date();
     const dd = String(now.getDate()).padStart(2, '0');
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const yy = String(now.getFullYear()).slice(-2);
     const dateStr = `${dd}${mm}${yy}`;
 
-    // Find highest count for this course today
     const existingBatches = await Batch.findAll({
-        where: { batch_id: { [Op.like]: `${courseName}_${dateStr}_%` } },
-        attributes: ['batch_id'],
+        where: { unique_id: { [Op.like]: `${courseName}_${dateStr}_%` } },
+        attributes: ['unique_id'],
         raw: true,
     });
 
     const counts = existingBatches.map((b) => {
-        const match = b.batch_id.match(/_(\d+)$/);
+        const match = b.unique_id.match(/_(\d+)$/);
         return match ? parseInt(match[1], 10) : 0;
     });
 
@@ -39,35 +35,32 @@ const generateBatchId = async (courseId) => {
     return `${courseName}_${dateStr}_${countStr}`;
 };
 
-// Create a new batch with course, teacher, and initial students
-const createBatch = async ({ courseId, teacherId, studentIds = [], description = null }) => {
+// Create batch: 1 course + 1 teacher + many students
+const createBatch = async ({ courseId, teacherId, studentIds = [] }) => {
     if (!courseId || !teacherId) {
         throw new HttpError(422, 'Course ID and Teacher ID are required');
     }
 
     const batchId = await generateBatchId(courseId);
 
-    // Create the batch
     const batch = await Batch.create({
-        batch_id: batchId,
+        unique_id: batchId,
         course_id: courseId,
-        teacher_id: teacherId,
-        description,
+        primary_teacher_id: teacherId,
+        display_name: batchId,
+        status: 'active',
     });
 
     // Add students if provided
     if (Array.isArray(studentIds) && studentIds.length > 0) {
         for (let i = 0; i < studentIds.length; i++) {
-            const uid = studentIds[i];
-            // Student unique ID: will need user info to generate properly
-            // For now, use a placeholder
+            const userId = studentIds[i];
             const studentId = `Student_${batchId}_${String(i + 1).padStart(3, '0')}`;
 
             await BatchMember.create({
-                batch_id: batch.id,
-                user_id: uid,
+                batch_id: batch.unique_id,
+                user_id: userId,
                 student_id: studentId,
-                joined_date: new Date(),
                 status: 'active',
             });
         }
@@ -79,13 +72,13 @@ const createBatch = async ({ courseId, teacherId, studentIds = [], description =
     };
 };
 
-// Get batch with all members
+// Get batch with members and course
 const getBatchWithMembers = async (batchId) => {
     const batch = await Batch.findOne({
-        where: { batch_id: batchId },
+        where: { unique_id: batchId },
         include: [
             { model: BatchMember, as: 'members', where: { status: 'active' } },
-            { model: Course, as: 'course', attributes: ['id', 'title'] },
+            { model: Course, as: 'course' },
         ],
     });
 
@@ -95,90 +88,93 @@ const getBatchWithMembers = async (batchId) => {
 };
 
 // Add student to batch
-const addStudentToBatch = async (batchId, userId, studentId) => {
-    const batch = await Batch.findOne({ where: { batch_id: batchId } });
+const addStudentToBatch = async (batchId, userId) => {
+    const batch = await Batch.findOne({ where: { unique_id: batchId } });
     if (!batch) throw new HttpError(404, 'Batch not found');
 
-    // Check if already in batch
     const existing = await BatchMember.findOne({
-        where: { batch_id: batch.id, user_id: userId, status: 'active' },
+        where: { batch_id: batchId, user_id: userId, status: 'active' },
     });
 
     if (existing) {
         throw new HttpError(422, 'Student already in this batch');
     }
 
+    // Generate student ID
+    const memberCount = await BatchMember.count({
+        where: { batch_id: batchId },
+    });
+
+    const studentId = `Student_${batchId}_${String(memberCount + 1).padStart(3, '0')}`;
+
     const member = await BatchMember.create({
-        batch_id: batch.id,
+        batch_id: batchId,
         user_id: userId,
         student_id: studentId,
-        joined_date: new Date(),
         status: 'active',
     });
 
     return { success: 'Student added to batch', member };
 };
 
-// Remove student from batch (soft delete - keep data)
+// Remove student from batch (soft delete)
 const removeStudentFromBatch = async (batchId, userId) => {
-    const batch = await Batch.findOne({ where: { batch_id: batchId } });
+    const batch = await Batch.findOne({ where: { unique_id: batchId } });
     if (!batch) throw new HttpError(404, 'Batch not found');
 
     const member = await BatchMember.findOne({
-        where: { batch_id: batch.id, user_id: userId, status: 'active' },
+        where: { batch_id: batchId, user_id: userId, status: 'active' },
     });
 
     if (!member) throw new HttpError(404, 'Student not in this batch');
 
-    // Soft delete: mark as removed, keep data
-    await member.update({
-        removed_date: new Date(),
-        status: 'removed',
-    });
+    await member.update({ status: 'removed' });
 
-    return { success: 'Student removed from batch (data preserved)' };
+    return { success: 'Student removed from batch' };
 };
 
-// Assign temporary teacher to a class
-const assignTempTeacherToClass = async (batchClassId, tempTeacherId) => {
-    const batchClass = await BatchClass.findByPk(batchClassId);
-    if (!batchClass) throw new HttpError(404, 'Class not found');
+// Change batch teacher
+const updateBatchTeacher = async (batchId, teacherId) => {
+    const batch = await Batch.findOne({ where: { unique_id: batchId } });
+    if (!batch) throw new HttpError(404, 'Batch not found');
 
-    await batchClass.update({ temp_teacher_id: tempTeacherId });
+    await batch.update({ primary_teacher_id: teacherId });
 
-    return { success: 'Temporary teacher assigned', batchClass };
+    return { success: 'Teacher updated for batch', batch };
 };
 
 // Create class for batch
 const createClassForBatch = async (batchId, { classDate, topic = null, notes = null, meetingLink = null }) => {
-    const batch = await Batch.findOne({ where: { batch_id: batchId } });
+    const batch = await Batch.findOne({ where: { unique_id: batchId } });
     if (!batch) throw new HttpError(404, 'Batch not found');
 
     const batchClass = await BatchClass.create({
-        batch_id: batch.id,
-        teacher_id: batch.teacher_id,
-        class_date: classDate,
-        topic,
-        notes,
-        meeting_link: meetingLink,
+        batch_id: batchId,
+        primary_teacher_id: batch.primary_teacher_id,
+        class_date_time: classDate,
+        title: topic,
+        description: notes,
         status: 'scheduled',
     });
 
     return { success: 'Class created', class: batchClass };
 };
 
-// List all batches
+// List all batches with filters
 const listBatches = async ({ page = 1, courseId = null, teacherId = null } = {}) => {
     const limit = 20;
     const offset = (Number(page) - 1) * limit;
     const where = {};
 
     if (courseId) where.course_id = Number(courseId);
-    if (teacherId) where.teacher_id = String(teacherId);
+    if (teacherId) where.primary_teacher_id = String(teacherId);
 
     const { count, rows } = await Batch.findAndCountAll({
         where,
-        include: [{ model: BatchMember, as: 'members', separate: true }],
+        include: [
+            { model: BatchMember, as: 'members', separate: true },
+            { model: Course, as: 'course', attributes: ['id', 'title'] },
+        ],
         limit,
         offset,
         order: [['created_at', 'DESC']],
@@ -203,7 +199,7 @@ module.exports = {
     getBatchWithMembers,
     addStudentToBatch,
     removeStudentFromBatch,
-    assignTempTeacherToClass,
+    updateBatchTeacher,
     createClassForBatch,
     listBatches,
     generateBatchId,

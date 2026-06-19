@@ -11,15 +11,6 @@ import {
 import { getStoredUser } from '../../api/auth';
 import { useCollege } from '@/hooks/useCollege';
 
-// VITE_ADMIN_API_URL points at admin-service (port 4000) — fine for asset
-// URLs (uploaded images) but wrong for "view course on frontend" links,
-// which need to land on the public site.
-const PUBLIC_BASE = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:5000';
-// Where the student-facing site lives. Override with VITE_FRONTEND_URL in
-// production. Empty string is treated as same-origin (useful when admin and
-// public site are served from the same domain).
-const FRONTEND_BASE = import.meta.env.VITE_FRONTEND_URL ?? 'http://localhost:8080';
-
 const STATUS_BADGE = {
     active: 'bg-green-100 text-green-700',
     inactive: 'bg-gray-200 text-gray-700',
@@ -665,18 +656,6 @@ function OptionsDropdown({ course, onDuplicate, onDelete, onMakeActive, onMakeIn
 
     const close = () => setOpen(false);
 
-    // Frontend URLs must match the routes defined in the public-site App.tsx:
-    //   /courses/programs/course-details          -> CourseDetailsPage (reads ?slug & ?program_id)
-    //   /courses/programs/course-details/play/:slug -> CoursePlayer
-    // Old paths (/course/:slug, /play-course/:slug) don't exist there.
-    // program_id is optional — the details page falls back to enrolment lookup
-    // if it's missing, so we only append it when the row carries one.
-    const detailsParams = new URLSearchParams({ slug: course.slug });
-    const programId = course.program_id ?? course.programId ?? null;
-    if (programId) detailsParams.set('program_id', String(programId));
-    const frontendUrl = `${FRONTEND_BASE}/courses/programs/course-details?${detailsParams.toString()}`;
-    const playerUrl = `${FRONTEND_BASE}/courses/programs/course-details/play/${course.slug}`;
-
     return (
         <div className="relative inline-block">
             <button
@@ -697,28 +676,6 @@ function OptionsDropdown({ course, onDuplicate, onDelete, onMakeActive, onMakeIn
                     className="z-[1000] min-w-[220px] bg-white border border-border rounded-ol-8 shadow-lg py-1 text-[13px]"
                 >
                     <li>
-                        <a
-                            className="block px-3 py-2 text-dark hover:bg-gray-50"
-                            href={frontendUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={close}
-                        >
-                            View Course On Frontend
-                        </a>
-                    </li>
-                    <li>
-                        <a
-                            className="block px-3 py-2 text-dark hover:bg-gray-50"
-                            href={playerUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={close}
-                        >
-                            Go To Course Playing Page
-                        </a>
-                    </li>
-                    <li>
                         <Link
                             className="block px-3 py-2 text-dark hover:bg-gray-50"
                             to={`/admin/course/edit/${course.id}`}
@@ -736,6 +693,17 @@ function OptionsDropdown({ course, onDuplicate, onDelete, onMakeActive, onMakeIn
                             Duplicate Course
                         </button>
                     </li>
+                    {!course.is_approved && (
+                        <li>
+                            <button
+                                type="button"
+                                className="w-full text-left block px-3 py-2 text-green-700 font-semibold hover:bg-green-50"
+                                onClick={() => { close(); onApprove(); }}
+                            >
+                                ✓ Approve Course
+                            </button>
+                        </li>
+                    )}
                     {course.status === 'active' ? (
                         <li>
                             <button

@@ -40,3 +40,19 @@ export const listBatchesByColleges = (clgIds) =>
     api
         .get('/batches/by-colleges', { params: { clgIds: (clgIds || []).join(',') } })
         .then((r) => r.data);
+
+// Add course to batch
+export const addBatchCourse = (id, courseId, clgId) =>
+    api.post(`/batches/${id}/courses`, { courseId }, cfg(clgId)).then((r) => r.data);
+
+// Remove course from batch
+export const removeBatchCourse = (id, courseId, clgId) =>
+    api.delete(`/batches/${id}/courses/${courseId}`, cfg(clgId)).then((r) => r.data);
+
+// Add teacher to batch
+export const addBatchTeacher = (id, teacherId, clgId) =>
+    api.post(`/batches/${id}/teachers`, { teacherId }, cfg(clgId)).then((r) => r.data);
+
+// Remove teacher from batch
+export const removeBatchTeacher = (id, teacherId, clgId) =>
+    api.delete(`/batches/${id}/teachers/${teacherId}`, cfg(clgId)).then((r) => r.data);

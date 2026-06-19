@@ -1,38 +1,45 @@
 const service = require('../services/BatchNewService');
 const { asyncHandler, HttpError } = require('../middlewares/error');
 
-// Create a new batch with course, teacher, and students
+// Create batch (with 1 course, 1 teacher, many students)
 exports.createBatch = asyncHandler(async (req, res) => {
-    const { courseId, teacherId, studentIds = [], description } = req.body;
-    res.json(await service.createBatch({ courseId, teacherId, studentIds, description }));
+    const { courseId, teacherId, studentIds = [] } = req.body;
+    res.json(await service.createBatch({ courseId, teacherId, studentIds }));
 });
 
-// Get batch with all members
+// Get batch details with members and course
 exports.getBatch = asyncHandler(async (req, res) => {
     const batch = await service.getBatchWithMembers(req.params.batchId);
     res.json({ batch: batch.toJSON() });
 });
 
-// List all batches with optional filters
+// List all batches
 exports.listBatches = asyncHandler(async (req, res) => {
     const { page, courseId, teacherId } = req.query;
     res.json(await service.listBatches({ page, courseId, teacherId }));
 });
 
-// Add a student to an existing batch
+// Add student to batch
 exports.addStudent = asyncHandler(async (req, res) => {
-    const { userId, studentId } = req.body;
+    const { userId } = req.body;
     const { batchId } = req.params;
-    res.json(await service.addStudentToBatch(batchId, userId, studentId));
+    res.json(await service.addStudentToBatch(batchId, userId));
 });
 
-// Remove a student from a batch (soft delete)
+// Remove student from batch
 exports.removeStudent = asyncHandler(async (req, res) => {
     const { batchId, userId } = req.params;
     res.json(await service.removeStudentFromBatch(batchId, userId));
 });
 
-// Create a class for a batch
+// Update batch teacher
+exports.updateTeacher = asyncHandler(async (req, res) => {
+    const { teacherId } = req.body;
+    const { batchId } = req.params;
+    res.json(await service.updateBatchTeacher(batchId, teacherId));
+});
+
+// Create class for batch
 exports.createClass = asyncHandler(async (req, res) => {
     const { batchId } = req.params;
     const { classDate, topic, notes, meetingLink } = req.body;
@@ -42,11 +49,4 @@ exports.createClass = asyncHandler(async (req, res) => {
         notes,
         meetingLink,
     }));
-});
-
-// Assign temporary teacher to a class
-exports.assignTempTeacher = asyncHandler(async (req, res) => {
-    const { batchClassId } = req.params;
-    const { tempTeacherId } = req.body;
-    res.json(await service.assignTempTeacherToClass(batchClassId, tempTeacherId));
 });

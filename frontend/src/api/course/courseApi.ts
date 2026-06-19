@@ -13,11 +13,12 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const id = localStorage.getItem("userId");
   if (id) config.headers.set("x-user-id", String(id));
-  // Send the auth token too so the server can VERIFY who the student is.
+  // Send the auth token too so the server can VERIFY who the student/admin is.
   // Release-gating (teacher-delegated courses) trusts the verified token id,
   // not the spoofable x-user-id header — without this, delegated lessons stay
   // locked for the logged-in student.
-  const token = localStorage.getItem("accessToken");
+  // Check for both accessToken (student/teacher) and admin_token (admin preview).
+  const token = localStorage.getItem("accessToken") || localStorage.getItem("admin_token");
   if (token) config.headers.set("Authorization", `Bearer ${token}`);
   return config;
 });
@@ -52,8 +53,16 @@ export const getLeaderboard = (courseId?: number) =>
       me: { user_id: string; name: string; completed: number; quiz_points: number; score: number; rank: number } | null;
     });
 
-export const getCourseDetails = (slug: string) =>
-  api.get(`/course/${slug}`).then((r) => r.data);
+// Public course details — NO auth required. If server returns 401,
+// it's a bug (endpoint should be public). Don't redirect on 401 here.
+export const getCourseDetails = (slug: string) => {
+  // Create a public-only axios instance that ignores auth tokens
+  const publicApi = axios.create({
+    baseURL: `${BASE}/api/public`,
+    timeout: 15000,
+  });
+  return publicApi.get(`/course/${slug}`).then((r) => r.data);
+};
 
 export const getPlayer = (slug: string, lessonId?: number | string) =>
   api.get(`/player/${slug}`, { params: { lesson_id: lessonId } }).then((r) => r.data);

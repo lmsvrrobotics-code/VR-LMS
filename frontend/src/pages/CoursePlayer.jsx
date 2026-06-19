@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
 import { getPlayer, completeLesson, updateLessonProgress } from '@/api/course/courseApi';
 import { safeObj } from '@/components/course/format';
 import Navbar from '@/components/layout/Navbar';
@@ -10,8 +11,12 @@ import PlayerTabs from '@/components/course/player/PlayerTabs';
 const PLAY_BASE = '/courses/programs/course-details/play';
 
 export default function CoursePlayer() {
+    const { user } = useAuth();
     const { slug, lessonId } = useParams();
     const navigate = useNavigate();
+
+    // Admin preview mode - admins see all lessons without locks
+    const isAdmin = user?.role === 'admin' || user?.role === 'root';
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -89,7 +94,8 @@ export default function CoursePlayer() {
         if (lesson.lesson_type === 'quiz') return;
         // A locked lesson (drip not yet reached, or teacher hasn't released it)
         // must NOT auto-complete just by sitting on the page.
-        const lockedNow = (data.locked_lesson_ids || []).includes(lesson.id);
+        // Admin preview mode bypasses locks — admins can see and interact with all lessons.
+        const lockedNow = !isAdmin && (data.locked_lesson_ids || []).includes(lesson.id);
         if (lockedNow) return;
 
         playbackTimeRef.current = 0;
@@ -219,6 +225,7 @@ export default function CoursePlayer() {
                                 lockedIds={lockedIds}
                                 progress={progress}
                                 completedCount={completed_lesson_count}
+                                isAdmin={isAdmin}
                             />
                         </div>
 

@@ -237,7 +237,7 @@ const list = async (query = {}) => {
     const page = Number(query.page) || 1;
     const offset = (page - 1) * limit;
 
-    const where = { status: 'active' };
+    const where = { status: 'active', is_approved: true };
 
     // Course grouping is now exclusively by college. `clgId` (the logged-in
     // student's college) is required: without it we return an empty list
@@ -859,7 +859,7 @@ const catalog = async ({ limit = 12, classFrom = null, classTo = null, track = n
     const ct = Number(classTo);
     const hasFilter = present(classFrom) && present(classTo) && Number.isFinite(cf) && Number.isFinite(ct);
 
-    const where = { status: 'active' };
+    const where = { status: 'active', is_approved: true };
     // Home preview: only courses the admin explicitly pushed to the Home page
     // ("Show on Home" toggle). The full /courses/browse catalog and the navbar
     // dropdown filters are NOT affected — they keep listing every active course.

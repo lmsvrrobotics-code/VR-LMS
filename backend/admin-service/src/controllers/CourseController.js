@@ -56,6 +56,6 @@ exports.approval = asyncHandler(async (req, res) => {
             id: req.params.id,
             subject: req.body.subject,
             message: req.body.message,
-        })
+        }, req.authUser?.userId)
     );
 });

@@ -97,7 +97,7 @@ const Navbar = () => {
     { name: "Home", href: "/", icon: Home },
     { name: "About", href: "/about", icon: Users },
     { name: "Courses", href: "/vr-courses", icon: BookOpen, dropdown: true },
-    { name: "Books", href: "/books", icon: Book, dropdown: true },
+    { name: "Books & Kits", href: "/books", icon: Book, dropdown: true },
     { name: "Gallery", href: "/gallery", icon: ImageIcon },
     { name: "Locations", href: "/locations", icon: MapPin },
     { name: "Contact Us", href: "/contact", icon: Mail },
@@ -115,16 +115,16 @@ const Navbar = () => {
     { name: "All Courses", href: "/courses/browse" },
   ];
 
-  // Sub-items under the "Books" dropdown — includes Books and Kits sections.
+  // Sub-items under the "Books & Kits" dropdown — navigate to sections.
   const bookItems = [
-    { name: "All Books", href: "/books" },
-    { name: "Robotics Kits", href: "/books?tab=kits" },
+    { name: "All Books", href: "/books#books-section" },
+    { name: "Robotics Kits", href: "/books#kits-section" },
   ];
 
   // Map each dropdown nav item to its sub-items.
   const dropdownItems: Record<string, { name: string; href: string }[]> = {
     Courses: courseItems,
-    Books: bookItems,
+    "Books & Kits": bookItems,
   };
 
   // On admin pages the layout uses a fixed-width sidebar (w-[260px]).
@@ -141,9 +141,9 @@ const Navbar = () => {
     : "shrink-0 flex items-center pr-6 lg:pr-10 mr-2";
 
   return (
-    <nav className="sticky top-0 z-50 bg-card/80 backdrop-blur-md border-b border-border/50">
-      <div className={isAdmin ? "" : "container-ngo"}>
-        <div className={wrapperCls}>
+    <nav className="sticky top-0 z-50 bg-card/80 backdrop-blur-md border-b border-border/50 overflow-visible">
+      <div className={`${isAdmin ? "" : "container-ngo"} overflow-visible`}>
+        <div className={`${wrapperCls} overflow-visible`}>
           {/* Logo — big brand image (the highlight of the navbar). */}
           <Link
             to="/"
@@ -160,48 +160,61 @@ const Navbar = () => {
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden lg:flex items-center space-x-8">
+          <div className="hidden lg:flex items-center space-x-8 overflow-visible">
             {navigation.map((item) =>
               item.dropdown ? (
-                <DropdownMenu
+                <div
                   key={item.name}
-                  open={openDropdown === item.name}
-                  onOpenChange={(o) => setOpenDropdown(o ? item.name : null)}
+                  className="relative pt-2"
+                  onMouseEnter={() => setOpenDropdown(item.name)}
+                  onMouseLeave={() => setOpenDropdown(null)}
                 >
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      onMouseEnter={() => setOpenDropdown(item.name)}
-                      className={`flex items-center space-x-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                        isActive(item.href)
-                          ? "text-primary bg-primary/10"
-                          : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-                      }`}
-                    >
-                      <item.icon className="w-4 h-4" />
-                      <span>{item.name}</span>
-                      <ChevronDown className="w-4 h-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="start"
-                    sideOffset={8}
-                    className="min-w-[220px]"
+                  <button
+                    type="button"
+                    onClick={() => setOpenDropdown(openDropdown === item.name ? null : item.name)}
+                    className={`flex items-center space-x-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                      openDropdown === item.name
+                        ? "text-primary bg-primary/10"
+                        : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                    }`}
                   >
-                    {(dropdownItems[item.name] ?? []).map((sub) => (
-                      <DropdownMenuItem
-                        key={sub.name}
-                        onClick={() => {
-                          navigate(sub.href.split("#")[0]);
-                          setOpenDropdown(null);
-                          setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 100);
-                        }}
-                      >
-                        {sub.name}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                    <item.icon className="w-4 h-4" />
+                    <span>{item.name}</span>
+                    <ChevronDown className={`w-4 h-4 transition-transform ${openDropdown === item.name ? "rotate-180" : ""}`} />
+                  </button>
+
+                  {openDropdown === item.name && (
+                    <div className="absolute left-0 top-full w-64 bg-white rounded-lg shadow-2xl border border-border/50 z-[9999] overflow-hidden pointer-events-auto">
+                      {(dropdownItems[item.name] ?? []).map((sub, idx) => (
+                        <button
+                          key={sub.name}
+                          type="button"
+                          onClick={() => {
+                            navigate(sub.href.split("#")[0]);
+                            setOpenDropdown(null);
+                            setTimeout(() => {
+                              const [pathname, hash] = String(sub.href).split("#");
+                              if (hash) {
+                                const el = document.getElementById(hash);
+                                if (el) {
+                                  const navbarHeight = 80;
+                                  const y = el.getBoundingClientRect().top + window.pageYOffset - navbarHeight;
+                                  window.scrollTo({ top: y, behavior: "smooth" });
+                                }
+                              }
+                            }, 100);
+                          }}
+                          className={`w-full text-left px-4 py-3 text-sm font-medium text-foreground transition-all duration-150 ease-out hover:bg-primary hover:text-white focus:bg-primary focus:text-white focus:outline-none cursor-pointer ${
+                            idx === 0 ? "pt-3" : ""
+                          } ${idx === (dropdownItems[item.name] ?? []).length - 1 ? "pb-3" : ""}`}
+                          onMouseMove={() => {}}
+                        >
+                          {sub.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ) : (
                 <Link
                   key={item.name}

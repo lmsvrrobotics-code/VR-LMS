@@ -21,8 +21,10 @@ const Forum = require('./Forum')(sequelize);
 const ForumReport = require('./ForumReport')(sequelize);
 const Program = require('./Program')(sequelize);
 const Batch = require('./Batch')(sequelize);
+const BatchCourse = require('./BatchCourse')(sequelize);
 const BatchMember = require('./BatchMember')(sequelize);
 const BatchClass = require('./BatchClass')(sequelize);
+const BatchLessonRelease = require('./BatchLessonRelease')(sequelize);
 const EmailJob = require('./EmailJob')(sequelize);
 const Gallery = require('./Gallery')(sequelize);
 const Book = require('./Book')(sequelize);
@@ -40,11 +42,6 @@ const ResourceCategory = require('./ResourceCategory')(sequelize);
 const TeacherFreeSchedule = require('./TeacherFreeSchedule')(sequelize);
 const StudentRecord = require('./StudentRecord')(sequelize);
 const StudentLearning = require('./StudentLearning')(sequelize);
-// Teacher-delegation layer: admin assigns a course+roster to a teacher
-// (TeachingAssignment + AssignmentMember), teacher drips lessons (LessonRelease).
-const TeachingAssignment = require('./TeachingAssignment')(sequelize);
-const AssignmentMember = require('./AssignmentMember')(sequelize);
-const LessonRelease = require('./LessonRelease')(sequelize);
 // Leads — public signups awaiting admin follow-up / conversion to students.
 const Lead = require('./Lead')(sequelize);
 // Payments — Razorpay course purchases (paywall source of truth).
@@ -68,7 +65,7 @@ const AssignmentSubmission = require('./AssignmentSubmission')(sequelize);
 // Notifications for students and teachers
 const Notification = require('./Notification')(sequelize);
 
-const models = { Category, Course, SeoField, User, Lesson, Section, Question, QuizSubmission, Setting, LiveClass, Coupon, Certificate, PreAssessmentResult, UserProgress, LessonCompletion, LessonWatchProgress, Language, Forum, ForumReport, Program, Batch, BatchMember, BatchClass, EmailJob, Gallery, Book, Kit, BookOrder, KitOrder, Slot, SlotEnrollment, Demo, ClassSession, Project, Testimonial, Resource, ResourceCategory, TeacherFreeSchedule, StudentRecord, StudentLearning, TeachingAssignment, AssignmentMember, LessonRelease, Lead, Payment, AppSetting, Location, TeacherFeedback, DemoVideo, FeedbackForm, FeedbackResponse, ContactMessage, Assignment, AssignmentSubmission, Notification };
+const models = { Category, Course, SeoField, User, Lesson, Section, Question, QuizSubmission, Setting, LiveClass, Coupon, Certificate, PreAssessmentResult, UserProgress, LessonCompletion, LessonWatchProgress, Language, Forum, ForumReport, Program, Batch, BatchCourse, BatchMember, BatchClass, BatchLessonRelease, EmailJob, Gallery, Book, Kit, BookOrder, KitOrder, Slot, SlotEnrollment, Demo, ClassSession, Project, Testimonial, Resource, ResourceCategory, TeacherFreeSchedule, StudentRecord, StudentLearning, Lead, Payment, AppSetting, Location, TeacherFeedback, DemoVideo, FeedbackForm, FeedbackResponse, ContactMessage, Assignment, AssignmentSubmission, Notification };
 Object.values(models).forEach((m) => m.associate && m.associate(models));
 
 module.exports = { sequelize, ...models };

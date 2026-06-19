@@ -91,7 +91,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     let cancelled = false;
 
     const hasAuthToken =
-      typeof window !== "undefined" && Boolean(localStorage.getItem("accessToken"));
+      typeof window !== "undefined" && (Boolean(localStorage.getItem("accessToken")) || Boolean(localStorage.getItem("admin_token")));
     const hasAdminToken = Boolean(getAdminToken());
 
     // Logged-out visitors have no tokens — skip the profile probe entirely.

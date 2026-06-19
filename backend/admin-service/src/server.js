@@ -34,7 +34,6 @@ const classRoutes = require('./routes/class.routes');
 const projectRoutes = require('./routes/project.routes');
 const testimonialRoutes = require('./routes/testimonial.routes');
 const resourceRoutes = require('./routes/resource.routes');
-const programRoutes = require('./routes/program.routes');
 const certificateRoutes = require('./routes/certificate.routes');
 const collegeDashboardRoutes = require('./routes/collegeDashboard.routes');
 const batchRoutes = require('./routes/batch.routes');
@@ -42,7 +41,6 @@ const batchNewRoutes = require('./routes/batchNew.routes');
 const collegeRoutes = require('./routes/college.routes');
 const studentRoutes = require('./routes/student.routes');
 const teacherRoutes = require('./routes/teacher.routes');
-const teachingRoutes = require('./routes/teaching.routes');
 const leadRoutes = require('./routes/lead.routes');
 const preAssessmentRoutes = require('./routes/preassessment.routes');
 const languageRoutes = require('./routes/language.routes');
@@ -806,46 +804,14 @@ app.get('/api/public/leaderboard', ...attachVerifiedId, async (req, res) => {
     }
 });
 
-const teachingDelegationSvc = require('./services/TeachingAssignmentService');
-
-// Teacher's roster students across all their assignments — powers the teacher
-// dashboard "Students" tab (by-teacher, same public pattern as classes/slots).
-app.get('/api/public/teaching/students-by-teacher/:teacherId', ...requireTeacherSelfOrAdmin, async (req, res) => {
-    try {
-        res.set('Cache-Control', 'no-store');
-        res.json({ students: await teachingDelegationSvc.studentsByTeacher(req.params.teacherId) });
-    } catch (e) {
-        console.warn('[students-by-teacher] failed:', e.message);
-        return res.status(500).json({ error: 'Could not load students' });
-    }
-});
-
-// One student's per-course progress across the teacher's courses — powers the
-// "Course progress" section in the teacher dashboard Students detail panel.
-// Guarded on :teacherId (verified teacher self / admin).
-app.get('/api/public/teaching/student-progress/:teacherId/:studentId', ...requireTeacherSelfOrAdmin, async (req, res) => {
-    try {
-        res.set('Cache-Control', 'no-store');
-        res.json(await teachingDelegationSvc.studentProgressForTeacher(req.params.teacherId, req.params.studentId));
-    } catch (e) {
-        console.warn('[student-progress] failed:', e.message);
-        return res.status(500).json({ error: 'Could not load student progress' });
-    }
-});
-
-app.get('/api/public/my-lessons', optionalAuth, async (req, res) => {
-    try {
-        res.set('Cache-Control', 'no-store');
-        // Trust ONLY the verified JWT id for gating — never the client header.
-        // No token on a delegated course → nothing is visible (locked).
-        const verifiedId = req.authUser?.userId || null;
-        const gate = await teachingDelegationSvc.visibleLessonIdsForStudent(req.query.course_id, verifiedId);
-        return res.json({ delegated: gate.enforced, lesson_ids: [...gate.lessonIds] });
-    } catch (e) {
-        console.warn('[public/my-lessons] failed:', e.message);
-        return res.status(500).json({ error: 'Could not load released lessons' });
-    }
-});
+// REMOVED: Old teaching assignment feature
+// Replaced by new Batch Management System
+// The following endpoints were removed:
+//   - GET /api/public/teaching/students-by-teacher/:teacherId
+//   - GET /api/public/teaching/student-progress/:teacherId/:studentId
+//   - GET /api/public/my-lessons
+// These should be reimplemented using the batch system instead
+// See BATCH_MANAGEMENT_SYSTEM.md for migration guide
 
 // Persist one quiz attempt so re-entering the lesson restores the last score
 // and remaining-retry state. user_id comes from the x-user-id header (set by
@@ -978,12 +944,6 @@ app.use('/api/admin', auth, forumRoutes.admin);
 app.use('/api/public', forumRoutes.public);
 
 // Teacher-delegation: admin assigns course+roster, teacher drips lessons.
-// adminOrTeacher (not adminOnly) so a teacher reaches their own assignments /
-// release endpoints. The service further restricts admin-only actions (create
-// assignment, edit roster). MUST sit before the adminOnly block below so a
-// teacher request isn't short-circuited by an earlier adminOnly mount.
-app.use('/api/admin', adminOrTeacher, teachingRoutes);
-
 // Student performance feedback — teacher-authored post-class evaluations
 // (StudentRecord kind='evaluation'), surfaced to the admin as stats + a
 // per-student feedback browser. Read-only + admin-gated.
@@ -1083,7 +1043,6 @@ app.use('/api/admin', adminOnly, classRoutes);
 app.use('/api/admin', adminOnly, projectRoutes);
 app.use('/api/admin', adminOnly, testimonialRoutes);
 app.use('/api/admin', adminOnly, resourceRoutes);
-app.use('/api/admin', adminOnly, programRoutes);
 app.use('/api/admin', adminOnly, certificateRoutes);
 app.use('/api/admin', adminOnly, collegeDashboardRoutes);
 app.use('/api/admin', adminOnly, batchRoutes);
@@ -1388,14 +1347,22 @@ sequelize.authenticate()
             await BatchMember.sync();
             await BatchClass.sync();
             // Add batch_id column if missing (idempotent)
-            await sequelize.query('ALTER TABLE batches ADD COLUMN IF NOT EXISTS batch_id VARCHAR(64) UNIQUE');
-            await sequelize.query('ALTER TABLE batches ADD COLUMN IF NOT EXISTS course_id INTEGER');
-            await sequelize.query('ALTER TABLE batches ADD COLUMN IF NOT EXISTS teacher_id VARCHAR(64)');
-            // Add student_id and other fields to batch_members if missing
-            await sequelize.query('ALTER TABLE batch_members ADD COLUMN IF NOT EXISTS student_id VARCHAR(128) UNIQUE');
-            await sequelize.query('ALTER TABLE batch_members ADD COLUMN IF NOT EXISTS joined_date DATE');
-            await sequelize.query('ALTER TABLE batch_members ADD COLUMN IF NOT EXISTS removed_date DATE');
-            await sequelize.query('ALTER TABLE batch_members ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT \'active\'');
+            await sequelize.query('ALTER TABLE lms_admin.batches ADD COLUMN IF NOT EXISTS batch_id VARCHAR(64) UNIQUE');
+            await sequelize.query('ALTER TABLE lms_admin.batches ADD COLUMN IF NOT EXISTS course_id INTEGER');
+            await sequelize.query('ALTER TABLE lms_admin.batches ADD COLUMN IF NOT EXISTS teacher_id VARCHAR(64)');
+            // Create indexes for batches
+            await sequelize.query('CREATE INDEX IF NOT EXISTS idx_batches_course_id ON lms_admin.batches(course_id)');
+            await sequelize.query('CREATE INDEX IF NOT EXISTS idx_batches_teacher_id ON lms_admin.batches(teacher_id)');
+            // Add user_id, student_id and other fields to batch_members if missing
+            await sequelize.query('ALTER TABLE lms_admin.batch_members ADD COLUMN IF NOT EXISTS user_id VARCHAR(255)');
+            await sequelize.query('ALTER TABLE lms_admin.batch_members ADD COLUMN IF NOT EXISTS student_id VARCHAR(128)');
+            await sequelize.query('ALTER TABLE lms_admin.batch_members ADD COLUMN IF NOT EXISTS joined_date DATE');
+            await sequelize.query('ALTER TABLE lms_admin.batch_members ADD COLUMN IF NOT EXISTS removed_date DATE');
+            await sequelize.query('ALTER TABLE lms_admin.batch_members ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT \'active\'');
+            // Create indexes for batch_members
+            await sequelize.query('CREATE INDEX IF NOT EXISTS idx_batch_members_user_id ON lms_admin.batch_members(user_id)');
+            await sequelize.query('CREATE INDEX IF NOT EXISTS idx_batch_members_status ON lms_admin.batch_members(status)');
+            console.log('[batches] schema ensured ✓');
         } catch (e) {
             console.warn('[batches] table sync failed:', e.message);
         }
@@ -1510,35 +1477,9 @@ sequelize.authenticate()
             console.warn('[resources] table sync failed:', e.message);
         }
 
-        // Teacher-delegation tables: admin assigns a course+roster to a teacher
-        // (teaching_assignments + assignment_members) and the teacher releases
-        // lessons day by day (lesson_releases). Same idempotent .sync() pattern
-        // — created on first run, no manual migration. Additive: does NOT touch
-        // courses.teacherId or any existing access logic.
-        // Idempotent create-if-missing. Plain .sync() on an EXISTING table still
-        // re-issues CREATE INDEX for the model-defined indexes (no IF NOT EXISTS)
-        // → "relation ... already exists" on every boot. And because these three
-        // shared one try/catch, that throw previously aborted the block and
-        // skipped LessonRelease.sync() (latent: a partial DB would never get the
-        // lesson_releases table). Guard each on an information_schema existence
-        // check so we only create what's actually missing.
-        try {
-            const { QueryTypes } = require('sequelize');
-            const { TeachingAssignment, AssignmentMember, LessonRelease } = require('./models');
-            const exists = async (table) => {
-                const rows = await sequelize.query(
-                    `SELECT 1 FROM information_schema.tables
-                       WHERE table_schema = 'lms_admin' AND table_name = :table LIMIT 1`,
-                    { replacements: { table }, type: QueryTypes.SELECT }
-                );
-                return rows.length > 0;
-            };
-            if (!(await exists('teaching_assignments'))) await TeachingAssignment.sync();
-            if (!(await exists('assignment_members')))   await AssignmentMember.sync();
-            if (!(await exists('lesson_releases')))       await LessonRelease.sync();
-        } catch (e) {
-            console.warn('[teacher-delegation] table sync failed:', e.message);
-        }
+        // REMOVED: Old teacher-delegation tables (teaching_assignments, assignment_members, lesson_releases)
+        // Replaced by the new Batch Management System
+        // Tables dropped by migration 12_remove_teaching_assignment_feature.sql
 
         // Dynamic feedback forms (teacher-authored) + their one-time responses.
         // feedback_responses carries a unique (form_id, student_id) index, so —

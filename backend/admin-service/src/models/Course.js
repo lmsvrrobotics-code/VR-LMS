@@ -6,7 +6,7 @@ module.exports = (sequelize) => {
         title: { type: DataTypes.STRING(255), allowNull: false },
         slug: { type: DataTypes.STRING(255) },
         short_description: { type: DataTypes.TEXT },
-        user_id: { type: DataTypes.INTEGER },
+        user_id: { type: DataTypes.STRING(100) },
         category_id: { type: DataTypes.INTEGER },
         course_type: { type: DataTypes.STRING(50), defaultValue: 'general' },
         status: { type: DataTypes.STRING(50), defaultValue: 'active' },
@@ -69,6 +69,11 @@ module.exports = (sequelize) => {
         // course is grouped in one Bunny collection — matches the per-course
         // layout we use for R2 assets (courses/<id>/...).
         bunny_collection_id: { type: DataTypes.STRING(64), allowNull: true },
+        // Course approval workflow — courses start unapproved and must be
+        // explicitly approved by an admin before displaying on the frontend.
+        is_approved: { type: DataTypes.BOOLEAN, defaultValue: false },
+        approved_at: { type: DataTypes.DATE, allowNull: true },
+        approved_by: { type: DataTypes.STRING(100), allowNull: true },
     }, { tableName: 'courses', timestamps: true, createdAt: 'created_at', updatedAt: 'updated_at' });
 
     Course.associate = (models) => {

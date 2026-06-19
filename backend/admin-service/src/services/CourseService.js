@@ -19,9 +19,7 @@ const { HttpError } = require('../middlewares/error');
 const teachingSvc = require('./TeachingAssignmentService');
 
 // Best-effort: every course with a teacher gets a TeachingAssignment so the
-// teacher has a surface to release lessons through (release-gating is universal
-// — see TeachingAssignmentService.visibleLessonIdsForStudent). Never let this
-// fail the course save; the backfill script can repair any miss.
+// teacher has a surface to release lessons through (release-gating is universal).
 async function ensureCourseAssignments(courseId, teachers, clgIds) {
     try {
         const clgId = Array.isArray(clgIds) ? clgIds[0] : null;
@@ -426,7 +424,14 @@ const createMeta = async () => {
 
 const create = async ({ body, files = {}, userId }) => {
     const b = body;
-    const finalUserId = userId || b.user_id || 1;
+
+    // userId is the integer 'id' from JWT. Convert to unique_id (string) for FK.
+    let finalUserId = b.user_id;
+    if (userId) {
+        const user = await User.findOne({ where: { id: userId } });
+        if (user) finalUserId = user.unique_id;
+    }
+    if (!finalUserId) finalUserId = '1'; // Fallback (may not exist)
 
     const data = {
         title: b.title,
@@ -781,8 +786,14 @@ const duplicate = async ({ id, userId, role }) => {
     return { success: 'Course duplicated.', course_id: created.id };
 };
 
-const approval = async ({ id, subject, message }) => {
-    await courseRepo.updateById(id, { status: 'active' });
+const approval = async ({ id, subject, message }, approvedByUserId) => {
+    const now = new Date();
+    await courseRepo.updateById(id, {
+        status: 'active',
+        is_approved: true,
+        approved_at: now,
+        approved_by: approvedByUserId || null,
+    });
     const course = await courseRepo.findByIdWithCreator(id);
     try {
         if (course?.creator?.email) {

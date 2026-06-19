@@ -1,83 +1,56 @@
-const service = require('../services/BatchService');
-const { asyncHandler, HttpError } = require('../middlewares/error');
+const batchService = require('../services/BatchService');
+const { asyncHandler } = require('../middlewares/error');
 
-// Resolve which college's batches a request operates on.
-//   - School admin: always their own JWT college_id (can't touch others).
-//   - Root/super admin: has no college, so they target one explicitly via the
-//     ?clgId= query param (the root Batches page sends it on every call). This
-//     lets the root admin manage any college's batches with the same feature.
-const requireCollege = (req) => {
-    if (req.user?.is_root_admin || req.user?.role === 'root') {
-        const cid = req.query.clgId || req.query.clg_id;
-        if (!cid) {
-            throw new HttpError(400, 'Select a school to manage its batches');
-        }
-        return String(cid);
-    }
-    const collegeId = req.user?.college_id || req.user?.collegeId;
-    if (!collegeId) {
-        throw new HttpError(403, 'Batches are only available to school admins');
-    }
-    return collegeId;
-};
-
-exports.list = asyncHandler(async (req, res) => {
-    const clgId = requireCollege(req);
-    res.json(await service.list({ clgId }));
-});
-
-exports.show = asyncHandler(async (req, res) => {
-    const clgId = requireCollege(req);
-    res.json(await service.get({ clgId, id: Number(req.params.id) }));
+exports.index = asyncHandler(async (req, res) => {
+  const result = await batchService.list(req.query);
+  res.json(result);
 });
 
 exports.store = asyncHandler(async (req, res) => {
-    const clgId = requireCollege(req);
-    res.json(await service.create({ clgId, body: req.body }));
+  const batch = await batchService.create(req.body);
+  res.status(201).json({ message: 'Batch created successfully', batch });
+});
+
+exports.show = asyncHandler(async (req, res) => {
+  const batch = await batchService.get(req.params.id);
+  res.json({ batch });
 });
 
 exports.update = asyncHandler(async (req, res) => {
-    const clgId = requireCollege(req);
-    res.json(await service.update({ clgId, id: Number(req.params.id), body: req.body }));
+  const batch = await batchService.update(req.params.id, req.body);
+  res.json({ message: 'Batch updated successfully', batch });
 });
 
 exports.delete = asyncHandler(async (req, res) => {
-    const clgId = requireCollege(req);
-    res.json(await service.remove({ clgId, id: Number(req.params.id) }));
+  await batchService.remove(req.params.id);
+  res.json({ message: 'Batch deleted successfully' });
 });
 
-exports.addMembers = asyncHandler(async (req, res) => {
-    const clgId = requireCollege(req);
-    res.json(await service.addMembers({ clgId, id: Number(req.params.id), body: req.body }));
+exports.addStudents = asyncHandler(async (req, res) => {
+  const { student_ids } = req.body;
+  const batch = await batchService.addMembers(req.params.id, student_ids);
+  res.json({ message: 'Students added to batch', batch });
 });
 
-exports.removeMember = asyncHandler(async (req, res) => {
-    const clgId = requireCollege(req);
-    res.json(await service.removeMember({
-        clgId,
-        id: Number(req.params.id),
-        userId: req.params.userId,
-    }));
+exports.removeStudent = asyncHandler(async (req, res) => {
+  const batch = await batchService.removeMember(req.params.id, req.params.studentId);
+  res.json({ message: 'Student removed from batch', batch });
 });
 
-// Bypasses requireCollege — root admin needs this to populate the batches
-// dropdown on Add Course where they pick the colleges themselves. Scopes by
-// the ?clgIds= query param (comma-separated or repeated).
-exports.byColleges = asyncHandler(async (req, res) => {
-    const raw = req.query.clgIds ?? req.query['clgIds[]'] ?? '';
-    const ids = Array.isArray(raw)
-        ? raw
-        : String(raw).split(',').map((s) => s.trim()).filter(Boolean);
-    // Root admin always also sees "independent" batches (built from individual
-    // students, not tied to any school) so they can be targeted from the
-    // course/program batch dropdowns. School admins stay scoped to their own.
-    const isRoot = req.user?.is_root_admin || req.user?.role === 'root'
-        || !(req.user?.college_id || req.user?.collegeId);
-    if (isRoot && !ids.includes('independent')) ids.push('independent');
-    res.json(await service.listByColleges({ clgIds: ids }));
+exports.listEligibleStudents = asyncHandler(async (req, res) => {
+  const { clgId } = req.query;
+  const result = await batchService.eligibleStudents(clgId);
+  res.json(result);
 });
 
-exports.eligibleStudents = asyncHandler(async (req, res) => {
-    const clgId = requireCollege(req);
-    res.json(await service.eligibleStudents({ clgId }));
+exports.assignTemporaryTeacher = asyncHandler(async (req, res) => {
+  const { temporary_teacher_id } = req.body;
+  const result = await batchService.assignTemporaryTeacher(req.params.id, req.params.classId, temporary_teacher_id);
+  res.json({ message: 'Temporary teacher assigned', result });
+});
+
+exports.releaseLesson = asyncHandler(async (req, res) => {
+  const { lesson_id } = req.body;
+  const result = await batchService.releaseLesson(req.params.id, lesson_id, req.user.id);
+  res.json({ message: 'Lesson released to batch', result });
 });

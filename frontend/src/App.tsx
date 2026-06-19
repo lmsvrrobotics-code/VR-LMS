@@ -29,8 +29,11 @@ import ProgramsPage from "./pages/Programspage";
 import ProgramSelect from "./pages/ProgramSelect";
 import CoursePrograms from "./pages/CoursePrograms";
 import ProgramsForCourse from "./pages/ProgramsForCourse";
-import CourseDetailsPage from "./pages/CourseDetailsPage";
+import CourseDetails from "./pages/CourseDetails";
 import CoursePlayer from "./pages/CoursePlayer";
+import CourseDetailsBatch from "./pages/student/CourseDetails";
+import CoursePlayerTemplate from "./pages/student/CoursePlayerTemplate";
+import StudentDashboardBatch from "./pages/student/StudentDashboard";
 import ZoomLiveClassRoom from "./zoom-live-class/player/ZoomLiveClassRoom";
 import ProgramDetailPage from "./pages/ProgramDetailPage";
 import PreAssessmentPage from "./pages/PreAssessmentPage";
@@ -56,6 +59,7 @@ import AdminCouponIndex from "./admin/pages/coupon/Index";
 import AdminGalleryIndex from "./admin/pages/gallery/Index";
 import AdminDemoVideosIndex from "./admin/pages/demo-videos/Index";
 import AdminLocationsIndex from "./admin/pages/locations/Index";
+import AdminKitsIndex from "./admin/pages/kits/Index";
 import AdminBooksIndex from "./admin/pages/books/Index";
 import AdminSlotsIndex from "./admin/pages/slots/Index";
 import AdminDemosIndex from "./admin/pages/demos/Index";
@@ -66,7 +70,6 @@ import AdminFeedbackFormsIndex from "./admin/pages/feedback-forms/Index";
 import AdminMessagesIndex from "./admin/pages/messages/Index";
 import AdminSettingsIndex from "./admin/pages/settings/Index";
 import AdminBatchesIndex from "./admin/pages/batch/Index";
-import AdminTeachingIndex from "./admin/pages/teaching/Index";
 import AdminLeadsIndex from "./admin/pages/leads/Index";
 import AdminProjectsIndex from "./admin/pages/projects/Index";
 import AdminTestimonialsIndex from "./admin/pages/testimonials/Index";
@@ -140,16 +143,10 @@ const App = () => (
             <Route path="/signup" element={<Navigate to="/auth?mode=signup" replace />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
 
-            {/* Protected Routes */}
+            {/* Protected Routes - redirect /dashboard to /courses/browse */}
             <Route
               path="/dashboard"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <StudentDashboard />
-                  </Layout>
-                </ProtectedRoute>
-              }
+              element={<Navigate to="/courses/browse" replace />}
             />
             <Route
               path="/admindashboard"
@@ -161,6 +158,33 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+
+            {/* Student Batch System Routes */}
+            <Route
+              path="/student/dashboard"
+              element={
+                <ProtectedRoute>
+                  <Layout><StudentDashboardBatch /></Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/courses/:courseId"
+              element={
+                <ProtectedRoute>
+                  <Layout><CourseDetailsBatch /></Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/courses/play/:courseId/:lessonId"
+              element={
+                <ProtectedRoute>
+                  <Layout><CoursePlayerTemplate /></Layout>
+                </ProtectedRoute>
+              }
+            />
+
             {/* Admin section — talks to admin-service (port 4000).
                 Teachers also use these pages with a restricted sidebar
                 and per-page access controls enforced in AdminLayout. */}
@@ -183,6 +207,7 @@ const App = () => (
               <Route path="gallery" element={<AdminGalleryIndex />} />
               <Route path="demo-videos" element={<AdminDemoVideosIndex />} />
               <Route path="locations" element={<AdminLocationsIndex />} />
+              <Route path="kits" element={<AdminKitsIndex />} />
               <Route path="books" element={<AdminBooksIndex />} />
               <Route path="calendar" element={<AdminCalendarIndex />} />
               <Route path="feedback" element={<AdminFeedbackIndex />} />
@@ -193,7 +218,6 @@ const App = () => (
               <Route path="demos" element={<AdminDemosIndex />} />
               <Route path="classes" element={<AdminClassesIndex />} />
               <Route path="batches" element={<AdminBatchesIndex />} />
-              <Route path="teaching" element={<AdminTeachingIndex />} />
               <Route path="leads" element={<AdminLeadsIndex />} />
               <Route path="projects" element={<AdminProjectsIndex />} />
               <Route path="testimonials" element={<AdminTestimonialsIndex />} />
@@ -303,11 +327,7 @@ const App = () => (
             />
             <Route
               path="/courses/programs/course-details"
-              element={
-                <ProtectedRoute>
-                  <CourseDetailsPage />
-                </ProtectedRoute>
-              }
+              element={<CourseDetails />}
             />
             <Route
               path="/courses/programs/course-details/play/:slug"

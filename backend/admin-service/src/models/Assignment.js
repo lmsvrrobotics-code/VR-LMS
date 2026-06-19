@@ -21,13 +21,15 @@ module.exports = (sequelize) => {
     });
 
     Assignment.associate = (models) => {
-        // batch_id is VARCHAR pointing to Batch.batch_id (unique string ID, not PK)
-        // This requires targetKey to specify the alternate column
-        Assignment.belongsTo(models.Batch, {
-            foreignKey: 'batch_id',
-            targetKey: 'batch_id',
-            as: 'batch'
-        });
+        // batch_id is VARCHAR pointing to Batch.unique_id (primary key)
+        // Batch model temporarily disabled - will be re-enabled when batch tables are created
+        if (models.Batch) {
+            Assignment.belongsTo(models.Batch, {
+                foreignKey: 'batch_id',
+                targetKey: 'unique_id',
+                as: 'batch'
+            });
+        }
         Assignment.belongsTo(models.Course, {
             foreignKey: 'course_id',
             as: 'course'

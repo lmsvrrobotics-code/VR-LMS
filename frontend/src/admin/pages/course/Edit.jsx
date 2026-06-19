@@ -123,36 +123,38 @@ export default function CourseEdit() {
             <div className="ol-card">
                 <div className="ol-card-body p-20px">
                     <div className="flex flex-wrap md:flex-nowrap gap-3">
-                        {/* Sidebar — pill-style nav with react-icons. Active tab is
-                            filled green with a white icon tile; inactive rows have a
-                            pale icon tile and gray label, separated by hair-line dividers. */}
-                        <div className="w-full md:w-[230px] flex-shrink-0">
-                            <div className="flex flex-col gap-1">
-                                {visibleTabs.map((t, idx) => {
-                                    const active = tab === t.key;
-                                    const { Icon } = t;
-                                    return (
-                                        <button
-                                            key={t.key}
-                                            type="button"
-                                            onClick={() => setTab(t.key)}
-                                            className={`flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-colors ${
-                                                active
-                                                    ? 'bg-skin text-white font-semibold shadow-sm'
-                                                    : 'text-gray-600 hover:bg-gray-50'
-                                            } ${idx !== 0 && !active ? 'border-t border-gray-100' : ''}`}
-                                        >
-                                            <span
-                                                className={`w-6 h-6 flex items-center justify-center text-[18px] ${
-                                                    active ? 'text-white' : 'text-gray-400'
+                        {/* Sidebar Navigation */}
+                        <div className="w-full md:w-[260px] flex-shrink-0">
+                            <div className="bg-gradient-to-b from-slate-50 to-white rounded-2xl border border-gray-200 p-3 shadow-sm">
+                                <div className="flex flex-col gap-2">
+                                    {visibleTabs.map((t, idx) => {
+                                        const active = tab === t.key;
+                                        const { Icon } = t;
+                                        return (
+                                            <button
+                                                key={t.key}
+                                                type="button"
+                                                onClick={() => setTab(t.key)}
+                                                className={`flex items-center gap-3 px-4 py-3 rounded-lg text-left font-medium transition-all ${
+                                                    active
+                                                        ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50'
+                                                        : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
                                                 }`}
                                             >
-                                                <Icon />
-                                            </span>
-                                            <span className="text-[14px]">{t.label}</span>
-                                        </button>
-                                    );
-                                })}
+                                                <span
+                                                    className={`w-7 h-7 flex items-center justify-center text-[16px] flex-shrink-0 ${
+                                                        active
+                                                            ? 'text-white'
+                                                            : 'text-gray-500 group-hover:text-orange-500'
+                                                    }`}
+                                                >
+                                                    <Icon />
+                                                </span>
+                                                <span className="text-[13px] font-semibold whitespace-nowrap">{t.label}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
                             </div>
                         </div>
 

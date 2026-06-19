@@ -19,7 +19,7 @@ const isVideoType = (type) => VIDEO_TYPES.includes(type);
 
 const PLAY_BASE = '/courses/programs/course-details/play';
 
-export default function PlayerSidebar({ course, currentLessonId, completedIds, lockedIds, progress, completedCount }) {
+export default function PlayerSidebar({ course, currentLessonId, completedIds, lockedIds, progress, completedCount, isAdmin }) {
     const [openSections, setOpenSections] = useState(() => {
         const m = {};
         course.sections.forEach((s) => {
@@ -81,7 +81,8 @@ export default function PlayerSidebar({ course, currentLessonId, completedIds, l
                                     {section.lessons.map((lesson) => {
                                         const isCurrent = lesson.id === currentLessonId;
                                         const isCompleted = completedIds.includes(lesson.id);
-                                        const isLocked = lockedIds.includes(lesson.id);
+                                        // Admin preview mode bypasses locks — admins can see all lessons
+                                        const isLocked = !isAdmin && lockedIds.includes(lesson.id);
 
                                         // Active row is a full orange gradient pill with white
                                         // content + a soft glow; inactive rows are normal text with

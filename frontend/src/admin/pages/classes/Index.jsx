@@ -7,7 +7,6 @@ import { listClasses, storeClass, updateClass, deleteClass, toggleClassStatus, g
 import { listCourses } from '../../api/course';
 import { listTeachers } from '../../api/teacher';
 import { listStudents } from '../../api/student';
-import { listAssignments } from '../../api/teaching';
 import { MultiSelect, fmtDateTime, toLocalInput } from '../../components/scheduling';
 
 /**
@@ -118,47 +117,11 @@ function ClassForm({ initial, onSubmit, submitLabel, courses, teachers, students
 
     // Teachers assigned (via Teacher Assignments) to the selected course.
     // Changing the course resets the picked teachers so only assigned ones apply.
-    const [courseTeachers, setCourseTeachers] = useState(null);
-    const [ctLoading, setCtLoading] = useState(false);
     const onCourseChange = (v) => setForm((s) => ({ ...s, course_id: v, teacher_ids: [] }));
 
-    useEffect(() => {
-        let alive = true;
-        if (!form.course_id) { setCourseTeachers(null); return undefined; }
-        setCtLoading(true);
-        listAssignments(form.course_id)
-            .then((r) => {
-                if (!alive) return;
-                const seen = new Map();
-                (r?.assignments || []).forEach((a) => {
-                    const t = a.teacher; // string name OR object {id,name,email,phone}
-                    const id = String(a.teacher_id ?? (t && t.id) ?? '');
-                    const label = (t && typeof t === 'object' ? (t.name || t.email) : t) || `Teacher ${id}`;
-                    const sub = t && typeof t === 'object' ? t.email : undefined;
-                    if (id && !seen.has(id)) seen.set(id, { value: id, label: String(label), sub });
-                });
-                setCourseTeachers([...seen.values()]);
-            })
-            .catch(() => { if (alive) setCourseTeachers([]); })
-            .finally(() => { if (alive) setCtLoading(false); });
-        return () => { alive = false; };
-    }, [form.course_id]);
-
-    const teacherOptions = useMemo(() => {
-        if (!form.course_id || courseTeachers === null) return [];
-        const opts = [...courseTeachers];
-        form.teacher_ids.forEach((id) => {
-            if (!opts.some((o) => o.value === String(id))) {
-                const fromAll = teachers.find((t) => t.value === String(id));
-                if (fromAll) opts.push(fromAll);
-            }
-        });
-        return opts;
-    }, [form.course_id, form.teacher_ids, courseTeachers, teachers]);
-
-    const teacherHint = !form.course_id
-        ? 'Select a course to see its assigned teachers.'
-        : ctLoading ? 'Loading teachers…' : 'No teachers assigned to this course.';
+    // All teachers available (teaching assignment feature removed - no longer filtered by course)
+    const teacherOptions = useMemo(() => teachers, [teachers]);
+    const teacherHint = 'Select teacher(s) for this class';
 
     const submit = async (e) => {
         e.preventDefault(); setSubmitting(true);

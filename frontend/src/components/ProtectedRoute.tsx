@@ -48,6 +48,7 @@ const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
   // Hard gate: a protected page requires an actual auth token. Without one the
   // visitor is logged out — period. This must not depend on a backend probe
   // (a misbehaving/200 auth endpoint must never be able to leak gated content).
+  // Check for both accessToken (student/teacher) and admin_token (admin).
   const hasToken =
     typeof window !== "undefined" &&
     Boolean(localStorage.getItem("accessToken") || localStorage.getItem("admin_token"));
