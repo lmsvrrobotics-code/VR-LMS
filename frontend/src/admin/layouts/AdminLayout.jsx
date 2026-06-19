@@ -4,6 +4,7 @@ import Navbar from '@/components/layout/Navbar';
 import { logout as adminLogout, getStoredUser } from '@/admin/api/auth';
 import { getToken as getAdminToken } from '@/admin/api/client';
 import { leadStats } from '@/admin/api/leads';
+import { feedbackStats } from '@/admin/api/feedback';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { useDashboardTheme } from '@/hooks/useDashboardTheme';
 
@@ -59,9 +60,17 @@ const ICONS = {
 const MENU = [
     { key: 'dashboard', label: 'Dashboard', icon: ICONS.dashboard, to: '/admin/dashboard' },
     { key: 'calendar', label: 'Calendar', icon: ICONS.category, to: '/admin/calendar' },
-    { key: 'feedback', label: 'Student Feedback', icon: ICONS.feedback, to: '/admin/feedback' },
-    { key: 'feedback-forms', label: 'Feedback Forms', icon: ICONS.feedback, to: '/admin/feedback-forms' },
-    { key: 'messages', label: 'Messages', icon: ICONS.mail, to: '/admin/messages' },
+    // Feedback section — grouped: Student Feedback, Forms, and Messages
+    {
+        key: 'feedback-section',
+        label: 'Feedback',
+        icon: ICONS.feedback,
+        children: [
+            { label: 'Student Feedback', to: '/admin/feedback' },
+            { label: 'Feedback Forms', to: '/admin/feedback-forms' },
+            { label: 'Messages', to: '/admin/messages' },
+        ],
+    },
     // Category sidebar entry removed — course grouping is now driven by the
     // `clg_ids` JSON column written from the course form (CollegeMultiSelect).
     // The /admin/categories route still exists in App.tsx for direct access,
@@ -77,7 +86,7 @@ const MENU = [
         ],
     },
     // Marketing — one home for everything that drives the public front page
-    // (Books, Projects, Gallery, Testimonials). Previously these were four
+    // (Kits, Books, Projects, Gallery, Testimonials). Previously these were four
     // separate top-level groups, which made the sidebar long; grouping them
     // keeps navigation short. Routes are unchanged, so all deep links + the
     // per-page "Add" buttons keep working.
@@ -86,6 +95,7 @@ const MENU = [
         label: 'Marketing',
         icon: ICONS.program,
         children: [
+            { label: 'Kits', to: '/admin/kits' },
             { label: 'Books', to: '/admin/books' },
             { label: 'Projects', to: '/admin/projects' },
             { label: 'Gallery', to: '/admin/gallery' },
@@ -127,15 +137,7 @@ const MENU = [
     // Assessments menu hidden from the sidebar by request. The feature itself
     // (routes /admin/assessments, pages, and the assessment-service) is left
     // intact and reachable by URL — only the nav entry is removed.
-    {
-        key: 'program',
-        label: 'Programs',
-        icon: ICONS.program,
-        children: [
-            { label: 'Manage Programs', to: '/admin/programs' },
-            { label: 'Add New Program', to: '/admin/programs/create' },
-        ],
-    },
+    // Programs menu also hidden from sidebar by request.
     {
         key: 'certificate',
         label: 'Certificate',
@@ -198,18 +200,6 @@ const MENU = [
             { label: 'Add Batch', to: '/admin/batches?tab=add' },
         ],
     },
-    // Teacher-delegation: admin assigns a course + roster to a teacher; the
-    // teacher then releases lessons day by day. Visible to root admin here and
-    // surfaced to teachers via the teacher cohort filter below.
-    {
-        key: 'teaching',
-        label: 'Teacher Assignments',
-        icon: ICONS.users,
-        children: [
-            { label: 'Add Assignment', to: '/admin/teaching?tab=add' },
-            { label: 'Manage Assignments', to: '/admin/teaching' },
-        ],
-    },
     // Leads — new portal signups awaiting follow-up / conversion to students.
     {
         key: 'leads',
@@ -253,9 +243,6 @@ function isGroupActive(group, pathname, search = '') {
     }
     if (group.key === 'certificate') {
         return pathname.startsWith('/admin/certificate');
-    }
-    if (group.key === 'program') {
-        return pathname.startsWith('/admin/programs');
     }
     if (group.key === 'assessment') {
         return pathname.startsWith('/admin/assessments');
@@ -319,6 +306,22 @@ export default function AdminLayout() {
         window.addEventListener('leads:changed', onLeadsChanged);
         return () => { alive = false; clearInterval(id); window.removeEventListener('leads:changed', onLeadsChanged); };
     }, []);
+
+    // Live "new feedback" counter for the feedback section badge. Polls every 60s.
+    const [newFeedback, setNewFeedback] = useState(0);
+    useEffect(() => {
+        let alive = true;
+        const fetchCount = () => feedbackStats()
+            .then((s) => { if (alive) setNewFeedback(Number(s?.unreviewed) || 0); })
+            .catch(() => {});
+        fetchCount();
+        const id = setInterval(fetchCount, 60000);
+        window.addEventListener('feedback:changed', (e) => {
+            if (e?.detail && typeof e.detail.newCount === 'number') setNewFeedback(e.detail.newCount);
+            else fetchCount();
+        });
+        return () => { alive = false; clearInterval(id); };
+    }, []);
     // The admin JWT is the authoritative source for is_root_admin / role /
     // college_id — it's freshly signed at login, whereas the cached admin_user
     // can be stale or (in older sessions) missing is_root_admin entirely. Read
@@ -346,21 +349,12 @@ export default function AdminLayout() {
                 ...item,
                 children: (item.children || []).filter((c) => c.to === '/admin/courses'),
             }));
-        const teachingGroup = MENU
-            .filter((item) => item.key === 'teaching')
-            // Teachers release lessons; they don't CREATE assignments → drop the
-            // "Add Assignment" child, keep only the manage view.
-            .map((item) => ({
-                ...item,
-                label: 'My Classes',
-                children: (item.children || []).filter((c) => c.to === '/admin/teaching'),
-            }));
-        visibleMenu = [...courseGroup, ...teachingGroup];
+        visibleMenu = [...courseGroup];
     } else {
         visibleMenu = MENU;
     }
 
-    // Hard-stop direct URL access to routes outside an teacher's surface.
+    // Hard-stop direct URL access to routes outside a teacher's surface.
     // Teachers are allowed on the course list and the course-edit page.
     // Edit Course tabs are filtered inside Edit.jsx.
     const isTeacherPathAllowed = (p) =>
@@ -368,8 +362,6 @@ export default function AdminLayout() {
         p === '/admin/' ||
         p === '/admin/courses' ||
         p.startsWith('/admin/courses?') ||
-        p === '/admin/teaching' ||
-        p.startsWith('/admin/teaching?') ||
         /^\/admin\/course\/edit\/\d+$/.test(p);
 
     useEffect(() => {
@@ -593,6 +585,14 @@ export default function AdminLayout() {
                                                         title={`${newLeads} new lead${newLeads === 1 ? '' : 's'} awaiting follow-up`}
                                                     >
                                                         {newLeads > 99 ? '99+' : newLeads}
+                                                    </span>
+                                                )}
+                                                {item.key === 'feedback-section' && newFeedback > 0 && (
+                                                    <span
+                                                        className="ml-2 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-blue-500 text-white text-[11px] font-bold leading-none"
+                                                        title={`${newFeedback} new feedback item${newFeedback === 1 ? '' : 's'}`}
+                                                    >
+                                                        {newFeedback > 99 ? '99+' : newFeedback}
                                                     </span>
                                                 )}
                                                 <span className={`ml-auto transition-transform ${isOpen ? 'rotate-180' : ''}`}>

@@ -2,11 +2,11 @@ const { DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
     const User = sequelize.define('User', {
-        id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+        id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true, allowNull: false },
         role: { type: DataTypes.STRING(100), allowNull: false },
         // When true, this admin gets the FULL root-admin dashboard (granted by
         // an existing root admin via "Give Access"). The original seeded root
-        // (lowest id) is always treated as root regardless of this flag.
+        // is the first user created regardless of this flag.
         is_root_admin: { type: DataTypes.BOOLEAN, allowNull: true, defaultValue: false },
         email: { type: DataTypes.STRING(255), unique: true, allowNull: false },
         status: { type: DataTypes.INTEGER },
