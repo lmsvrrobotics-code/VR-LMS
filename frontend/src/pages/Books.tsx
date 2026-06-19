@@ -32,6 +32,7 @@ interface Kit {
   subtitle: string | null;
   description: string | null;
   cover_url: string | null;
+  buy_url: string | null;
   price: number;
 }
 
@@ -254,7 +255,7 @@ const Books = () => {
                   <Package className="w-8 h-8 text-primary" />
                 )}
               </div>
-              <h3 className="text-lg font-semibold">{emptyLabel} coming soon</h3>
+              <h3 className="text-lg font-semibold">{activeTab === "books" ? "Books" : "Kits"} coming soon</h3>
               <p className="text-muted-foreground text-sm mt-1">
                 New {activeTab === "books" ? "titles" : "kits"} from VR Robotics Academy will appear here.
               </p>
