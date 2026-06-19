@@ -57,6 +57,7 @@ const create = async ({ body, file }) => {
         subtitle: body.subtitle ? String(body.subtitle).trim() : null,
         description: body.description ? String(body.description).trim() : null,
         price: Number.isFinite(Number(body.price)) ? Number(body.price) : 0,
+        buy_url: body.buy_url ? String(body.buy_url).trim() : null,
         sort_order: Number.isFinite(Number(body.sort_order)) ? Number(body.sort_order) : 0,
         status: body.status === '0' || body.status === 0 ? 0 : 1,
         cover_url: null,
@@ -84,6 +85,9 @@ const update = async ({ id, body, file }) => {
         price: body.price !== undefined && Number.isFinite(Number(body.price))
             ? Number(body.price)
             : item.price,
+        buy_url: body.buy_url !== undefined
+            ? (body.buy_url ? String(body.buy_url).trim() : null)
+            : item.buy_url,
         sort_order: body.sort_order !== undefined && Number.isFinite(Number(body.sort_order))
             ? Number(body.sort_order)
             : item.sort_order,
