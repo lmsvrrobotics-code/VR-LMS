@@ -318,6 +318,34 @@ const isAuthEmailTaken = async (email) => {
     return rows.length > 0;
 };
 
+const generateUniqueStudentTeacherId = async (fullName) => {
+    try {
+        // Extract first name (first word only)
+        const firstName = (fullName || '').trim().split(' ')[0] || 'User';
+
+        // Get today's date in YYYYMMDD format
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        const dateStr = `${year}${month}${day}`;
+
+        // Count how many users were created today
+        const result = await authDb.query(
+            `SELECT COUNT(*) as count FROM users WHERE DATE("createdAt") = CURRENT_DATE`,
+            { type: QueryTypes.SELECT }
+        );
+
+        const serialNumber = (result[0]?.count || 0) + 1;
+        const paddedSerial = String(serialNumber).padStart(2, '0');
+
+        const uniqueId = `${firstName}${dateStr}-${paddedSerial}`;
+        return uniqueId;
+    } catch (error) {
+        throw new HttpError(500, `Failed to generate unique ID: ${error.message}`);
+    }
+};
+
 // Students added from Manage Students must land in the same auth schema
 // the list() query reads from (lucy_devdb.users) AND be able to log in via
 // Supabase Auth. Two writes:
@@ -338,6 +366,8 @@ const create = async (body, file) => {
 
     const roleId = await resolveStudentRoleId();
     const userId = generateUserId();
+    // Generate unique ID: FirstName + YYYYMMDD + "-" + SerialNumber
+    const uniqueId = await generateUniqueStudentTeacherId(body.name);
 
     // 1. Supabase Auth user — owns the password from here on.
     const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({

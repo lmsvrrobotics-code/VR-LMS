@@ -113,6 +113,34 @@ const isEmailTaken = async (email, excludeId = null) => {
     return rows.length > 0;
 };
 
+const generateUniqueStudentTeacherId = async (fullName) => {
+    try {
+        // Extract first name (first word only)
+        const firstName = (fullName || '').trim().split(' ')[0] || 'User';
+
+        // Get today's date in YYYYMMDD format
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        const dateStr = `${year}${month}${day}`;
+
+        // Count how many users were created today
+        const result = await authDb.query(
+            `SELECT COUNT(*) as count FROM users WHERE DATE("createdAt") = CURRENT_DATE`,
+            { type: QueryTypes.SELECT }
+        );
+
+        const serialNumber = (result[0]?.count || 0) + 1;
+        const paddedSerial = String(serialNumber).padStart(2, '0');
+
+        const uniqueId = `${firstName}${dateStr}-${paddedSerial}`;
+        return uniqueId;
+    } catch (error) {
+        throw new HttpError(500, `Failed to generate unique ID: ${error.message}`);
+    }
+};
+
 // Admin-created teachers land in lucy_devdb.users (role=teacher) AND
 // Supabase Auth so they can sign in. Mirrors StudentService.create.
 const create = async (body, file = null) => {
@@ -127,6 +155,8 @@ const create = async (body, file = null) => {
     }
     const roleId = await resolveTeacherRoleId();
     const userId = generateUserId();
+    // Generate unique ID: FirstName + YYYYMMDD + "-" + SerialNumber
+    const uniqueId = await generateUniqueStudentTeacherId(body.name);
 
     const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
         email: body.email,
