@@ -61,11 +61,6 @@ CREATE INDEX IF NOT EXISTS student_records_teacher_student_idx ON lms_admin.stud
 CREATE INDEX IF NOT EXISTS student_records_student_idx ON lms_admin.student_records (student_id);
 CREATE UNIQUE INDEX IF NOT EXISTS batch_members_batch_user_uniq ON lms_admin.batch_members (batch_id, user_id);
 CREATE INDEX IF NOT EXISTS batch_members_user_idx ON lms_admin.batch_members (user_id);
-CREATE INDEX IF NOT EXISTS teaching_assignments_course_idx ON lms_admin.teaching_assignments (course_id);
-CREATE INDEX IF NOT EXISTS teaching_assignments_teacher_idx ON lms_admin.teaching_assignments (teacher_id);
-CREATE INDEX IF NOT EXISTS assignment_members_ref_idx ON lms_admin.assignment_members (member_type, member_ref);
-CREATE INDEX IF NOT EXISTS assignment_members_assignment_idx ON lms_admin.assignment_members (teaching_assignment_id);
-CREATE INDEX IF NOT EXISTS lesson_releases_assignment_idx ON lms_admin.lesson_releases (teaching_assignment_id);
 CREATE INDEX IF NOT EXISTS certificates_user_idx ON lms_admin.certificates (user_id);
 CREATE INDEX IF NOT EXISTS feedback_responses_student_idx ON lms_admin.feedback_responses (student_id);
 
