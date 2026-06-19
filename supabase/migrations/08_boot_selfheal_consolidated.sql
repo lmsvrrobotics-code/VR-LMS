@@ -56,14 +56,10 @@ CREATE INDEX IF NOT EXISTS user_progress_user_idx ON lms_admin.user_progress (us
 CREATE INDEX IF NOT EXISTS user_progress_user_course_idx ON lms_admin.user_progress (user_id, course_id);
 CREATE INDEX IF NOT EXISTS quiz_submissions_user_quiz_idx ON lms_admin.quiz_submissions (user_id, quiz_id);
 CREATE INDEX IF NOT EXISTS quiz_submissions_quiz_idx ON lms_admin.quiz_submissions (quiz_id);
-CREATE INDEX IF NOT EXISTS payments_user_course_idx ON lms_admin.payments (user_id, course_id);
-CREATE INDEX IF NOT EXISTS payments_order_idx ON lms_admin.payments (razorpay_order_id);
-CREATE INDEX IF NOT EXISTS student_records_teacher_student_idx ON lms_admin.student_records (teacher_id, student_id);
-CREATE INDEX IF NOT EXISTS student_records_student_idx ON lms_admin.student_records (student_id);
-CREATE UNIQUE INDEX IF NOT EXISTS batch_members_batch_user_uniq ON lms_admin.batch_members (batch_id, user_id);
-CREATE INDEX IF NOT EXISTS batch_members_user_idx ON lms_admin.batch_members (user_id);
+-- NOTE: payments, student_records, batch_members, feedback_responses are created
+-- at boot-time via Model.sync(), not in SQL migrations. Indexes for these tables
+-- are created at boot time (server.js ensureIndexes.js), not here.
 CREATE INDEX IF NOT EXISTS certificates_user_idx ON lms_admin.certificates (user_id);
-CREATE INDEX IF NOT EXISTS feedback_responses_student_idx ON lms_admin.feedback_responses (student_id);
 
 -- NOTE: feature tables created by boot-time Model.sync() (forums, leads,
 -- payments, slots, demos, books, locations, app_settings, feedback_forms,
