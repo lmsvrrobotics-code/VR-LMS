@@ -40,3 +40,6 @@ backend/admin-service/tmp-debug-*.js
 DEPLOY_AWS.md
 scripts/
 .github/
+.env
+.env.local
+.env.*.local
