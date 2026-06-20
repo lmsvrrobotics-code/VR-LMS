@@ -122,6 +122,11 @@ import cookieParser from "cookie-parser";
 import { generateRoleID } from './utils/uidGeneration.js';
 import { attachErrorHandler } from './observability.js';
 
+// ✅ SECURITY IMPORTS
+import { sanitizeMiddleware } from './lib/sanitize.js';
+import auditLog from './lib/auditLog.js';
+import bruteForce from './lib/bruteForceProtection.js';
+
 const app = express();
 
 // Behind Railway's proxy the client IP is in X-Forwarded-For. Without this,
@@ -152,6 +157,10 @@ app.use(cors({
 
 app.use(helmet());
 app.use(express.json());
+
+// ✅ SECURITY: Sanitize all inputs (removes XSS)
+app.use(sanitizeMiddleware);
+
 app.use(morgan('dev'));
 app.use(cookieParser());
 app.use(rateLimit({ windowMs: 60_000, max: 200 }));
