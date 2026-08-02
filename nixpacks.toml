@@ -1,6 +1,0 @@
-# backend/start-all.sh requires bash specifically (it uses `wait -n`, a bash
-# builtin not available in POSIX sh / ash), but the Nixpacks-built runtime
-# image does not ship bash by default. Install it explicitly so the
-# configured startCommand ("bash backend/start-all.sh") can execute.
-[phases.setup]
-aptPkgs = ["bash"]
