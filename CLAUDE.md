@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```powershell
 .\run.ps1
 ```
-This idempotent script installs dependencies, applies database migrations, seeds admin accounts, and launches all services in separate windows. Opens http://localhost:5173 in the browser when ready. Default login credentials are displayed at the end.
+This idempotent script installs dependencies, applies database migrations, seeds admin accounts, and launches all services in separate windows. Opens http://localhost:8080 in the browser when ready. Default login credentials are displayed at the end.
 
 ### Quick Restart (Fast)
 ```powershell
@@ -21,7 +21,7 @@ Kills all node processes and relaunches services that have `node_modules` instal
 - **Auth Service**: `cd backend/auth-service && npm run dev` (port 8001)
 - **Assessment Service**: `cd backend/assessment-service && npm run dev` (port 8003)
 - **Bastion Gateway**: `cd backend/Bastion-server && npm run dev` (port 8000)
-- **Frontend**: `cd frontend && npm run dev` (port 5173)
+- **Frontend**: `cd frontend && npm run dev` (port 8080, set in `frontend/vite.config.ts`)
 
 ### Build & Test
 ```bash
@@ -82,7 +82,7 @@ cd frontend && npm run lint
 
 ### Request Flow
 ```
-Browser → Frontend (Vite, port 5173)
+Browser → Frontend (Vite, port 8080)
        ↓
        → Bastion Gateway (port 8000, routes API calls)
        ↓
@@ -409,7 +409,7 @@ Creates/updates `vrroot@vrroboticsacademy.com` and `vradmin@vrroboticsacademy.co
 
 ### Local Ports
 - Admin Service: `5000`
-- Frontend: `5173`
+- Frontend: `8080`
 - Auth Service: `8001`
 - Assessment Service: `8003`
 - Bastion Gateway: `8000`

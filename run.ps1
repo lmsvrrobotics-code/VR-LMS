@@ -83,7 +83,7 @@ $services = @(
     @{ Name = 'admin-service';      Port = 5000; Path = "$ROOT\backend\admin-service" },
     @{ Name = 'assessment-service'; Port = 8003; Path = "$ROOT\backend\assessment-service" },
     @{ Name = 'Bastion-server';     Port = 8000; Path = "$ROOT\backend\Bastion-server" },
-    @{ Name = 'frontend';           Port = 5173; Path = "$ROOT\frontend" }
+    @{ Name = 'frontend';           Port = 8080; Path = "$ROOT\frontend" }
 )
 
 foreach ($svc in $services) {
@@ -102,8 +102,8 @@ Write-Host "All services launching. Waiting ~12 seconds..." -ForegroundColor Gre
 Start-Sleep -Seconds 12
 
 Write-Host ""
-Write-Host "Opening http://localhost:5173" -ForegroundColor Yellow
-Start-Process "http://localhost:5173"
+Write-Host "Opening http://localhost:8080" -ForegroundColor Yellow
+Start-Process "http://localhost:8080"
 
 Write-Host ""
 Write-Host "-------------------------------------------------------------"
