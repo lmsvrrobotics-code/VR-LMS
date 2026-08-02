@@ -33,9 +33,12 @@ export async function runMigrations() {
 
 // Alternative: Run via node-postgres if psql unavailable
 export async function runMigrationsViaPg() {
+  // Declared outside the try so the finally block can always close it, including
+  // when connect() itself throws.
+  let client;
   try {
     const { Client } = await import('pg');
-    const client = new Client(process.env.DATABASE_URL);
+    client = new Client(process.env.DATABASE_URL);
     await client.connect();
 
     // Same reason as the afterConnect hook in db/index.js: the migration SQL
@@ -49,18 +52,40 @@ export async function runMigrationsViaPg() {
     const { readFileSync } = await import('fs');
     const sql = readFileSync(migrationPath, 'utf-8');
 
-    // Split into statements (crude but works for migrations)
-    const statements = sql.split(';').filter(s => s.trim());
+    // Strip line comments BEFORE splitting. Comments in this file sit above the
+    // statement they describe, so after a naive split on ';' each chunk begins
+    // with "\n-- ...\nCREATE INDEX ...". The old `startsWith('--')` guard never
+    // matched that (the chunk starts with a newline), so comment text was sent
+    // to Postgres as part of the statement.
+    const statements = sql
+      .split('\n')
+      .map((line) => line.replace(/--.*$/, ''))
+      .join('\n')
+      .split(';')
+      .map((s) => s.trim())
+      .filter(Boolean);
 
     for (const statement of statements) {
-      if (statement.trim().startsWith('--')) continue;
       await client.query(statement);
       console.log(`✅ ${statement.substring(0, 50)}...`);
     }
 
-    await client.end();
     console.log('✅ All migrations complete');
   } catch (err) {
-    console.error('Migration error:', err);
+    // Do NOT swallow this. Indexes are a performance concern, not a correctness
+    // one, so a failure must not stop auth-service from serving logins — but the
+    // previous `console.error` alone left a broken migration looking identical
+    // to a healthy startup, which is how this file shipped indexing columns that
+    // do not exist. Make it unmissable and report it to Sentry.
+    console.error(
+      `❌ MIGRATION FAILED — indexes are missing, queries will fall back to sequential scans. ` +
+        `Fix required: ${err.message}`,
+    );
+    const Sentry = await import('@sentry/node').catch(() => null);
+    Sentry?.captureException?.(err);
+  } finally {
+    // The old code only closed the client on the success path, so every failed
+    // run leaked an open Postgres connection for the life of the process.
+    await client?.end().catch(() => {});
   }
 }
