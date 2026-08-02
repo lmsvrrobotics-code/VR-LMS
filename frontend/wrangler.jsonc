@@ -1,6 +1,6 @@
 {
-  "name": "gentle-limit-6149",
-  "account_id": "3d41e964e8f87c96f433e4931e8ec8ef",
+  "name": "vr-lms",
+  "account_id": "5c8420a7d85dace148fabed90cfb055d",
   "compatibility_date": "2025-01-01",
   "assets": {
     "directory": "./dist",
