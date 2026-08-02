@@ -38,6 +38,13 @@ export async function runMigrationsViaPg() {
     const client = new Client(process.env.DATABASE_URL);
     await client.connect();
 
+    // Same reason as the afterConnect hook in db/index.js: the migration SQL
+    // uses unqualified table names, which resolve via search_path — default
+    // `public`, where these tables don't exist.
+    await client.query(
+      `SET search_path TO "${process.env.DB_SCHEMA || 'lucy_devdb'}", public`
+    );
+
     const migrationPath = path.join(__dirname, 'migrations', '001-create-indexes.sql');
     const { readFileSync } = await import('fs');
     const sql = readFileSync(migrationPath, 'utf-8');
