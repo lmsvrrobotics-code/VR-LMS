@@ -166,16 +166,61 @@ function userContextMiddleware(req, res, next) {
 /**
  * Audit log for sensitive operations
  * Usage: auditLog('PAYMENT_CAPTURED', { orderId, amount }, req.authUser.userId);
+ *
+ * Also persists to the audit_log table in Supabase for compliance/forensics
  */
-function auditLog(action, data = {}, userId = null) {
-  logger.info('AUDIT', {
+function auditLog(action, data = {}, userId = null, req = null) {
+  const auditEntry = {
     action,
     userId,
     ...data,
     timestamp: new Date().toISOString(),
-  });
+  };
 
-  // TODO: Also write to audit_log table for compliance
+  logger.info('AUDIT', auditEntry);
+
+  // Persist to Supabase audit_log table asynchronously (fire-and-forget)
+  // so it doesn't block the request
+  (async () => {
+    try {
+      const { sequelize } = require('../models');
+      await sequelize.query(`
+        SELECT audit.log_event(
+          :action,
+          :actor_id,
+          :actor_email,
+          :actor_role,
+          :resource_type,
+          :resource_id,
+          :changes,
+          :request_id,
+          :ip_address,
+          'success',
+          NULL,
+          :metadata
+        )
+      `, {
+        replacements: {
+          action,
+          actor_id: userId || null,
+          actor_email: req?.user?.email || req?.authUser?.email || null,
+          actor_role: req?.user?.role || req?.authUser?.role || null,
+          resource_type: data.resource_type || null,
+          resource_id: data.resource_id || null,
+          changes: data.changes ? JSON.stringify(data.changes) : null,
+          request_id: req?.requestId || null,
+          ip_address: req?.ip || null,
+          metadata: Object.keys(data).length > 0 ? JSON.stringify(data) : null,
+        },
+      });
+    } catch (err) {
+      // Never block requests on audit failures, just log to Sentry
+      Sentry.captureException(err, {
+        tags: { type: 'audit_log_failure' },
+        extra: { action, userId },
+      });
+    }
+  })();
 }
 
 module.exports = {

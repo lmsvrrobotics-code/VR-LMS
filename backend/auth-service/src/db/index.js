@@ -23,7 +23,7 @@ const sequelize = connectionUrl
       dialect: 'postgres',
       logging: false,
       schema: DB_SCHEMA,
-      pool: { max: 10, min: 0, acquire: 60000, idle: 10000, evict: 15000 },
+      pool: { max: 30, min: 5, acquire: 30000, idle: 10000, evict: 5000 },
       retry: {
         max: 3,
         match: [
@@ -48,7 +48,7 @@ const sequelize = connectionUrl
         dialect: 'postgres',
         logging: false,
         schema: DB_SCHEMA,
-        pool: { max: 10, min: 0, acquire: 60000, idle: 10000, evict: 15000 },
+        pool: { max: 30, min: 5, acquire: 30000, idle: 10000, evict: 5000 },
         dialectOptions: {
           ssl: { require: true, rejectUnauthorized: false },
         },
