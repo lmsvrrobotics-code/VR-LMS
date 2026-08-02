@@ -23,7 +23,12 @@ require('dotenv').config();
 })();
 
 module.exports = {
-    port: Number(process.env.PORT || 5000),
+    // ADMIN_SERVICE_PORT wins over PORT so this service can share a container
+    // with the gateway. Railway injects one PORT per container and only the
+    // public process (Bastion) may bind it; without this, whichever of the two
+    // started second would die with EADDRINUSE. Matches the localhost:5000
+    // default in Bastion's serviceMap.
+    port: Number(process.env.ADMIN_SERVICE_PORT || process.env.PORT || 5000),
     env: process.env.NODE_ENV || 'development',
     appUrl: process.env.APP_URL || 'http://localhost:5000',
     uploadDir: process.env.UPLOAD_DIR || 'uploads',

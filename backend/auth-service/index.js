@@ -12,7 +12,12 @@ process.on('uncaughtException', (err) => {
   console.error('[auth-service] Uncaught exception:', err);
 });
 
-const PORT = process.env.PORT || 8001;
+// AUTH_SERVICE_PORT wins over PORT so this service can share a container with
+// the gateway. Railway injects a single PORT for the whole container and only
+// the public-facing process (Bastion) may bind it — if auth-service also read
+// PORT, whichever started second would die with EADDRINUSE. Bastion's
+// serviceMap defaults to localhost:8001 for auth, so this must match it.
+const PORT = process.env.AUTH_SERVICE_PORT || process.env.PORT || 8001;
 
 async function startup() {
   try {

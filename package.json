@@ -1,0 +1,14 @@
+{
+  "name": "vr-lms-backend",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Root manifest so Nixpacks can build all four backend services into one container. Each service keeps its own package.json and dependency tree; this only orchestrates install and start.",
+  "scripts": {
+    "postinstall": "npm run install:all",
+    "install:all": "npm --prefix backend/auth-service ci --omit=dev && npm --prefix backend/admin-service ci --omit=dev && npm --prefix backend/assessment-service ci --omit=dev && npm --prefix backend/Bastion-server ci --omit=dev",
+    "start": "bash backend/start-all.sh"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
