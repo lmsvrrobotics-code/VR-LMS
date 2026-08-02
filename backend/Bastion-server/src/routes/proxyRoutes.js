@@ -121,6 +121,53 @@ Object.entries(serviceMap).forEach(([name, service]) => {
   });
 });
 
+// admin-service owns two prefixes the gateway must expose verbatim:
+//   /api/public/*  — unauthenticated catalogue, colleges, gallery, leaderboard…
+//   /api/admin/*   — the admin dashboard's own API
+// Neither is reachable through the /api/v1/<service> scheme above, and the
+// frontend calls them as `${BASE}/api/public/...` (54 call sites) and
+// `${BASE}/api/admin/...` (7) with BASE pointing at Bastion. They only ever
+// worked because admin-service used to hold the public port directly; once
+// Bastion took it over, every one of those calls 404'd at the gateway.
+//
+// Forward the path UNCHANGED — no prefix rewriting — because admin-service
+// mounts these routes at exactly these paths.
+const adminService = serviceMap.admin;
+const adminTarget = targetFor(adminService);
+
+const adminPassthrough = httpProxy(adminTarget, {
+  preserveHostHdr: false,
+  limit: '20mb',
+  proxyReqPathResolver: (req) => req.originalUrl,
+  // Same CORS normalisation as the /api/v1 proxies: strip whatever the
+  // upstream set and re-emit based on the request Origin, so a broken
+  // upstream combo (`*` + credentials) can't reach the browser.
+  userResHeaderDecorator: (headers, userReq) => {
+    Object.keys(headers).forEach((h) => {
+      if (h.toLowerCase().startsWith('access-control-')) delete headers[h];
+    });
+    const origin = userReq.headers?.origin;
+    if (origin && isAllowedOrigin(origin)) {
+      headers['access-control-allow-origin'] = origin;
+      headers['access-control-allow-credentials'] = 'true';
+      headers['vary'] = headers['vary'] ? `${headers['vary']}, Origin` : 'Origin';
+    }
+    return headers;
+  },
+  proxyErrorHandler: (err, res, next) => {
+    healthMonitor.checkOne('admin').catch(() => {});
+    if (res.headersSent) return next(err);
+    const timedOut = err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT';
+    return res.status(timedOut ? 504 : 502).json({
+      error: 'admin unavailable',
+      details: err.code || err.message,
+    });
+  },
+});
+
+router.use('/public', adminPassthrough);
+router.use('/admin', adminPassthrough);
+
 // expose Bastion’s view of service health
 router.get('/_services/health', (req, res) => {
   res.json(healthMonitor.statusMap);
