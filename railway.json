@@ -4,7 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "sh backend/start-all.sh",
+    "startCommand": "sh -c 'if [ -f backend/start-all.sh ]; then sh backend/start-all.sh; else sh start-all.sh; fi'",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }
