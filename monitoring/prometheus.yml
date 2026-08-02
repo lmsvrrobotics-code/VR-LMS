@@ -1,0 +1,41 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Targets use compose SERVICE NAMES, not localhost. Prometheus scrapes from
+# inside its own container, where `localhost` is Prometheus itself — the
+# repo-root prometheus.yml (written for running services directly on a host)
+# would report every target as down if mounted here.
+scrape_configs:
+  - job_name: 'auth-service'
+    static_configs:
+      - targets: ['auth-service:8001']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
+  - job_name: 'admin-service'
+    static_configs:
+      - targets: ['admin-service:5000']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
+  - job_name: 'assessment-service'
+    static_configs:
+      - targets: ['assessment-service:8003']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
+  - job_name: 'bastion-gateway'
+    static_configs:
+      - targets: ['bastion:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
+# NOTE: Redis is intentionally not scraped. Redis speaks its own protocol, not
+# HTTP/Prometheus — scraping redis:6379 directly yields a permanently failing
+# target. Add a redis_exporter sidecar and scrape that if you want Redis
+# metrics. (The repo-root prometheus.yml has this bug.)
+
+# NOTE: `rule_files: alert_rules.yml` from the repo-root config is omitted —
+# that file is not mounted into this container, and a missing rule file makes
+# Prometheus refuse to start.

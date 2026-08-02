@@ -1,0 +1,29 @@
+# Secrets must never enter an image layer. `COPY . .` would otherwise bake the
+# local .env — SUPABASE_JWT_SECRET, DATABASE_URL, service-role keys — into the
+# image, where anyone who can pull it (or read the registry) can extract it.
+# Runtime config comes from compose `environment:` / the host, not from a file
+# committed into the build context.
+.env
+.env.*
+!.env.example
+
+# Host node_modules are built for the host OS/arch. Copying them over the
+# `npm ci` output can shadow correct linux-musl binaries with Windows/macOS
+# ones and produce native-module failures that only appear in the container.
+node_modules
+npm-debug.log*
+
+# Build/dev noise that only inflates image size and cache invalidation.
+.git
+.gitignore
+Dockerfile
+.dockerignore
+*.md
+logs
+*.log
+coverage
+.nyc_output
+tests
+.vscode
+.idea
+.DS_Store

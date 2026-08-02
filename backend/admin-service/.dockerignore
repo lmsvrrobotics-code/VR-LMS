@@ -1,0 +1,32 @@
+# Secrets must never enter an image layer — see the Bastion .dockerignore.
+# Runtime config comes from compose `environment:` / the host, not a copied file.
+.env
+.env.*
+!.env.example
+
+# Host node_modules are built for the host OS/arch and can shadow the correct
+# linux-musl binaries produced by `npm ci`.
+node_modules
+npm-debug.log*
+
+# Local upload artifacts. compose mounts the admin_uploads volume over
+# /app/uploads at runtime, so anything copied here is dead weight in the image
+# (and may contain real user files).
+uploads
+
+# NOTE: src/scripts/** is deliberately NOT excluded — `npm run seed:admin`
+# (seedRootAdmin.js) is run inside the container on first deploy.
+
+.git
+.gitignore
+Dockerfile
+.dockerignore
+*.md
+logs
+*.log
+coverage
+.nyc_output
+tests
+.vscode
+.idea
+.DS_Store

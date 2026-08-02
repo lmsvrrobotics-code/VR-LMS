@@ -1,0 +1,31 @@
+# Secrets must never enter an image layer. `COPY . .` would otherwise bake the
+# local .env — SUPABASE_JWT_SECRET, DATABASE_URL, service-role keys — into the
+# image, where anyone who can pull it can extract it. Runtime config comes from
+# compose `environment:` / the host.
+.env
+.env.*
+!.env.example
+
+# Host node_modules are built for the host OS/arch and can shadow the correct
+# linux-musl binaries produced by `npm ci`.
+node_modules
+npm-debug.log*
+
+# NOTE: src/db/migrations/** is deliberately NOT excluded — index.js runs
+# runMigrationsViaPg() at startup and needs those .sql files present.
+
+.git
+.gitignore
+Dockerfile
+.dockerignore
+*.md
+logs
+*.log
+coverage
+.nyc_output
+tests
+loadtest.js
+loadtest.k6.js
+.vscode
+.idea
+.DS_Store
