@@ -14,6 +14,7 @@ const supabaseAdmin = require('../lib/supabaseAdmin');
 const env = require('../config/env');
 const { enqueue } = require('../jobs/emailQueue');
 const { studentWelcome, passwordReset } = require('../helpers/emailTemplates');
+const publicId = require('../lib/uniqueId');
 
 const ROLE = 'teacher';
 
@@ -57,7 +58,7 @@ const list = async ({ page = 1, per_page = 1000, search = '' }) => {
             { replacements: { role: ROLE, like }, type: QueryTypes.SELECT }
         );
         const rows = await authDb.query(
-            `SELECT u."userId" AS id, u.name, u.email, u.phone, u.expertise,
+            `SELECT u."userId" AS id, u.unique_id, u.name, u.email, u.phone, u.expertise,
                     u."yearsOfExperience", u."linkedinUrl", u.bio, u.address,
                     u."teacherPhoto", u."createdAt"
                FROM users u
@@ -80,7 +81,7 @@ const list = async ({ page = 1, per_page = 1000, search = '' }) => {
 
 const get = async (id) => {
     const rows = await authDb.query(
-        `SELECT u."userId" AS id, u.name, u.email, u.phone, u.dob, u.gender,
+        `SELECT u."userId" AS id, u.unique_id, u.name, u.email, u.phone, u.dob, u.gender,
                 u.expertise, u.bio, u."yearsOfExperience", u."linkedinUrl",
                 u.address, u."teacherPhoto", u."createdAt"
            FROM users u
@@ -113,33 +114,6 @@ const isEmailTaken = async (email, excludeId = null) => {
     return rows.length > 0;
 };
 
-const generateUniqueStudentTeacherId = async (fullName) => {
-    try {
-        // Extract first name (first word only)
-        const firstName = (fullName || '').trim().split(' ')[0] || 'User';
-
-        // Get today's date in YYYYMMDD format
-        const today = new Date();
-        const year = today.getFullYear();
-        const month = String(today.getMonth() + 1).padStart(2, '0');
-        const day = String(today.getDate()).padStart(2, '0');
-        const dateStr = `${year}${month}${day}`;
-
-        // Count how many users were created today
-        const result = await authDb.query(
-            `SELECT COUNT(*) as count FROM users WHERE DATE("createdAt") = CURRENT_DATE`,
-            { type: QueryTypes.SELECT }
-        );
-
-        const serialNumber = (result[0]?.count || 0) + 1;
-        const paddedSerial = String(serialNumber).padStart(2, '0');
-
-        const uniqueId = `${firstName}${dateStr}-${paddedSerial}`;
-        return uniqueId;
-    } catch (error) {
-        throw new HttpError(500, `Failed to generate unique ID: ${error.message}`);
-    }
-};
 
 // Admin-created teachers land in lucy_devdb.users (role=teacher) AND
 // Supabase Auth so they can sign in. Mirrors StudentService.create.
@@ -155,8 +129,9 @@ const create = async (body, file = null) => {
     }
     const roleId = await resolveTeacherRoleId();
     const userId = generateUserId();
-    // Generate unique ID: FirstName + YYYYMMDD + "-" + SerialNumber
-    const uniqueId = await generateUniqueStudentTeacherId(body.name);
+    // Public teacher id (VRT<year><serial>). Teachers are only ever created by
+    // an admin, so there is no deferred/lead path here — always assign one.
+    const uniqueId = await publicId.generate('teacher');
 
     const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
         email: body.email,
@@ -175,16 +150,17 @@ const create = async (body, file = null) => {
     try {
         await authDb.query(
             `INSERT INTO users
-                ("userId", name, email, "passwordHash", phone, "roleId",
+                ("userId", unique_id, name, email, "passwordHash", phone, "roleId",
                  expertise, bio, "yearsOfExperience", "linkedinUrl", address,
                  "teacherPhoto", "createdAt", "updatedAt")
              VALUES
-                (:userId, :name, :email, :passwordHash, :phone, :roleId,
+                (:userId, :uniqueId, :name, :email, :passwordHash, :phone, :roleId,
                  :expertise, :bio, :yearsOfExperience, :linkedinUrl, :address,
                  :teacherPhoto, NOW(), NOW())`,
             {
                 replacements: {
                     userId,
+                    uniqueId,
                     name: body.name,
                     email: body.email,
                     passwordHash: `supabase:${supabaseUid}`,

@@ -33,7 +33,7 @@ const baseFrame = ({ heading, bodyHtml }) => `
             </tr>
             <tr>
               <td style="padding:16px 24px;border-top:1px solid #eef0f2;font-size:12px;color:#7a8189;">
-                You're receiving this because you're enrolled at a YagnaTech LMS partner college.
+                You're receiving this because you're enrolled at VR Robotics Academy.
               </td>
             </tr>
           </table>
@@ -65,7 +65,7 @@ const batchAddedToStudent = ({ studentName, batchName, loginUrl }) => {
         <p style="margin:0 0 24px 0;font-size:13px;word-break:break-all;">
             <a href="${safeUrl}" style="color:#177385;">${safeUrl}</a>
         </p>
-        <p style="margin:0;">Best Regards,<br/>YagnaTech Team</p>
+        <p style="margin:0;">Best Regards,<br/>VR Robotics Academy</p>
     `;
     return { subject, html: baseFrame({ heading, bodyHtml }) };
 };
@@ -110,7 +110,7 @@ const preAssessmentRegistered = ({ studentName, programName, loginUrl }) => {
         <p style="margin:0 0 24px 0;font-size:13px;word-break:break-all;">
             <a href="${safeUrl}" style="color:#177385;">${safeUrl}</a>
         </p>
-        <p style="margin:0;">Best Regards,<br/>YagnaTech Team</p>
+        <p style="margin:0;">Best Regards,<br/>VR Robotics Academy</p>
     `;
     return { subject, html: baseFrame({ heading, bodyHtml }) };
 };
@@ -170,7 +170,7 @@ const courseAssignedToStudent = ({
         <p style="margin:0 0 24px 0;font-size:13px;word-break:break-all;">
             <a href="${safeUrl}" style="color:#177385;">${safeUrl}</a>
         </p>
-        <p style="margin:0;">Best Regards,<br/>YagnaTech Team</p>
+        <p style="margin:0;">Best Regards,<br/>VR Robotics Academy</p>
     `;
     return { subject, html: baseFrame({ heading, bodyHtml }) };
 };
@@ -247,9 +247,9 @@ const certificateIssued = ({
         ${lmsLine}
         <p style="margin:0 0 16px 0;">
             Keep up the momentum — there are more courses waiting on your
-            dashboard. We’re proud to have you in the YagnaTech community.
+            dashboard. We’re proud to have you in our community.
         </p>
-        <p style="margin:0;">Best Regards,<br/>YagnaTech Team</p>
+        <p style="margin:0;">Best Regards,<br/>VR Robotics Academy</p>
     `;
     return { subject, html: baseFrame({ heading, bodyHtml }) };
 };
@@ -276,7 +276,7 @@ const studentWelcome = ({ studentName, email, password, loginUrl }) => {
         </p>
         <p style="margin:0 0 4px 0;color:#7a8189;font-size:13px;">For your security, please change your password after your first login.</p>
         <p style="margin:0 0 24px 0;font-size:13px;word-break:break-all;"><a href="${safeUrl}" style="color:#177385;">${safeUrl}</a></p>
-        <p style="margin:0;">Best Regards,<br/>YagnaTech Team</p>
+        <p style="margin:0;">Best Regards,<br/>VR Robotics Academy</p>
     `;
     return { subject, html: baseFrame({ heading, bodyHtml }) };
 };
@@ -303,7 +303,7 @@ const passwordReset = ({ name, email, password, loginUrl }) => {
         </p>
         <p style="margin:0 0 4px 0;color:#7a8189;font-size:13px;">For your security, please change this password after you sign in. If you didn't request this, contact your administrator.</p>
         <p style="margin:0 0 24px 0;font-size:13px;word-break:break-all;"><a href="${safeUrl}" style="color:#177385;">${safeUrl}</a></p>
-        <p style="margin:0;">Best Regards,<br/>YagnaTech Team</p>
+        <p style="margin:0;">Best Regards,<br/>VR Robotics Academy</p>
     `;
     return { subject, html: baseFrame({ heading, bodyHtml }) };
 };

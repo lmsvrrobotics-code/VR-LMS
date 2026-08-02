@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
@@ -10,8 +10,16 @@ import { toast } from "react-toastify";
 // Replaced by Batch Management System
 import ScheduleCalendar, { type ScheduleEvent } from "@/components/schedule/ScheduleCalendar";
 import FeedbackFormsView from "@/components/teacher/FeedbackFormsView";
+import Navbar from "@/components/layout/Navbar";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useDashboardTheme } from "@/hooks/useDashboardTheme";
+import { mergePickedFiles } from "@/lib/filePicker";
+// Shared with the student dashboard so both shells classify sessions, run the
+// pre-class countdown and greet the user with identical, unit-tested rules.
+import {
+  greeting, firstName, splitSchedule,
+  getClassState, canJoinClass, shouldCountDown, msUntilStart, formatCountdown,
+} from "@/lib/assignmentStatus";
 import {
   Menu,
   X,
@@ -33,6 +41,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowRight,
+  Clock3,
 } from "lucide-react";
 
 /**
@@ -49,7 +58,9 @@ import {
 // are left intact but unreachable, so the feature can be restored by re-adding
 // the nav entries.
 const navItems = [
+  { name: "Dashboard", icon: LayoutDashboard },
   { name: "My Courses", icon: MonitorPlay },
+  { name: "Assignments", icon: ClipboardList },
   { name: "Demos", icon: MessageSquare },
   { name: "Classes", icon: MonitorPlay },
   { name: "Calendar", icon: CalendarDays },
@@ -59,28 +70,12 @@ const navItems = [
   { name: "Profile", icon: Contact },
 ];
 
-/**
- * TODO(backend): replace this static placeholder with live data.
- * Suggested API: GET /api/teacher/earnings?month=YYYY-MM  (auth: teacher)
- * returning a payload shaped exactly like `DashboardData` below, so wiring is a
- * drop-in. See the commented useEffect in the component for the fetch scaffold.
- */
-type DashboardData = {
-  month: string;
-  earnings: { demos: string; classes: string; other: string };
-  penalties: { penalizedClasses: string; disputedSessions: string };
-  demos: { successful: string; unsuccessful: string; conversions: string };
-  classes: { paid: string; unsuccessful: string; cancelled: string; punctuality: string };
-};
+/* The old placeholder earnings model (DashboardData / PLACEHOLDER_DATA) was
+   removed with the mock Dashboard tab: it rendered hardcoded "₹0" and "—"
+   against no backend, so it reported figures that were never real. The tab now
+   shows live teaching analytics — see TeacherOverview below. */
 
-const PLACEHOLDER_DATA: DashboardData = {
-  month: "May 2026",
-  earnings: { demos: "₹0", classes: "₹0", other: "₹0" },
-  penalties: { penalizedClasses: "—", disputedSessions: "—" },
-  demos: { successful: "0", unsuccessful: "0", conversions: "—" },
-  classes: { paid: "0", unsuccessful: "0", cancelled: "0", punctuality: "0%" },
-};
-
+// Small figure used in the per-student detail panel (Students tab).
 const Stat = ({ value, label }: { value: string; label: string }) => (
   <div className="flex-1 min-w-[140px] rounded-xl bg-muted/60 px-5 py-4">
     <div className="text-2xl font-bold">{value}</div>
@@ -237,6 +232,10 @@ const SlotsView = ({ teacherId }: { teacherId?: string }) => {
 function useTeacherList<T>(teacherId: string | undefined, path: string, key: string) {
   const [items, setItems] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
+  // Bumping this re-runs the effect — how callers force a refetch after a
+  // mutation (e.g. a teacher releasing a lesson) without duplicating the fetch.
+  const [nonce, setNonce] = useState(0);
+  const refetch = useCallback(() => setNonce((n) => n + 1), []);
   useEffect(() => {
     if (!teacherId) { setItems([]); setLoading(false); return; }
     let cancelled = false;
@@ -249,8 +248,8 @@ function useTeacherList<T>(teacherId: string | undefined, path: string, key: str
       .catch(() => { if (!cancelled) setItems([]); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [teacherId, path, key]);
-  return { items, loading };
+  }, [teacherId, path, key, nonce]);
+  return { items, loading, refetch };
 }
 
 const Panel = ({ title, icon: Icon, children }: { title: string; icon: typeof Calendar; children: ReactNode }) => (
@@ -262,40 +261,1255 @@ const Panel = ({ title, icon: Icon, children }: { title: string; icon: typeof Ca
 
 const Empty = ({ text }: { text: string }) => <p className="text-muted-foreground py-8 text-center">{text}</p>;
 
+/* ---------------------------------------------------------------------------
+ * Shared session (class / demo) presentation
+ *
+ * Demos and Classes are the same shape of thing — a titled session with a time
+ * window, a course and a meeting link — so they share one stats bar, one row
+ * renderer and one live/upcoming/past split. Previously each tab rendered its
+ * own markup with no notion of whether a session was live, finished or still
+ * to come, and both showed an always-active Join link.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Re-render trigger for time-sensitive rows.
+ *
+ * This hook deliberately returns NOTHING. Callers read `new Date()` directly,
+ * so the displayed state is always derived from the real clock and the
+ * session's own start/end times — never from a stored timestamp that could go
+ * stale. All this does is force a re-render often enough that the display keeps
+ * up: once a second when something is visibly ticking (a countdown, a live
+ * badge), otherwise every 15 seconds.
+ *
+ * The rate is recomputed on each tick from the session itself, so a row that
+ * becomes imminent, goes live, or finishes speeds up or slows down on its own.
+ */
+function useNow(s: { start_at?: string | null; end_at?: string | null } | null | undefined) {
+  const [, force] = useState(0);
+  useEffect(() => {
+    let id: number;
+    const schedule = () => {
+      const at = new Date();
+      const fast = shouldCountDown(s, at) || getClassState(s, at) === "live";
+      id = window.setTimeout(() => { force((n) => n + 1); schedule(); }, fast ? 1000 : 15000);
+    };
+    schedule();
+    return () => window.clearTimeout(id);
+  }, [s]);
+}
+
+/**
+ * Re-render trigger for a LIST of time-sensitive sessions.
+ *
+ * Returns a counter whose only purpose is to invalidate `useMemo`s that read
+ * the clock — the derived values themselves must still call `new Date()`, so
+ * they always reflect the real time rather than when the data happened to load.
+ *
+ * Ticks once a second while any session is live or counting down, otherwise
+ * every 15 seconds, so an idle schedule costs almost nothing.
+ */
+function useScheduleTick(items: { start_at?: string | null; end_at?: string | null }[]): number {
+  const [tick, setTick] = useState(0);
+  // Depend on the schedule's SHAPE, not the array identity: a re-fetch that
+  // returns identical times must not restart the timer loop.
+  const key = items.map((i) => `${i.start_at ?? ""}|${i.end_at ?? ""}`).join(",");
+  useEffect(() => {
+    let id: number;
+    const schedule = () => {
+      const at = new Date();
+      const fast = items.some((i) => shouldCountDown(i, at) || getClassState(i, at) === "live");
+      id = window.setTimeout(() => { setTick((n) => n + 1); schedule(); }, fast ? 1000 : 15000);
+    };
+    schedule();
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return tick;
+}
+
+/** Day + time window for a session, in IST like the rest of the schedule UI. */
+const fmtSessionWhen = (start: string | null, end: string | null) => {
+  if (!start) return "Time to be confirmed";
+  const s = new Date(start);
+  if (Number.isNaN(s.getTime())) return "Time to be confirmed";
+  const day = s.toLocaleDateString("en-IN", { weekday: "short", day: "2-digit", month: "short", timeZone: IST });
+  const from = s.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: IST });
+  const e = end ? new Date(end) : null;
+  const to = e && !Number.isNaN(e.getTime())
+    ? e.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: IST })
+    : null;
+  if (!to || !e) return `${day} · ${from}`;
+
+  // When a session ENDS ON A DIFFERENT DAY, show that date too. Rendering only
+  // the clock times ("3:34 pm – 3:36 pm") hid a 16 Jul → 31 Jul window and made
+  // a two-week-long session look like a two-minute one — so a row that was
+  // legitimately still running read as an obvious bug.
+  const sameDay =
+    s.toLocaleDateString("en-IN", { timeZone: IST }) === e.toLocaleDateString("en-IN", { timeZone: IST });
+  if (sameDay) return `${day} · ${from} – ${to}`;
+
+  const endDay = e.toLocaleDateString("en-IN", { weekday: "short", day: "2-digit", month: "short", timeZone: IST });
+  return `${day} ${from} → ${endDay} ${to}`;
+};
+
+/** Normalised session row. Classes carry `name`, demos carry `title`. */
+interface TeacherSession {
+  id: number;
+  title: string;
+  course_title: string | null;
+  start_at: string | null;
+  end_at: string | null;
+  meeting_link: string | null;
+  student_count?: number;
+}
+
+/** Live / upcoming / completed counts for the stats bar. */
+const sessionStats = (items: TeacherSession[], now = new Date()) => {
+  const { upcoming, past } = splitSchedule(items, now);
+  const live = items.filter((s) => getClassState(s, now) === "live").length;
+  return {
+    total: items.length,
+    live,
+    // "Scheduled" excludes the ones already running, so live + scheduled +
+    // completed sums to the total without double-counting.
+    scheduled: upcoming.length - live,
+    completed: past.length,
+  };
+};
+
+/**
+ * One session, in the same visual language as the student dashboard: state
+ * badge, countdown inside the last 10 minutes, and a Join button that is only
+ * active while the session is live or imminent.
+ *
+ * `dimPast` greys finished sessions so the list reads chronologically at a
+ * glance without hiding history.
+ */
+const TeacherSessionRow = ({ s, past = false }: { s: TeacherSession; past?: boolean }) => {
+  // Whether a session is live is a pure function of ITS OWN start/end times and
+  // the current wall clock — nothing else. `useNow` exists only to re-render as
+  // time passes; it never decides the answer. Reading the clock fresh on every
+  // render (rather than trusting a stored `now`) means the badge is correct on
+  // the very first paint, even before any interval has fired.
+  useNow(s);
+  const at = new Date();
+
+  const state = getClassState(s, at);
+  const counting = shouldCountDown(s, at);
+  const joinable = canJoinClass(s, at);
+  const now = at;
+
+  return (
+    <li className={`flex flex-wrap items-center gap-3 rounded-xl border p-4 transition ${
+      past ? "border-border/50 opacity-70" : "border-border/70 hover:border-primary/30"
+    }`}>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="truncate font-medium m-0">{s.title}</p>
+          {state === "live" && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/10 px-2.5 py-0.5 text-xs font-semibold text-red-600 ring-1 ring-inset ring-red-500/20 dark:text-red-400">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-red-500" />
+              </span>
+              Live now
+            </span>
+          )}
+          {state === "soon" && !counting && (
+            <span className="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-500/20 dark:text-amber-400">
+              Starting soon
+            </span>
+          )}
+          {past && (
+            <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
+              Completed
+            </span>
+          )}
+        </div>
+        <p className="mt-1 inline-flex items-center gap-1.5 text-xs text-muted-foreground m-0">
+          <CalendarDays className="h-3.5 w-3.5" /> {fmtSessionWhen(s.start_at, s.end_at)}
+        </p>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground m-0">
+          {s.course_title || "—"}
+          {typeof s.student_count === "number"
+            ? ` · ${s.student_count} student${s.student_count === 1 ? "" : "s"}`
+            : ""}
+        </p>
+      </div>
+
+      {counting && (
+        <div
+          aria-live="off"
+          className="flex shrink-0 flex-col items-center rounded-xl bg-amber-500/10 px-4 py-2 ring-1 ring-inset ring-amber-500/20"
+        >
+          <span className="inline-flex items-center gap-1.5 text-lg font-bold tabular-nums leading-none text-amber-700 dark:text-amber-400">
+            <Clock3 className="h-4 w-4" />
+            {formatCountdown(msUntilStart(s, now))}
+          </span>
+          <span className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-amber-700/70 dark:text-amber-400/70">
+            Starts in
+          </span>
+        </div>
+      )}
+
+      {s.meeting_link ? (
+        joinable ? (
+          <a
+            href={s.meeting_link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-hero px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-105"
+          >
+            <Video className="h-4 w-4" /> Join
+          </a>
+        ) : past ? null : (
+          <span className="shrink-0 rounded-xl border border-border px-4 py-2 text-xs font-medium text-muted-foreground">
+            Link opens near start
+          </span>
+        )
+      ) : (
+        <span className="shrink-0 text-xs text-muted-foreground">No meeting link</span>
+      )}
+    </li>
+  );
+};
+
+/** Stat chip for the session stats bar. */
+const SessionStat = ({
+  value, label, tone,
+}: { value: number; label: string; tone: "red" | "amber" | "muted" | "primary" }) => {
+  const tones = {
+    red: "bg-red-500/10 text-red-600 dark:text-red-400 ring-red-500/20",
+    amber: "bg-amber-500/10 text-amber-700 dark:text-amber-400 ring-amber-500/20",
+    muted: "bg-muted text-muted-foreground ring-border",
+    primary: "bg-primary/10 text-primary ring-primary/20",
+  } as const;
+  return (
+    <div className={`flex-1 min-w-[110px] rounded-xl px-4 py-3 ring-1 ring-inset ${tones[tone]}`}>
+      <div className="text-2xl font-bold leading-none tabular-nums">{value}</div>
+      <div className="mt-1 text-xs font-medium">{label}</div>
+    </div>
+  );
+};
+
+/**
+ * Shared body for the Demos and Classes tabs: a stats bar (total / live now /
+ * scheduled / completed), then the sessions grouped into upcoming and past.
+ */
+const SessionsPanel = ({
+  title, icon, items, loading, emptyText, noun,
+}: {
+  title: string;
+  icon: typeof Calendar;
+  items: TeacherSession[];
+  loading: boolean;
+  emptyText: string;
+  noun: string;
+}) => {
+  // Stats and the upcoming/past split are computed from the CURRENT clock on
+  // every render, so they can never disagree with the badges on the rows below.
+  // `tick` only forces that recomputation to happen; it is never an input.
+  const tick = useScheduleTick(items);
+
+  /* eslint-disable react-hooks/exhaustive-deps */
+  const stats = useMemo(() => sessionStats(items, new Date()), [items, tick]);
+  const { upcoming, past } = useMemo(() => splitSchedule(items, new Date()), [items, tick]);
+  /* eslint-enable react-hooks/exhaustive-deps */
+
+  return (
+    <Panel title={title} icon={icon}>
+      {loading ? (
+        <Empty text={`Loading ${noun}…`} />
+      ) : items.length === 0 ? (
+        <Empty text={emptyText} />
+      ) : (
+        <>
+          <div className="mb-6 flex flex-wrap gap-3">
+            <SessionStat value={stats.total} label={`Total ${noun}`} tone="primary" />
+            <SessionStat value={stats.live} label="Live now" tone="red" />
+            <SessionStat value={stats.scheduled} label="Scheduled" tone="amber" />
+            <SessionStat value={stats.completed} label="Completed" tone="muted" />
+          </div>
+
+          {upcoming.length > 0 && (
+            <>
+              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                Upcoming
+              </h3>
+              <ul className="space-y-3 list-none p-0 m-0">
+                {upcoming.map((s) => <TeacherSessionRow key={s.id} s={s} />)}
+              </ul>
+            </>
+          )}
+
+          {past.length > 0 && (
+            <>
+              <h3 className={`mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground ${upcoming.length > 0 ? "mt-8" : ""}`}>
+                Completed
+              </h3>
+              <ul className="space-y-3 list-none p-0 m-0">
+                {past.map((s) => <TeacherSessionRow key={s.id} s={s} past />)}
+              </ul>
+            </>
+          )}
+        </>
+      )}
+    </Panel>
+  );
+};
+
 const DemosView = ({ teacherId }: { teacherId?: string }) => {
   const { items, loading } = useTeacherList<{ id: number; title: string; course_title: string | null; start_at: string | null; end_at: string | null; meeting_link: string | null }>(teacherId, "demos", "demos");
+  const sessions: TeacherSession[] = useMemo(
+    () => items.map((d) => ({
+      id: d.id, title: d.title || "Demo", course_title: d.course_title,
+      start_at: d.start_at, end_at: d.end_at, meeting_link: d.meeting_link,
+    })),
+    [items],
+  );
   return (
-    <Panel title="My Demos" icon={MessageSquare}>
-      {loading ? <Empty text="Loading demos…" /> : items.length === 0 ? <Empty text="No demos assigned to you yet." /> : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-muted-foreground border-b">
-                <th className="py-2 pr-4">Demo</th>
-                <th className="py-2 pr-4">Date</th>
-                <th className="py-2 pr-4">Day</th>
-                <th className="py-2 pr-4">Time</th>
-                <th className="py-2 pr-4">Course</th>
-                <th className="py-2 pr-4">Meeting</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((d) => (
-                <tr key={d.id} className="border-b">
-                  <td className="py-3 pr-4 font-medium">{d.title}</td>
-                  <td className="py-3 pr-4 whitespace-nowrap">{fmtDate(d.start_at)}</td>
-                  <td className="py-3 pr-4">{fmtDay(d.start_at)}</td>
-                  <td className="py-3 pr-4 whitespace-nowrap">{fmtTime(d.start_at)} – {fmtTime(d.end_at)}</td>
-                  <td className="py-3 pr-4">{d.course_title || "—"}</td>
-                  <td className="py-3 pr-4">
-                    {d.meeting_link
-                      ? <a href={d.meeting_link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary font-semibold hover:underline"><Video className="w-4 h-4" /> Join</a>
-                      : <span className="text-muted-foreground">—</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <SessionsPanel
+      title="My Demos"
+      icon={MessageSquare}
+      items={sessions}
+      loading={loading}
+      noun="demos"
+      emptyText="No demos assigned to you yet."
+    />
+  );
+};
+
+// --- My Courses -------------------------------------------------------------
+// Every course the teacher reaches through batch assignment, each with its FULL
+// curriculum. Backed by GET /api/public/teacher-courses/by-teacher/:teacherId,
+// which unions both teacher-assignment paths (batch_teachers roster +
+// batches.primary_teacher_id) so the tab fills in regardless of which admin
+// screen created the assignment.
+interface TeacherCourseLesson {
+  id: number;
+  title: string | null;
+  lesson_type: string | null;
+  duration: string | null;
+  is_free: number | null;
+  is_released: boolean;
+}
+interface TeacherCourseSection {
+  id: number | null;
+  title: string | null;
+  lessons: TeacherCourseLesson[];
+}
+interface TeacherCourseBatch {
+  batch_id: string;
+  batch_name: string | null;
+  student_count: number;
+}
+interface TeacherCourse {
+  course_id: number;
+  title: string;
+  thumbnail: string | null;
+  short_description: string | null;
+  level: string | null;
+  batches: TeacherCourseBatch[];
+  student_count: number;
+  section_count: number;
+  lesson_count: number;
+  released_count: number;
+  locked_count: number;
+  sections: TeacherCourseSection[];
+}
+
+// One course card: header summary always visible, curriculum expandable. The
+// first course starts expanded so the teacher lands on a populated tab rather
+// than a wall of collapsed rows.
+const CourseCurriculumCard = ({
+  course,
+  defaultOpen,
+  onChanged,
+}: {
+  course: TeacherCourse;
+  defaultOpen: boolean;
+  onChanged: () => void;
+}) => {
+  const [open, setOpen] = useState(defaultOpen);
+  // Which batch the unlock applies to. A course card can cover several batches
+  // (same syllabus, different cohorts) and a release is always per-batch, so
+  // the teacher picks the cohort before unlocking. Single-batch courses just
+  // use their only batch and never show the picker.
+  const [batchId, setBatchId] = useState(course.batches[0]?.batch_id ?? "");
+  // Lesson id currently being written — disables just that row's button.
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const activeBatch = course.batches.find((b) => b.batch_id === batchId) || course.batches[0];
+
+  const toggleRelease = async (lesson: TeacherCourseLesson) => {
+    if (!batchId) { setError("This course has no batch assigned yet."); return; }
+    setBusyId(lesson.id);
+    setError(null);
+    const action = lesson.is_released ? "revoke-lesson" : "release-lesson";
+    try {
+      await axios.post(
+        `${ADMIN_BASE}/api/admin/batches/${encodeURIComponent(batchId)}/${action}`,
+        { lesson_id: lesson.id },
+        { headers: teacherAuthHeaders(), timeout: 30000 },
+      );
+      onChanged(); // refetch so counts + badges reflect the new state
+    } catch (e) {
+      const msg = (e as { response?: { data?: { error?: string; message?: string } } })?.response?.data;
+      setError(msg?.error || msg?.message || "Could not update the lesson. Please try again.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <div className="border border-border rounded-xl overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full flex items-start gap-4 p-4 text-left hover:bg-muted/50 transition-colors"
+      >
+        {course.thumbnail ? (
+          <img src={course.thumbnail} alt="" className="w-16 h-16 rounded-lg object-cover shrink-0" />
+        ) : (
+          <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center shrink-0">
+            <MonitorPlay className="w-6 h-6 text-muted-foreground" />
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <h3 className="font-semibold truncate">{course.title}</h3>
+          {course.short_description ? (
+            <p className="text-sm text-muted-foreground line-clamp-1">{course.short_description}</p>
+          ) : null}
+          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-muted-foreground">
+            <span>{course.section_count} section{course.section_count === 1 ? "" : "s"}</span>
+            <span>{course.lesson_count} lesson{course.lesson_count === 1 ? "" : "s"}</span>
+            <span>{course.released_count} of {course.lesson_count} released</span>
+            <span>{course.student_count} student{course.student_count === 1 ? "" : "s"}</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {course.batches.map((b) => (
+              <span key={b.batch_id} className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                {b.batch_name || b.batch_id}
+              </span>
+            ))}
+          </div>
+        </div>
+        <ChevronRight className={`w-5 h-5 shrink-0 mt-1 transition-transform ${open ? "rotate-90" : ""}`} />
+      </button>
+
+      {open ? (
+        <div className="border-t border-border divide-y divide-border">
+          {/* Cohort selector — a release only ever applies to one batch. */}
+          {course.batches.length > 1 ? (
+            <div className="p-4 flex flex-wrap items-center gap-2 bg-muted/30">
+              <label htmlFor={`batch-${course.course_id}`} className="text-xs font-medium text-muted-foreground">
+                Unlock for batch
+              </label>
+              <select
+                id={`batch-${course.course_id}`}
+                value={batchId}
+                onChange={(e) => setBatchId(e.target.value)}
+                className="text-sm border border-border rounded-md px-2 py-1 bg-background"
+              >
+                {course.batches.map((b) => (
+                  <option key={b.batch_id} value={b.batch_id}>
+                    {b.batch_name || b.batch_id} ({b.student_count} student{b.student_count === 1 ? "" : "s"})
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          {error ? (
+            <p role="alert" className="text-sm text-red-600 px-4 py-2 bg-red-50">{error}</p>
+          ) : null}
+
+          {course.sections.length === 0 ? (
+            <p className="text-sm text-muted-foreground p-4">
+              This course has no curriculum yet. Once an admin adds sections and lessons they appear here.
+            </p>
+          ) : (
+            course.sections.map((s, si) => (
+              <div key={s.id ?? `orphan-${si}`} className="p-4">
+                <h4 className="font-medium text-sm mb-2">
+                  {s.title || "Untitled section"}
+                  <span className="ml-2 text-xs text-muted-foreground font-normal">
+                    {s.lessons.length} lesson{s.lessons.length === 1 ? "" : "s"}
+                  </span>
+                </h4>
+                {s.lessons.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No lessons in this section yet.</p>
+                ) : (
+                  <ol className="space-y-1">
+                    {s.lessons.map((l, li) => (
+                      <li key={l.id} className="flex items-center gap-2 text-sm py-1">
+                        <span className="text-xs text-muted-foreground w-6 shrink-0">{li + 1}.</span>
+                        <span className="flex-1 min-w-0 truncate">{l.title || "Untitled lesson"}</span>
+                        {l.duration ? (
+                          <span className="text-xs text-muted-foreground shrink-0">{l.duration}</span>
+                        ) : null}
+                        {/* No "Free" badge here: for a teacher, the only state
+                            that matters is Released vs Locked. is_free is a
+                            pricing flag and reads as "already open", which is
+                            misleading next to the Unlock control. */}
+                        <span
+                          className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${
+                            l.is_released ? "bg-emerald-100 text-emerald-700" : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {l.is_released ? "Released" : "Locked"}
+                        </span>
+                        {/* The switch itself: until this is pressed the lesson
+                            stays locked in the student's course player and its
+                            video is withheld server-side. */}
+                        <button
+                          type="button"
+                          onClick={() => toggleRelease(l)}
+                          disabled={busyId === l.id || !batchId}
+                          title={
+                            activeBatch
+                              ? `${l.is_released ? "Lock" : "Unlock"} for ${activeBatch.batch_name || activeBatch.batch_id}`
+                              : "No batch assigned to this course"
+                          }
+                          className={`text-xs px-2 py-1 rounded-md shrink-0 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                            l.is_released
+                              ? "border border-border hover:bg-muted"
+                              : "bg-primary text-primary-foreground hover:opacity-90"
+                          }`}
+                        >
+                          {busyId === l.id ? "Saving…" : l.is_released ? "Lock" : "Unlock"}
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+const MyCoursesView = ({ teacherId }: { teacherId?: string }) => {
+  const { items, loading, refetch } = useTeacherList<TeacherCourse>(teacherId, "teacher-courses", "courses");
+
+  if (!teacherId) return <Panel title="My Courses" icon={MonitorPlay}><Empty text="Sign in as a teacher to see your courses." /></Panel>;
+
+  return (
+    <Panel title="My Courses" icon={MonitorPlay}>
+      {loading ? (
+        <Empty text="Loading your courses…" />
+      ) : items.length === 0 ? (
+        <Empty text="No courses assigned to you yet. Once an admin adds you to a batch, that batch's course and full curriculum appear here." />
+      ) : (
+        <div className="space-y-4">
+          {items.map((c, i) => (
+            <CourseCurriculumCard key={c.course_id} course={c} defaultOpen={i === 0} onChanged={refetch} />
+          ))}
+        </div>
+      )}
+    </Panel>
+  );
+};
+
+/* ---------------------------------------------------------------------------
+   Assignments — create an assignment for one of my batches, read every
+   student's response, and grade it. Backed by /api/admin/teacher-assignments,
+   which scopes everything to the batches this teacher actually teaches.
+--------------------------------------------------------------------------- */
+interface TeacherAssignmentBatch {
+  batch_id: string;
+  batch_name: string;
+  course_id: number | null;
+  student_count: number;
+}
+interface AssignmentAttachment {
+  kind: "file" | "link";
+  url: string;
+  name: string | null;
+  mime: string | null;
+}
+interface TeacherAssignment {
+  id: number;
+  batch_id: string;
+  batch_name: string;
+  title: string;
+  description: string | null;
+  instructions: string | null;
+  due_date: string | null;
+  max_score: number;
+  attachments: AssignmentAttachment[] | null;
+  attachments_title: string | null;
+  student_count: number;
+  submitted_count: number;
+  graded_count: number;
+}
+interface AssignmentStudentRow {
+  user_id: string | null;
+  name: string | null;
+  email: string | null;
+  unique_id: string | null;
+  off_roster?: boolean;
+  submission: {
+    id: number;
+    submission_text: string | null;
+    file_url: string | null;
+    status: string;
+    submitted_date: string | null;
+    score: number | null;
+    feedback: string | null;
+  } | null;
+}
+
+const fmtDue = (iso: string | null) => {
+  if (!iso) return "No due date";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "No due date";
+  return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+};
+
+/* ---------------------------------------------------------------------------
+ * Assignment card presentation
+ *
+ * Presentation only — these read the same counts the list already had
+ * (student_count / submitted_count / graded_count / due_date) and render them
+ * more legibly. No new data, no new requests.
+ * ------------------------------------------------------------------------- */
+
+/** Whether a due date has passed. Null/unparseable dates are never overdue. */
+const isOverdue = (iso: string | null, now = new Date()) => {
+  if (!iso) return false;
+  const d = new Date(iso);
+  return !Number.isNaN(d.getTime()) && d.getTime() < now.getTime();
+};
+
+// Shared field styling for the create-assignment form, so every control in it
+// shares one focus ring and border treatment instead of repeating the classes.
+const fieldCls =
+  "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20";
+
+/** Label above a form control, with an explicit optional/required hint. */
+const FieldLabel = ({ children, hint }: { children: ReactNode; hint?: string }) => (
+  <span className="mb-1.5 flex items-baseline gap-1.5">
+    <span className="text-xs font-medium text-foreground">{children}</span>
+    {hint ? <span className="text-xs font-normal text-muted-foreground">{hint}</span> : null}
+  </span>
+);
+
+/** Small pill used for the per-assignment counts. */
+const AssignmentChip = ({
+  children, tone = "muted",
+}: { children: ReactNode; tone?: "muted" | "amber" | "emerald" | "red" }) => {
+  const tones = {
+    muted: "bg-muted text-muted-foreground ring-border",
+    amber: "bg-amber-500/10 text-amber-700 dark:text-amber-400 ring-amber-500/20",
+    emerald: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 ring-emerald-500/20",
+    red: "bg-red-500/10 text-red-600 dark:text-red-400 ring-red-500/20",
+  } as const;
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${tones[tone]}`}>
+      {children}
+    </span>
+  );
+};
+
+/**
+ * Submission progress for one assignment. The bar shows graded (solid) and
+ * submitted-but-ungraded (lighter) against the roster size, so a teacher can
+ * see at a glance what still needs marking.
+ */
+const AssignmentProgress = ({
+  submitted, graded, total,
+}: { submitted: number; graded: number; total: number }) => {
+  // Guard against a zero roster so an empty batch renders an empty bar rather
+  // than dividing by zero.
+  const pct = (n: number) => (total > 0 ? Math.min(100, (n / total) * 100) : 0);
+  return (
+    <div
+      className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={total}
+      aria-valuenow={submitted}
+      aria-label={`${submitted} of ${total} submitted, ${graded} graded`}
+    >
+      <div className="flex h-full">
+        <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${pct(graded)}%` }} />
+        <div className="h-full bg-amber-400 transition-all duration-500" style={{ width: `${pct(Math.max(0, submitted - graded))}%` }} />
+      </div>
+    </div>
+  );
+};
+
+// The grading panel for ONE assignment: every student on the roster, their
+// answer, and a score box. Non-submitters are listed too — a teacher needs to
+// see who hasn't handed in, not just who has.
+const AssignmentSubmissions = ({
+  assignment,
+  onGraded,
+}: {
+  assignment: TeacherAssignment;
+  onGraded: () => void;
+}) => {
+  const [rows, setRows] = useState<AssignmentStudentRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  // Local edits keyed by submission id so typing in one row never disturbs another.
+  const [draft, setDraft] = useState<Record<number, { score: string; feedback: string }>>({});
+  const [savingId, setSavingId] = useState<number | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    axios
+      .get(`${ADMIN_BASE}/api/admin/teacher-assignments/${assignment.id}/submissions`, {
+        headers: teacherAuthHeaders(), timeout: 30000,
+      })
+      .then(({ data }) => setRows(Array.isArray(data?.students) ? data.students : []))
+      .catch(() => setError("Could not load responses."))
+      .finally(() => setLoading(false));
+  }, [assignment.id]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const save = async (row: AssignmentStudentRow) => {
+    if (!row.submission) return;
+    const d = draft[row.submission.id] ?? {
+      score: row.submission.score == null ? "" : String(row.submission.score),
+      feedback: row.submission.feedback ?? "",
+    };
+    if (d.score === "") { setError("Enter a score before saving."); return; }
+    setSavingId(row.submission.id);
+    setError(null);
+    try {
+      await axios.patch(
+        `${ADMIN_BASE}/api/admin/teacher-submissions/${row.submission.id}/grade`,
+        { score: Number(d.score), feedback: d.feedback },
+        { headers: teacherAuthHeaders(), timeout: 30000 },
+      );
+      toast.success(`Saved ${row.name || "student"}'s marks`);
+      load();
+      onGraded();
+    } catch (e) {
+      const m = (e as { response?: { data?: { error?: string } } })?.response?.data;
+      setError(m?.error || "Could not save the marks.");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  if (loading) return <p className="text-sm text-muted-foreground p-4">Loading responses…</p>;
+
+  return (
+    <div className="p-4 space-y-3">
+      {error ? <p role="alert" className="text-sm text-red-600">{error}</p> : null}
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No students in this batch yet.</p>
+      ) : (
+        rows.map((r) => {
+          const sub = r.submission;
+          const d = sub
+            ? draft[sub.id] ?? { score: sub.score == null ? "" : String(sub.score), feedback: sub.feedback ?? "" }
+            : { score: "", feedback: "" };
+          return (
+            <div key={r.user_id || r.unique_id || Math.random()} className="border border-border rounded-lg p-3">
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <span className="font-medium text-sm">{r.name || r.unique_id || r.user_id}</span>
+                {r.unique_id ? <span className="text-xs text-muted-foreground">{r.unique_id}</span> : null}
+                {r.off_roster ? (
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">No longer in batch</span>
+                ) : null}
+                <span
+                  className={`text-xs px-1.5 py-0.5 rounded ml-auto ${
+                    !sub ? "bg-muted text-muted-foreground"
+                      : sub.status === "graded" ? "bg-emerald-100 text-emerald-700"
+                      : "bg-blue-100 text-blue-700"
+                  }`}
+                >
+                  {!sub ? "Not submitted" : sub.status === "graded" ? `Graded ${sub.score}/${assignment.max_score}` : "Submitted"}
+                </span>
+              </div>
+
+              {!sub ? (
+                <p className="text-sm text-muted-foreground italic">This student hasn't submitted yet.</p>
+              ) : (
+                <>
+                  <p className="text-sm whitespace-pre-wrap break-words bg-muted/40 rounded p-2">
+                    {sub.submission_text || <span className="italic text-muted-foreground">No text answer</span>}
+                  </p>
+                  {sub.file_url ? (
+                    <a href={sub.file_url} target="_blank" rel="noreferrer" className="text-xs text-primary underline mt-1 inline-block">
+                      View attached file
+                    </a>
+                  ) : null}
+                  <p className="text-xs text-muted-foreground mt-1">Submitted {fmtDue(sub.submitted_date)}</p>
+
+                  <div className="flex flex-wrap items-end gap-2 mt-2">
+                    <label className="text-xs">
+                      <span className="block text-muted-foreground mb-1">Marks (out of {assignment.max_score})</span>
+                      <input
+                        type="number" min={0} max={assignment.max_score} value={d.score}
+                        onChange={(e) => setDraft((p) => ({ ...p, [sub.id]: { ...d, score: e.target.value } }))}
+                        className="w-24 border border-border rounded-md px-2 py-1 text-sm bg-background"
+                      />
+                    </label>
+                    <label className="text-xs flex-1 min-w-[180px]">
+                      <span className="block text-muted-foreground mb-1">Feedback (optional)</span>
+                      <input
+                        type="text" value={d.feedback}
+                        onChange={(e) => setDraft((p) => ({ ...p, [sub.id]: { ...d, feedback: e.target.value } }))}
+                        className="w-full border border-border rounded-md px-2 py-1 text-sm bg-background"
+                      />
+                    </label>
+                    <button
+                      type="button" onClick={() => save(r)} disabled={savingId === sub.id}
+                      className="text-xs px-3 py-1.5 rounded-md bg-primary text-primary-foreground font-medium disabled:opacity-50"
+                    >
+                      {savingId === sub.id ? "Saving…" : sub.status === "graded" ? "Update marks" : "Save marks"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+};
+
+const AssignmentsView = ({ teacherId }: { teacherId?: string }) => {
+  const [batches, setBatches] = useState<TeacherAssignmentBatch[]>([]);
+  const [items, setItems] = useState<TeacherAssignment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [openId, setOpenId] = useState<number | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    batch_id: "", title: "", description: "", due_date: "", max_score: "100",
+    attachments_title: "",
+  });
+  // Reference material: files chosen from disk + links typed in. Kept separate
+  // because files go up as multipart parts and links as a JSON field.
+  const [files, setFiles] = useState<File[]>([]);
+  const [links, setLinks] = useState<string[]>([]);
+  const [linkDraft, setLinkDraft] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const addLink = () => {
+    const v = linkDraft.trim();
+    if (!v) return;
+    setLinks((p) => [...p, v]);
+    setLinkDraft("");
+  };
+
+  const load = useCallback(() => {
+    if (!teacherId) { setLoading(false); return; }
+    setLoading(true);
+    axios
+      .get(`${ADMIN_BASE}/api/admin/teacher-assignments`, { headers: teacherAuthHeaders(), timeout: 30000 })
+      .then(({ data }) => {
+        setBatches(Array.isArray(data?.batches) ? data.batches : []);
+        setItems(Array.isArray(data?.assignments) ? data.assignments : []);
+      })
+      .catch(() => setError("Could not load your assignments."))
+      .finally(() => setLoading(false));
+  }, [teacherId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Default the batch picker to the teacher's first batch once loaded.
+  useEffect(() => {
+    if (!form.batch_id && batches.length) setForm((f) => ({ ...f, batch_id: batches[0].batch_id }));
+  }, [batches, form.batch_id]);
+
+  const create = async () => {
+    if (!form.batch_id) { setError("Pick a batch."); return; }
+    if (form.title.trim().length < 2) { setError("Give the assignment a title."); return; }
+    // A link typed but never "Add"ed is still sitting in the draft box and
+    // would be dropped silently, so fold it in rather than losing it.
+    const pendingLink = linkDraft.trim();
+    const allLinks = pendingLink && !links.includes(pendingLink) ? [...links, pendingLink] : links;
+    // A heading with nothing under it produces no student-visible block at all
+    // (the server only stores a title when there IS material to label), so say
+    // so up front instead of reporting success on an empty resource section.
+    if (form.attachments_title.trim() && !files.length && !allLinks.length) {
+      setError("Add at least one file or link under the resource heading, or clear the heading.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      // multipart/form-data so the PDFs/images ride along with the fields.
+      // Don't set Content-Type by hand — the browser must add the boundary.
+      const fd = new FormData();
+      fd.append("batch_id", form.batch_id);
+      fd.append("title", form.title.trim());
+      if (form.description.trim()) fd.append("description", form.description.trim());
+      if (form.due_date) fd.append("due_date", new Date(form.due_date).toISOString());
+      fd.append("max_score", String(Number(form.max_score) || 100));
+      if (allLinks.length) fd.append("links", JSON.stringify(allLinks));
+      if (form.attachments_title.trim()) fd.append("attachments_title", form.attachments_title.trim());
+      for (const f of files) fd.append("attachments", f);
+
+      const { data } = await axios.post(`${ADMIN_BASE}/api/admin/teacher-assignments`, fd, {
+        headers: teacherAuthHeaders(),
+        timeout: 120000, // uploads can be slow on a classroom connection
+      });
+      // The assignment is created even when an attachment fails to upload, so
+      // a bare "sent" toast would hide material the students can't see.
+      // Held longer than a normal toast — it names files the teacher must re-attach.
+      if (data?.warning) toast.warn(data.warning, { autoClose: 12000 });
+      else toast.success("Assignment sent to your students");
+      setForm((f) => ({ ...f, title: "", description: "", due_date: "", attachments_title: "" }));
+      setFiles([]); setLinks([]); setLinkDraft("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      setShowForm(false);
+      load();
+    } catch (e) {
+      const m = (e as { response?: { data?: { error?: string } } })?.response?.data;
+      setError(m?.error || "Could not create the assignment.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async (a: TeacherAssignment) => {
+    if (!window.confirm(`Delete "${a.title}"? This also deletes all student responses and marks.`)) return;
+    try {
+      await axios.delete(`${ADMIN_BASE}/api/admin/teacher-assignments/${a.id}`, {
+        headers: teacherAuthHeaders(), timeout: 30000,
+      });
+      toast.success("Assignment deleted");
+      load();
+    } catch {
+      setError("Could not delete the assignment.");
+    }
+  };
+
+  if (!teacherId) return <Panel title="Assignments" icon={ClipboardList}><Empty text="Sign in as a teacher to manage assignments." /></Panel>;
+
+  return (
+    <Panel title="Assignments" icon={ClipboardList}>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="max-w-prose text-sm text-muted-foreground">
+          Send work to a batch, then read every student's answer and give marks.
+        </p>
+        <button
+          type="button" onClick={() => setShowForm((v) => !v)} disabled={batches.length === 0}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:brightness-110 disabled:opacity-50"
+        >
+          {showForm ? <X className="h-4 w-4" /> : <ClipboardList className="h-4 w-4" />}
+          {showForm ? "Cancel" : "New assignment"}
+        </button>
+      </div>
+
+      {error ? (
+        <p role="alert" className="mb-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm font-medium text-red-600 ring-1 ring-inset ring-red-500/20 dark:text-red-400">
+          {error}
+        </p>
+      ) : null}
+
+      {showForm ? (
+        <div className="mb-4 space-y-4 rounded-xl border border-border bg-muted/20 p-5">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <FieldLabel>Batch</FieldLabel>
+              <select
+                value={form.batch_id} onChange={(e) => setForm((f) => ({ ...f, batch_id: e.target.value }))}
+                className={fieldCls}
+              >
+                {batches.map((b) => (
+                  <option key={b.batch_id} value={b.batch_id}>
+                    {b.batch_name} ({b.student_count} student{b.student_count === 1 ? "" : "s"})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <FieldLabel>Title</FieldLabel>
+              <input
+                value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                placeholder="e.g. Build a line-following robot"
+                className={fieldCls}
+              />
+            </label>
+          </div>
+          <label className="block">
+            <FieldLabel hint="optional">Instructions</FieldLabel>
+            <textarea
+              value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              rows={3} placeholder="What should the students do?"
+              className={`${fieldCls} resize-y`}
+            />
+          </label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <FieldLabel hint="optional">Due date</FieldLabel>
+              <input
+                type="datetime-local" value={form.due_date}
+                onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))}
+                className={fieldCls}
+              />
+            </label>
+            <label className="block">
+              <FieldLabel>Total marks</FieldLabel>
+              <input
+                type="number" min={1} value={form.max_score}
+                onChange={(e) => setForm((f) => ({ ...f, max_score: e.target.value }))}
+                className={fieldCls}
+              />
+            </label>
+          </div>
+          {/* Reference material: PDFs / images / documents from disk, plus any
+              links (video, drive folder, article) the teacher wants to share. */}
+          <div className="space-y-3 border-t border-border pt-4">
+            <div>
+              <span className="flex items-center gap-1.5 text-sm font-semibold">
+                <Library className="h-4 w-4 text-primary" />
+                Reference material
+                <span className="text-xs font-normal text-muted-foreground">optional</span>
+              </span>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Attach as many PDFs, images or links as you need. Students see them on the assignment.
+              </p>
+            </div>
+
+            <label className="block">
+              <FieldLabel hint="optional">Heading for these resources</FieldLabel>
+              <input
+                value={form.attachments_title}
+                onChange={(e) => setForm((f) => ({ ...f, attachments_title: e.target.value }))}
+                placeholder="Reference material"
+                maxLength={200}
+                className={fieldCls}
+              />
+            </label>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                // Both MIME types AND extensions: a bare ".pdf,…,image/*" mix
+                // makes some Windows file pickers grey out PDFs/images, so the
+                // teacher sees nothing selectable. Mirrors the server's
+                // ALLOWED_ATTACHMENT filter (teacherAssignment.routes.js).
+                accept={[
+                  "application/pdf", ".pdf",
+                  "image/png", "image/jpeg", "image/gif", "image/webp", ".png", ".jpg", ".jpeg", ".gif", ".webp",
+                  "application/msword", ".doc",
+                  "application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".docx",
+                  "text/plain", ".txt",
+                  "application/zip", ".zip",
+                ].join(",")}
+                // Append rather than replace, so the teacher can add files in
+                // several goes. Clearing the input afterwards lets them pick
+                // the same file again if they removed it by mistake.
+                //
+                // Snapshot the FileList BEFORE clearing the input. `setFiles`
+                // takes a lazy updater that React runs after this handler
+                // returns, so reading `e.target.files` inside it read an input
+                // that `e.target.value = ""` had already reset — per spec that
+                // empties the FileList, so every picked file was silently
+                // dropped and no chip ever appeared.
+                onChange={(e) => {
+                  const picked = Array.from(e.target.files || []);
+                  e.target.value = "";
+                  setFiles((p) => mergePickedFiles(p, picked));
+                }}
+                className="text-xs file:mr-2 file:cursor-pointer file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-primary-foreground hover:file:brightness-110"
+              />
+              <span className="text-xs text-muted-foreground">PDF, images or docs — up to 20 files, 25MB each</span>
+            </div>
+
+            {files.length > 0 ? (
+              <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
+                {files.map((f, i) => (
+                  <li key={`${f.name}-${i}`} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs">
+                    <span className="max-w-[180px] truncate">{f.name}</span>
+                    <button
+                      type="button" aria-label={`Remove ${f.name}`}
+                      onClick={() => setFiles((p) => p.filter((_, j) => j !== i))}
+                      className="text-muted-foreground transition-colors hover:text-red-600"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            <div className="flex flex-wrap gap-2">
+              <input
+                value={linkDraft}
+                onChange={(e) => setLinkDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addLink(); } }}
+                placeholder="Paste a link (e.g. https://youtu.be/…) and press Add"
+                className={`${fieldCls} min-w-[220px] flex-1`}
+              />
+              <button
+                type="button" onClick={addLink}
+                className="shrink-0 rounded-lg border border-border px-3 py-2 text-xs font-medium transition-colors hover:border-primary/30 hover:bg-muted"
+              >
+                Add link
+              </button>
+            </div>
+
+            {links.length > 0 ? (
+              <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
+                {links.map((l, i) => (
+                  <li key={`${l}-${i}`} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs">
+                    <span className="max-w-[220px] truncate">{l}</span>
+                    <button
+                      type="button" aria-label={`Remove ${l}`}
+                      onClick={() => setLinks((p) => p.filter((_, j) => j !== i))}
+                      className="text-muted-foreground transition-colors hover:text-red-600"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+
+          <div className="flex items-center gap-3 border-t border-border pt-4">
+            <button
+              type="button" onClick={create} disabled={saving}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:brightness-110 disabled:opacity-50"
+            >
+              {saving ? "Sending…" : "Send to students"}
+            </button>
+            <button
+              type="button" onClick={() => setShowForm(false)} disabled={saving}
+              className="rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {loading ? (
+        <Empty text="Loading assignments…" />
+      ) : batches.length === 0 ? (
+        <Empty text="You don't teach any batch yet. Once an admin assigns you one, you can send assignments here." />
+      ) : items.length === 0 ? (
+        <Empty text="No assignments yet. Use “New assignment” to send work to your students." />
+      ) : (
+        <div className="space-y-3">
+          {items.map((a) => {
+            const open = openId === a.id;
+            const toGrade = Math.max(0, a.submitted_count - a.graded_count);
+            const overdue = isOverdue(a.due_date);
+            return (
+              <div
+                key={a.id}
+                className={`rounded-xl border bg-card shadow-sm transition-shadow hover:shadow-md ${
+                  open ? "border-primary/30" : "border-border"
+                }`}
+              >
+                <div className="p-4">
+                  {/* Header row: the expand control is its own button so the
+                      attachment links below are no longer nested inside it
+                      (a button cannot legally contain an anchor). */}
+                  <div className="flex items-start gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setOpenId(open ? null : a.id)}
+                      aria-expanded={open}
+                      className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                    >
+                      <ChevronRight
+                        className={`mt-0.5 h-5 w-5 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-90" : ""}`}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-semibold">{a.title}</span>
+                        {a.description ? (
+                          <span className="mt-0.5 block truncate text-sm text-muted-foreground">{a.description}</span>
+                        ) : null}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => remove(a)}
+                      className="shrink-0 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-600"
+                    >
+                      Delete
+                    </button>
+                  </div>
+
+                  {/* Meta line: batch, due date, total marks. */}
+                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 pl-8 text-xs text-muted-foreground">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Users className="h-3.5 w-3.5" /> {a.batch_name}
+                    </span>
+                    <span className={`inline-flex items-center gap-1.5 ${overdue ? "font-medium text-red-600 dark:text-red-400" : ""}`}>
+                      <CalendarDays className="h-3.5 w-3.5" />
+                      Due {fmtDue(a.due_date)}{overdue ? " · overdue" : ""}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <ClipboardCheck className="h-3.5 w-3.5" /> {a.max_score} marks
+                    </span>
+                  </div>
+
+                  {/* Submission progress — the numbers the teacher acts on. */}
+                  <div className="mt-3 pl-8">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <AssignmentChip tone={a.submitted_count > 0 ? "amber" : "muted"}>
+                        {a.submitted_count} of {a.student_count} submitted
+                      </AssignmentChip>
+                      {a.graded_count > 0 ? (
+                        <AssignmentChip tone="emerald">{a.graded_count} graded</AssignmentChip>
+                      ) : null}
+                      {toGrade > 0 ? (
+                        <AssignmentChip tone="red">{toGrade} to grade</AssignmentChip>
+                      ) : null}
+                    </div>
+                    <AssignmentProgress
+                      submitted={a.submitted_count}
+                      graded={a.graded_count}
+                      total={a.student_count}
+                    />
+                  </div>
+
+                  {/* Reference material, now a sibling of the expand button. */}
+                  {a.attachments?.length ? (
+                    <div className="mt-3 pl-8">
+                      <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                        {a.attachments_title || "Reference material"}
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {a.attachments.map((att, i) => (
+                          <a
+                            key={`${att.url}-${i}`}
+                            href={att.url}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="inline-flex max-w-[220px] items-center gap-1 rounded-md border border-border px-2 py-0.5 text-xs transition-colors hover:border-primary/30 hover:bg-muted"
+                          >
+                            <span className="truncate">{att.name || att.url}</span>
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                {open ? (
+                  <div className="border-t border-border">
+                    <AssignmentSubmissions assignment={a} onGraded={load} />
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       )}
     </Panel>
@@ -304,24 +1518,23 @@ const DemosView = ({ teacherId }: { teacherId?: string }) => {
 
 const ClassesView = ({ teacherId }: { teacherId?: string }) => {
   const { items, loading } = useTeacherList<{ id: number; name: string; course_title: string | null; start_at: string | null; end_at: string | null; meeting_link: string | null; course_student_count?: number }>(teacherId, "classes", "classes");
+  const sessions: TeacherSession[] = useMemo(
+    () => items.map((c) => ({
+      id: c.id, title: c.name || "Class", course_title: c.course_title,
+      start_at: c.start_at, end_at: c.end_at, meeting_link: c.meeting_link,
+      student_count: c.course_student_count,
+    })),
+    [items],
+  );
   return (
-    <Panel title="My Classes" icon={MonitorPlay}>
-      {loading ? <Empty text="Loading classes…" /> : items.length === 0 ? <Empty text="No classes assigned to you yet." /> : (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {items.map((c) => (
-            <div key={c.id} className="rounded-xl border border-border p-4 flex flex-col gap-2">
-              <div className="font-semibold text-lg">{c.name}</div>
-              {c.course_title && <div className="text-sm text-muted-foreground">{c.course_title}</div>}
-              <div className="text-sm"><span className="font-medium">{fmtSlot(c.start_at)}</span><span className="text-muted-foreground"> → {fmtSlot(c.end_at)}</span></div>
-              <div className="text-xs text-muted-foreground">{c.course_student_count ?? 0} student{(c.course_student_count ?? 0) === 1 ? "" : "s"} assigned to this course</div>
-              {c.meeting_link
-                ? <a href={c.meeting_link} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-hero text-white text-sm font-semibold px-3 py-2"><Video className="w-4 h-4" /> Join class</a>
-                : <span className="text-xs text-muted-foreground mt-1">No meeting link</span>}
-            </div>
-          ))}
-        </div>
-      )}
-    </Panel>
+    <SessionsPanel
+      title="My Classes"
+      icon={MonitorPlay}
+      items={sessions}
+      loading={loading}
+      noun="classes"
+      emptyText="No classes assigned to you yet."
+    />
   );
 };
 
@@ -837,7 +2050,7 @@ const Stars = ({ value }: { value: number }) => {
 
 // Per-student detail: goals, badges, SPR notes, school marks and projects.
 // All persisted via the flexible /student-records endpoints (kind + data).
-const StudentDetail = ({ teacherId, student }: { teacherId: string; student: { id: string; name: string; classes: number; slots: number } }) => {
+const StudentDetail = ({ teacherId, student }: { teacherId: string; student: { id: string; name: string; classes: number; slots: number; studentId?: string | null; batches?: { id: string; name: string }[] } }) => {
   const [records, setRecords] = useState<StudentRec[]>([]);
   const [loading, setLoading] = useState(true);
   const [primary, setPrimary] = useState("");
@@ -920,7 +2133,20 @@ const StudentDetail = ({ teacherId, student }: { teacherId: string; student: { i
     <div>
       <div className="flex items-center gap-4 mb-5">
         <div className="w-14 h-14 rounded-full bg-gradient-hero text-white text-lg font-bold flex items-center justify-center">{(student.name || "S").slice(0, 1).toUpperCase()}</div>
-        <h2 className="text-xl font-bold">{student.name || student.id}</h2>
+        <div className="min-w-0">
+          <h2 className="text-xl font-bold m-0 truncate">{student.name || student.id}</h2>
+          <div className="flex flex-wrap items-center gap-1.5 mt-1">
+            {student.studentId && (
+              <span className="text-[12px] text-muted-foreground tabular-nums">{student.studentId}</span>
+            )}
+            {/* Batch chips: which of the teacher's groups this student is in. */}
+            {(student.batches || []).map((b) => (
+              <span key={b.id} className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                <Users className="w-3 h-3" /> {b.name}
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
       <div className="flex flex-wrap gap-4 mb-8">
         <Stat value={String(student.classes)} label="Classes" />
@@ -1091,7 +2317,10 @@ interface RosterSched { id: number; students: { id: string; name: string }[] }
 const StudentsView = ({ teacherId }: { teacherId?: string }) => {
   const [classes, setClasses] = useState<RosterSched[]>([]);
   const [slots, setSlots] = useState<RosterSched[]>([]);
-  const [courseStudents, setCourseStudents] = useState<{ id: string; name: string }[]>([]);
+  // Students reached via batch membership, each carrying the batches they're in.
+  const [batchStudents, setBatchStudents] = useState<
+    { id: string; name: string; studentId?: string | null; batches?: { id: string; name: string }[] }[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
@@ -1100,27 +2329,59 @@ const StudentsView = ({ teacherId }: { teacherId?: string }) => {
     if (!teacherId) { setLoading(false); return; }
     let cancelled = false;
     setLoading(true);
-    Promise.all([
-      axios.get(`${ADMIN_BASE}/api/public/classes/by-teacher/${teacherId}`, { params: { t: Date.now() }, headers: { "Cache-Control": "no-cache", ...teacherAuthHeaders() }, timeout: 30000 }),
-      axios.get(`${ADMIN_BASE}/api/public/slots/by-teacher/${teacherId}`, { params: { t: Date.now() }, headers: { "Cache-Control": "no-cache", ...teacherAuthHeaders() }, timeout: 30000 }),
-      // Students from the teacher's COURSE assignments (delegation roster).
-      axios.get(`${ADMIN_BASE}/api/public/teaching/students-by-teacher/${teacherId}`, { params: { t: Date.now() }, headers: { "Cache-Control": "no-cache", ...teacherAuthHeaders() }, timeout: 30000 }),
+    const get = (path: string) =>
+      axios.get(`${ADMIN_BASE}/${path}/${teacherId}`, {
+        params: { t: Date.now() },
+        headers: { "Cache-Control": "no-cache", ...teacherAuthHeaders() },
+        timeout: 30000,
+      });
+
+    // allSettled, NOT all: these three feeds are independent, and Promise.all
+    // rejects the whole chain if ANY one fails — the old .catch then cleared
+    // all three lists. A single broken endpoint (slots/by-teacher was 500ing on
+    // a missing service method) therefore blanked the entire Students tab even
+    // though the batch-students call had succeeded. Each source now stands or
+    // falls on its own.
+    Promise.allSettled([
+      get("api/public/classes/by-teacher"),
+      get("api/public/slots/by-teacher"),
+      // Students from the teacher's BATCH assignments. This replaced the old
+      // /teaching/students-by-teacher endpoint, which was deleted with the
+      // teaching-assignment feature — the dashboard kept calling it and the
+      // 404 was swallowed, so batch students never appeared here at all.
+      get("api/public/teacher-students/by-teacher"),
     ])
       .then(([c, s, ts]) => {
         if (cancelled) return;
-        setClasses(Array.isArray(c.data?.classes) ? c.data.classes : []);
-        setSlots(Array.isArray(s.data?.slots) ? s.data.slots : []);
-        setCourseStudents(Array.isArray(ts.data?.students) ? ts.data.students : []);
+        setClasses(c.status === "fulfilled" && Array.isArray(c.value.data?.classes) ? c.value.data.classes : []);
+        setSlots(s.status === "fulfilled" && Array.isArray(s.value.data?.slots) ? s.value.data.slots : []);
+        setBatchStudents(ts.status === "fulfilled" && Array.isArray(ts.value.data?.students) ? ts.value.data.students : []);
+        // Surface a failed feed instead of silently showing an empty roster.
+        [c, s, ts].forEach((r, i) => {
+          if (r.status === "rejected") {
+            console.warn(`[teacher students] feed ${["classes", "slots", "batch-students"][i]} failed:`, r.reason?.message);
+          }
+        });
       })
-      .catch(() => { if (!cancelled) { setClasses([]); setSlots([]); setCourseStudents([]); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [teacherId]);
 
-  const map = new Map<string, { id: string; name: string; classes: number; slots: number }>();
+  type StudentEntry = {
+    id: string;
+    name: string;
+    classes: number;
+    slots: number;
+    studentId?: string | null;
+    batches: { id: string; name: string }[];
+  };
+  const map = new Map<string, StudentEntry>();
+  const blank = (id: string, name?: string): StudentEntry => ({
+    id, name: name || "", classes: 0, slots: 0, batches: [],
+  });
   const add = (entries: RosterSched[], key: "classes" | "slots") => {
     entries.forEach((e) => (e.students || []).forEach((st) => {
-      const cur = map.get(st.id) || { id: st.id, name: st.name || "", classes: 0, slots: 0 };
+      const cur = map.get(st.id) || blank(st.id, st.name);
       cur[key] += 1;
       if (st.name && !cur.name) cur.name = st.name;
       map.set(st.id, cur);
@@ -1128,11 +2389,15 @@ const StudentsView = ({ teacherId }: { teacherId?: string }) => {
   };
   add(classes, "classes");
   add(slots, "slots");
-  // Merge course-assignment (delegation) students so they show even with no
-  // class/slot scheduled.
-  courseStudents.forEach((st) => {
-    const cur = map.get(st.id) || { id: st.id, name: st.name || "", classes: 0, slots: 0 };
+  // Merge BATCH students so they show even with no class/slot scheduled — this
+  // is the primary roster now that batches replaced teaching assignments.
+  batchStudents.forEach((st) => {
+    const cur = map.get(st.id) || blank(st.id, st.name);
     if (st.name && !cur.name) cur.name = st.name;
+    if (st.studentId && !cur.studentId) cur.studentId = st.studentId;
+    (st.batches || []).forEach((b) => {
+      if (!cur.batches.some((x) => x.id === b.id)) cur.batches.push(b);
+    });
     map.set(st.id, cur);
   });
   let students = Array.from(map.values()).sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
@@ -1148,16 +2413,34 @@ const StudentsView = ({ teacherId }: { teacherId?: string }) => {
       ) : (
         <div className="grid lg:grid-cols-[280px_1fr] gap-6">
           <div className="rounded-xl border border-border p-4">
-            <h3 className="font-semibold mb-3">Your Students</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold m-0">Your Students</h3>
+              {students.length > 0 && (
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary tabular-nums">
+                  {students.length}
+                </span>
+              )}
+            </div>
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search students" className="w-full rounded-lg border border-border px-3 py-2 text-sm mb-3" />
             {students.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No students assigned to you yet (via courses, classes, or slots).</p>
+              <p className="text-sm text-muted-foreground">
+                {q.trim()
+                  ? "No students match that search."
+                  : "No students assigned to you yet. Students appear here once an admin adds them to one of your batches."}
+              </p>
             ) : (
               <ul className="space-y-1 max-h-[440px] overflow-y-auto">
                 {students.map((s) => (
                   <li key={s.id}>
                     <button type="button" onClick={() => setSelected(s.id)} className={`w-full text-left rounded-lg px-3 py-2 text-sm ${selected === s.id ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted"}`}>
-                      {s.name || s.id}
+                      <span className="block truncate">{s.name || s.id}</span>
+                      {/* Which batch(es) this student comes from — the teacher's
+                          main way of telling their groups apart. */}
+                      {s.batches.length > 0 && (
+                        <span className="block truncate text-[11.5px] text-muted-foreground font-normal mt-0.5">
+                          {s.batches.map((b) => b.name).join(", ")}
+                        </span>
+                      )}
                     </button>
                   </li>
                 ))}
@@ -1207,25 +2490,265 @@ const PendingFeedbackBanner = ({ teacherId, onGiveFeedback }: { teacherId?: stri
   );
 };
 
+/* ---------------------------------------------------------------------------
+ * Dashboard (overview)
+ *
+ * Built entirely from feeds the other tabs already use (teacher-courses,
+ * classes, demos), so it adds no new endpoints and can never disagree with the
+ * tab a teacher clicks into. Replaces the old placeholder, which showed
+ * hardcoded "₹0" earnings and "—" penalties against no backend at all.
+ * ------------------------------------------------------------------------- */
+
+/** Metric tile. `tone` tints the icon chip; every tile is also text-labelled. */
+const MetricTile = ({
+  value, label, icon: Icon, tone = "primary", loading = false,
+}: {
+  value: string | number;
+  label: string;
+  icon: typeof Calendar;
+  tone?: "primary" | "emerald" | "amber" | "blue";
+  loading?: boolean;
+}) => {
+  const tones = {
+    primary: "bg-primary/10 text-primary",
+    emerald: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    amber: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+    blue: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  } as const;
+  return (
+    <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-sm transition-shadow hover:shadow-md">
+      <span className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl ${tones[tone]}`}>
+        <Icon className="h-5 w-5" />
+      </span>
+      {loading ? (
+        <div className="h-8 w-16 animate-pulse rounded bg-muted" />
+      ) : (
+        <div className="text-3xl font-bold leading-none tracking-tight tabular-nums">{value}</div>
+      )}
+      <div className="mt-2 text-sm text-muted-foreground">{label}</div>
+    </div>
+  );
+};
+
+const OverviewEmpty = ({ icon: Icon, title, text }: { icon: typeof Calendar; title: string; text?: string }) => (
+  <div className="py-10 text-center">
+    <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+      <Icon className="h-6 w-6" />
+    </span>
+    <p className="text-base font-semibold m-0">{title}</p>
+    {text && <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground m-0">{text}</p>}
+  </div>
+);
+
+const TeacherOverview = ({
+  teacherId, name, onGoTo,
+}: { teacherId?: string; name: string; onGoTo: (t: string) => void }) => {
+  const { items: courses, loading: coursesLoading } =
+    useTeacherList<TeacherCourse>(teacherId, "teacher-courses", "courses");
+  const { items: classes, loading: classesLoading } =
+    useTeacherList<{ id: number; name: string; course_title: string | null; start_at: string | null; end_at: string | null; meeting_link: string | null }>(teacherId, "classes", "classes");
+  const { items: demos, loading: demosLoading } =
+    useTeacherList<{ id: number; title: string; course_title: string | null; start_at: string | null; end_at: string | null; meeting_link: string | null }>(teacherId, "demos", "demos");
+
+  // Normalise both feeds to one row shape (classes use `name`, demos `title`).
+  const classRows: TeacherSession[] = useMemo(
+    () => classes.map((c) => ({ id: c.id, title: c.name || "Class", course_title: c.course_title, start_at: c.start_at, end_at: c.end_at, meeting_link: c.meeting_link })),
+    [classes],
+  );
+  const demoRows: TeacherSession[] = useMemo(
+    () => demos.map((d) => ({ id: d.id, title: d.title || "Demo", course_title: d.course_title, start_at: d.start_at, end_at: d.end_at, meeting_link: d.meeting_link })),
+    [demos],
+  );
+
+  // What counts as "upcoming" depends on the CURRENT time, so it must be
+  // recomputed as the clock moves — not memoised against the data alone. These
+  // were previously keyed on [classRows]/[demoRows] only, which evaluated the
+  // clock once when the feed loaded: a session that finished while the tab sat
+  // open stayed in "Upcoming" indefinitely. `tick` exists solely to re-run
+  // these; the values come from a fresh `new Date()` each time.
+  const tick = useScheduleTick([...classRows, ...demoRows]);
+
+  /* eslint-disable react-hooks/exhaustive-deps */
+  const upcomingClasses = useMemo(() => splitSchedule(classRows, new Date()).upcoming, [classRows, tick]);
+  const upcomingDemos = useMemo(() => splitSchedule(demoRows, new Date()).upcoming, [demoRows, tick]);
+
+  // Distinct students across the teacher's courses. Summing student_count would
+  // double-count anyone enrolled in two of their courses, so count batch
+  // membership by unique batch instead.
+  const { studentCount, releasedPct, lessonTotal, releasedTotal } = useMemo(() => {
+    const seenBatches = new Set<string>();
+    let students = 0;
+    let lessons = 0;
+    let released = 0;
+    for (const c of courses) {
+      lessons += c.lesson_count || 0;
+      released += c.released_count || 0;
+      for (const b of c.batches || []) {
+        if (seenBatches.has(b.batch_id)) continue;
+        seenBatches.add(b.batch_id);
+        students += b.student_count || 0;
+      }
+    }
+    return {
+      studentCount: students,
+      lessonTotal: lessons,
+      releasedTotal: released,
+      releasedPct: lessons ? Math.round((released / lessons) * 100) : 0,
+    };
+  }, [courses]);
+
+  const nextSession = useMemo(
+    () => splitSchedule([...classRows, ...demoRows], new Date()).upcoming[0],
+    [classRows, demoRows, tick],
+  );
+  const liveNow = useMemo(
+    () => [...classRows, ...demoRows].find((s) => getClassState(s, new Date()) === "live"),
+    [classRows, demoRows, tick],
+  );
+  /* eslint-enable react-hooks/exhaustive-deps */
+
+  const scheduleLoading = classesLoading || demosLoading;
+  const linkBtn = "inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition hover:gap-2.5";
+
+  return (
+    <div className="space-y-6">
+      {/* Hero */}
+      <section className="relative overflow-hidden rounded-2xl bg-gradient-hero p-6 text-white shadow-sm sm:p-8">
+        <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10 blur-2xl" />
+        <div className="relative">
+          <p className="text-sm font-medium text-white/80">{greeting()}</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Welcome back, {name} 👋</h1>
+          <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/85">
+            {scheduleLoading
+              ? "Getting your schedule up to date…"
+              : liveNow
+                ? `${liveNow.title} is happening right now — join in.`
+                : nextSession
+                  ? `Your next session, ${nextSession.title}, is on ${fmtSessionWhen(nextSession.start_at, nextSession.end_at)}.`
+                  : "Nothing scheduled right now. Enjoy the breather."}
+          </p>
+          {!scheduleLoading && liveNow?.meeting_link && (
+            <a
+              href={liveNow.meeting_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-primary shadow-sm transition hover:bg-white/90"
+            >
+              <Video className="h-4 w-4" /> Join now
+            </a>
+          )}
+        </div>
+      </section>
+
+      {/* Analytics */}
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <MetricTile icon={MonitorPlay} tone="primary" loading={coursesLoading} value={courses.length} label={courses.length === 1 ? "Course assigned" : "Courses assigned"} />
+        <MetricTile icon={Users} tone="blue" loading={coursesLoading} value={studentCount} label="Students taught" />
+        <MetricTile icon={CalendarDays} tone="amber" loading={scheduleLoading} value={upcomingClasses.length} label="Upcoming classes" />
+        <MetricTile icon={MessageSquare} tone="emerald" loading={scheduleLoading} value={upcomingDemos.length} label="Upcoming demos" />
+      </div>
+
+      {/* Curriculum release progress — how much of the syllabus is unlocked. */}
+      <section className="rounded-2xl border border-border/70 bg-card p-5 shadow-sm sm:p-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-base font-semibold m-0 flex items-center gap-2">
+            <ClipboardCheck className="h-4 w-4 text-primary" /> Lesson releases
+          </h2>
+          <button type="button" onClick={() => onGoTo("My Courses")} className={linkBtn}>
+            Manage courses <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
+        {coursesLoading ? (
+          <div className="h-2 w-full animate-pulse rounded-full bg-muted" />
+        ) : lessonTotal === 0 ? (
+          <OverviewEmpty icon={MonitorPlay} title="No curriculum yet" text="Once an admin assigns you a course, its lessons appear here." />
+        ) : (
+          <>
+            <div className="mb-1.5 flex items-baseline justify-between gap-3 text-sm">
+              <span className="text-muted-foreground">{releasedTotal} of {lessonTotal} lessons released</span>
+              <span className="font-semibold tabular-nums">{releasedPct}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={releasedPct} aria-valuemin={0} aria-valuemax={100}>
+              <div className="h-full rounded-full bg-gradient-hero transition-all duration-700" style={{ width: `${releasedPct}%` }} />
+            </div>
+          </>
+        )}
+      </section>
+
+      {/* Upcoming classes + demos, side by side on wide screens. */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section className="rounded-2xl border border-border/70 bg-card p-5 shadow-sm sm:p-6">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-base font-semibold m-0 flex items-center gap-2">
+              <MonitorPlay className="h-4 w-4 text-primary" /> Upcoming classes
+            </h2>
+            {upcomingClasses.length > 3 && (
+              <button type="button" onClick={() => onGoTo("Classes")} className={linkBtn}>
+                View all <ArrowRight className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          {classesLoading ? (
+            <div className="space-y-3">{[0, 1].map((i) => <div key={i} className="h-20 w-full animate-pulse rounded-xl bg-muted" />)}</div>
+          ) : upcomingClasses.length === 0 ? (
+            <OverviewEmpty icon={CalendarDays} title="No classes scheduled" text="Classes an admin schedules with you appear here." />
+          ) : (
+            <ul className="space-y-3 list-none p-0 m-0">
+              {upcomingClasses.slice(0, 3).map((s) => <TeacherSessionRow key={`class-${s.id}`} s={s} />)}
+            </ul>
+          )}
+        </section>
+
+        <section className="rounded-2xl border border-border/70 bg-card p-5 shadow-sm sm:p-6">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-base font-semibold m-0 flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-primary" /> Upcoming demos
+            </h2>
+            {upcomingDemos.length > 3 && (
+              <button type="button" onClick={() => onGoTo("Demos")} className={linkBtn}>
+                View all <ArrowRight className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          {demosLoading ? (
+            <div className="space-y-3">{[0, 1].map((i) => <div key={i} className="h-20 w-full animate-pulse rounded-xl bg-muted" />)}</div>
+          ) : upcomingDemos.length === 0 ? (
+            <OverviewEmpty icon={MessageSquare} title="No demos scheduled" text="Demo sessions assigned to you appear here." />
+          ) : (
+            <ul className="space-y-3 list-none p-0 m-0">
+              {upcomingDemos.slice(0, 3).map((s) => <TeacherSessionRow key={`demo-${s.id}`} s={s} />)}
+            </ul>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+};
+
 const TeacherDashboard = () => {
-  const [active, setActive] = useState("My Courses");
+  const [active, setActive] = useState("Dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [data] = useState<DashboardData>(PLACEHOLDER_DATA);
   const { user } = useAuth();
   const { isDark } = useDashboardTheme();
 
-  // TODO(backend): connect to the teacher earnings API. Uncomment & adapt:
-  // useEffect(() => {
-  //   axios
-  //     .get(`/api/teacher/earnings?month=2026-05`)
-  //     .then((res) => setData(res.data))
-  //     .catch(() => setData(PLACEHOLDER_DATA));
-  // }, []);
+  // Greet with the name the teacher registered with.
+  const teacherFirstName = firstName(user as { name?: string | null; email?: string | null } | null);
 
   return (
-    <div className={`min-h-screen flex bg-[#f4f4f5] dark:bg-[#0f0f14] ${isDark ? "dark teacher-dark" : ""}`}>
-      {/* Mobile top bar with menu button */}
-      <div className="lg:hidden fixed top-0 inset-x-0 z-30 flex items-center gap-2 px-4 h-14 bg-white dark:bg-[#16161f] border-b border-orange-100 dark:border-white/10">
+    /* Translucent surface (not the old opaque #f4f4f5) so the global VR
+       Robotics logo watermark — body::before in index.css — shows through the
+       shell, exactly like the student dashboard. */
+    <div className={`min-h-screen flex flex-col bg-muted/40 ${isDark ? "dark teacher-dark" : ""}`}>
+      {/* Shared site navbar, so the teacher shell keeps the main navigation
+          (Home / Courses / profile menu) available like the rest of the site.
+          Presentation only — the sidebar tabs below still drive every view. */}
+      <Navbar />
+
+      <div className="flex flex-1 min-h-0">
+      {/* Mobile top bar with menu button. Sits directly under the site navbar
+          (sticky, below its 4rem mobile height) instead of fixed at top-0, so
+          the two headers stack rather than overlap. */}
+      <div className="lg:hidden fixed top-16 inset-x-0 z-30 flex items-center gap-2 px-4 h-14 bg-white dark:bg-[#16161f] border-b border-orange-100 dark:border-white/10">
         <button type="button" onClick={() => setSidebarOpen(true)} aria-label="Open menu" className="text-muted-foreground hover:text-primary">
           <Menu className="w-6 h-6" />
         </button>
@@ -1233,12 +2756,15 @@ const TeacherDashboard = () => {
       </div>
       {/* Backdrop (mobile) */}
       {sidebarOpen && (
-        <div className="lg:hidden fixed inset-0 z-40 bg-black/40" onClick={() => setSidebarOpen(false)} aria-hidden="true" />
+        <div className="lg:hidden fixed inset-0 z-30 bg-black/40" onClick={() => setSidebarOpen(false)} aria-hidden="true" />
       )}
       {/* Sidebar — drawer on mobile, static on desktop */}
-      <aside className={`w-64 shrink-0 bg-gradient-to-b from-[#fff6ee] to-white dark:from-[#16161f] dark:to-[#101019] border-r border-orange-100 dark:border-white/10 flex flex-col h-screen
-        fixed inset-y-0 left-0 z-50 transform transition-transform duration-200
-        lg:static lg:translate-x-0 lg:sticky lg:top-0
+      {/* Offsets account for the site navbar above: the mobile drawer starts
+          below its 4rem bar, the desktop rail sticks below its 5rem bar and is
+          shortened to match so it never scrolls past the viewport. */}
+      <aside className={`w-64 shrink-0 bg-gradient-to-b from-[#fff6ee] to-white dark:from-[#16161f] dark:to-[#101019] border-r border-orange-100 dark:border-white/10 flex flex-col h-[calc(100vh-4rem)] lg:h-[calc(100vh-5rem)]
+        fixed top-16 bottom-0 left-0 z-40 transform transition-transform duration-200
+        lg:static lg:translate-x-0 lg:sticky lg:top-20
         ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <button type="button" onClick={() => setSidebarOpen(false)} aria-label="Close menu" className="lg:hidden absolute top-4 right-4 text-muted-foreground hover:text-primary">
           <X className="w-6 h-6" />
@@ -1282,146 +2808,21 @@ const TeacherDashboard = () => {
       </aside>
 
       {/* Main */}
-      <main className="flex-1 overflow-y-auto p-4 pt-[72px] lg:p-8 lg:pt-8 space-y-6">
+      {/* pt clears the mobile menu bar, which is fixed below the site navbar. */}
+      <main className="flex-1 min-w-0 overflow-y-auto p-4 pt-[72px] lg:p-8 lg:pt-8 space-y-6">
         {/* Post-class nudge to evaluate students — shows on every tab. */}
         <PendingFeedbackBanner teacherId={user?.userId} onGiveFeedback={() => setActive("Students")} />
 
         {active === "Dashboard" ? (
-          <>
-            {/* Earnings card */}
-            <section className="bg-white rounded-2xl shadow-sm p-6 space-y-5">
-              <h1 className="text-2xl font-bold">
-                My earnings for <span className="text-blue-600">{data.month}</span>
-              </h1>
-
-              {/* Dispute banner */}
-              <div className="rounded-xl bg-[#fff6ee] p-5 flex items-center justify-between gap-4 flex-wrap">
-                <div className="h-1.5 w-16 rounded bg-primary" />
-                <div className="text-right">
-                  <p className="text-sm text-muted-foreground flex items-center gap-1 justify-end">
-                    Noticed an issue in your earnings or penalties? <Info className="w-4 h-4" />
-                  </p>
-                  <button className="text-blue-600 font-semibold inline-flex items-center gap-1">
-                    Raise dispute <ArrowRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Earnings summary */}
-              <div className="rounded-xl bg-muted/40 p-5">
-                <h2 className="font-semibold mb-4">Earnings summary</h2>
-                <div className="flex flex-wrap gap-4">
-                  <Stat value={data.earnings.demos} label="Earnings on demos" />
-                  <Stat value={data.earnings.classes} label="Earnings on classes" />
-                  <Stat value={data.earnings.other} label="Other earnings" />
-                </div>
-              </div>
-
-              {/* Penalties summary */}
-              <div className="rounded-xl bg-muted/40 p-5">
-                <h2 className="font-semibold mb-4">Penalties summary</h2>
-                <div className="flex flex-wrap gap-4">
-                  <Stat value={data.penalties.penalizedClasses} label="Penalized classes" />
-                  <Stat value={data.penalties.disputedSessions} label="Disputed sessions" />
-                </div>
-              </div>
-            </section>
-
-            {/* Demos */}
-            <section className="bg-white rounded-2xl shadow-sm p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold">Demos</h2>
-                <button className="text-blue-600 font-semibold inline-flex items-center gap-1">
-                  View details <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-4">
-                <Stat value={data.demos.successful} label="Successful demos" />
-                <Stat value={data.demos.unsuccessful} label="Unsuccessful demos" />
-                <Stat value={data.demos.conversions} label="Conversions" />
-              </div>
-            </section>
-
-            {/* Classes */}
-            <section className="bg-white rounded-2xl shadow-sm p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold">Classes</h2>
-                <button className="text-blue-600 font-semibold inline-flex items-center gap-1">
-                  View details <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-4">
-                <Stat value={data.classes.paid} label="Paid" />
-                <Stat value={data.classes.unsuccessful} label="Unsuccessful" />
-                <Stat value={data.classes.cancelled} label="Cancelled" />
-                <Stat value={data.classes.punctuality} label="Punctuality %" />
-              </div>
-            </section>
-
-            {/* Other earnings */}
-            <section className="bg-white rounded-2xl shadow-sm p-6">
-              <h2 className="text-xl font-bold mb-2">Other earnings</h2>
-              <p className="text-muted-foreground">No other earnings</p>
-            </section>
-
-            {/* Penalized classes */}
-            <section className="bg-white rounded-2xl shadow-sm p-6">
-              <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                <h2 className="text-xl font-bold flex items-center gap-2">
-                  Penalized classes
-                  <span className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-sm">—</span>
-                </h2>
-                <p className="text-sm text-muted-foreground flex items-center gap-1">
-                  <Info className="w-4 h-4" /> Detailed breakdown available in 'View details' under 'Classes'
-                </p>
-              </div>
-              <p className="text-muted-foreground">No penalized classes</p>
-            </section>
-
-            {/* Incentives banner */}
-            <section className="bg-white rounded-2xl shadow-sm p-4">
-              <div className="flex items-center gap-3">
-                <button className="w-9 h-9 rounded-lg border flex items-center justify-center shrink-0 hover:bg-muted">
-                  <ChevronLeft className="w-5 h-5" />
-                </button>
-                <div className="flex-1 grid md:grid-cols-2 gap-4 rounded-2xl bg-[#1e1e2a] text-white p-6">
-                  <div>
-                    <h3 className="text-xl font-bold mb-3">
-                      Earn more <span className="text-primary">incentives</span> from every class
-                    </h3>
-                    <ul className="space-y-2 text-sm text-white/80">
-                      <li className="bg-white/5 rounded-lg px-3 py-2"><span className="text-primary font-semibold">Earn ₹1250</span> by achieving 90+ mentor rating</li>
-                      <li className="bg-white/5 rounded-lg px-3 py-2"><span className="text-primary font-semibold">Earn ₹750</span> by completing 24 classes with same student</li>
-                      <li className="bg-white/5 rounded-lg px-3 py-2"><span className="text-primary font-semibold">Earn ₹1000</span> by completing 48 classes with same student</li>
-                      <li className="bg-white/5 rounded-lg px-3 py-2"><span className="text-primary font-semibold">Earn ₹1000</span> by successfully upselling or cross-selling</li>
-                    </ul>
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold mb-3">
-                      Refer. <span className="text-primary">Earn.</span> Repeat.
-                    </h3>
-                    <ul className="space-y-2 text-sm text-white/80">
-                      <li className="bg-white/5 rounded-lg px-3 py-2"><span className="text-primary font-semibold">Earn ₹1000</span> by referring a mentor who completes 75 teaching hours</li>
-                      <li className="bg-white/5 rounded-lg px-3 py-2"><span className="text-primary font-semibold">Earn up to ₹1800</span> (₹300 for demo + ₹1500 for enrollment) by referring a student</li>
-                    </ul>
-                  </div>
-                </div>
-                <button className="w-9 h-9 rounded-lg border flex items-center justify-center shrink-0 hover:bg-muted">
-                  <ChevronRight className="w-5 h-5" />
-                </button>
-              </div>
-            </section>
-          </>
+          <TeacherOverview teacherId={user?.userId} name={teacherFirstName} onGoTo={setActive} />
         ) : active === "Slots" ? (
           <SlotsView teacherId={user?.userId} />
         ) : active === "Demos" ? (
           <DemosView teacherId={user?.userId} />
         ) : active === "My Courses" ? (
-          // Teaching assignment feature removed - replaced by Batch Management System
-          <div className="p-6 text-center text-gray-500">
-            <p>This feature is being transitioned to the new Batch Management System.</p>
-            <p className="text-sm mt-2">Please contact admin for course assignments.</p>
-          </div>
+          <MyCoursesView teacherId={user?.userId} />
+        ) : active === "Assignments" ? (
+          <AssignmentsView teacherId={user?.userId} />
         ) : active === "Classes" ? (
           <ClassesView teacherId={user?.userId} />
         ) : active === "Calendar" ? (
@@ -1443,6 +2844,7 @@ const TeacherDashboard = () => {
           </div>
         )}
       </main>
+      </div>
     </div>
   );
 };

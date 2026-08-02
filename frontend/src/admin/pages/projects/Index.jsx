@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { Plus, Search, Rocket } from 'lucide-react';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import Modal from '../../components/Modal';
 import ManageCard from '../../components/ManageCard';
@@ -91,32 +92,42 @@ export default function ProjectsIndex() {
     const isEmpty = rows.length === 0;
 
     return (
-        <div>
-            <div className="ol-card rounded-ol-8 mb-3"><div className="ol-card-body py-12px px-20px my-3">
-                <div className="flex items-center justify-between flex-wrap gap-3">
-                    <h4 className="text-[16px] font-semibold text-dark m-0">Student Projects</h4>
-                    <button type="button" className="ol-btn-outline-secondary flex items-center gap-10px" onClick={() => setAddOpen(true)}>
-                        <span className="fi-rr-plus" /><span>Add Project</span>
+        <div className="space-y-4">
+            {/* Toolbar — shared professional layout across Marketing pages. */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-lightgreen text-skin">
+                        <Rocket className="h-[18px] w-[18px]" />
+                    </span>
+                    <div>
+                        <h1 className="m-0 text-[18px] font-bold text-dark">Student Projects</h1>
+                        <p className="m-0 mt-0.5 text-[12px] text-gray">Featured on the public Home page.</p>
+                    </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                    <form onSubmit={onSearch} className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                        <input className="ol-form-control w-[220px] !pl-9" name="search" type="text" placeholder="Search by title" defaultValue={query.search || ''} />
+                    </form>
+                    <button type="button" className="inline-flex items-center gap-1.5 rounded-ol-8 bg-skin px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-skin-dark" onClick={() => setAddOpen(true)}>
+                        <Plus className="h-4 w-4" /> Add Project
                     </button>
                 </div>
-            </div></div>
+            </div>
 
-            <div className="ol-card"><div className="ol-card-body p-3">
-                <form onSubmit={onSearch} className="flex justify-end gap-3 mb-3 mt-3">
-                    <input className="ol-form-control max-w-[280px]" name="search" type="text" placeholder="Search by title" defaultValue={query.search || ''} />
-                    <button type="submit" className="ol-btn-primary">Search</button>
-                </form>
-
-                {isEmpty ? (
-                    <div className="py-12 text-center border border-dashed border-border rounded-ol-8">
-                        <p className="text-[16px] font-semibold text-dark mb-1">No projects yet</p>
-                        <p className="text-[13px] text-gray">Click “Add Project” to create the first one.</p>
-                    </div>
-                ) : (
-                    <>
-                        <p className="text-gray text-[14px] mb-3">Showing {rows.length} of {data.projects.total}{loading && <span className="ml-2 text-[12px]">Refreshing…</span>}</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {rows.map((p) => (
+            {isEmpty ? (
+                <div className="rounded-ol-8 border border-dashed border-ebordermuted bg-white py-16 text-center">
+                    <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-lightgreen text-skin">
+                        <Rocket className="h-6 w-6" />
+                    </span>
+                    <p className="mb-1 text-[15px] font-semibold text-dark">{query.search ? 'No projects match your search' : 'No projects yet'}</p>
+                    <p className="text-[13px] text-gray">{query.search ? 'Try a different title.' : 'Click “Add Project” to create the first one.'}</p>
+                </div>
+            ) : (
+                <>
+                    <p className="text-[13px] text-gray tabular-nums">Showing {rows.length} of {data.projects.total}{loading && <span className="ml-2 text-[12px]">Refreshing…</span>}</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {rows.map((p) => (
                                 <ManageCard
                                     key={p.id}
                                     active={!!p.status}
@@ -136,7 +147,6 @@ export default function ProjectsIndex() {
                         </div>
                     </>
                 )}
-            </div></div>
 
             {addOpen && (
                 <Modal title="Add Project" size="md" onClose={() => setAddOpen(false)}>

@@ -1,4 +1,4 @@
-﻿const { Slot, SlotEnrollment, Batch, Course } = require('../models');
+﻿const { Slot, SlotEnrollment, Course } = require('../models');
 const { HttpError } = require('../middlewares/error');
 const { Op } = require('sequelize');
 
@@ -37,7 +37,6 @@ const getSlotsByDateRange = async ({ batchId, courseId, startDate, endDate }) =>
     const slots = await Slot.findAll({
         where,
         include: [
-            { model: Batch, as: 'batch', attributes: ['id', 'batch_id'] },
             { model: Course, as: 'course', attributes: ['id', 'title'] },
         ],
         order: [['slot_date', 'ASC'], ['start_time', 'ASC']],
@@ -51,7 +50,6 @@ const getSlotWithEnrollments = async (slotId) => {
     const slot = await Slot.findByPk(slotId, {
         include: [
             { model: SlotEnrollment, as: 'enrollments' },
-            { model: Batch, as: 'batch' },
             { model: Course, as: 'course' },
         ],
     });
@@ -139,7 +137,6 @@ const listSlots = async ({ page = 1, batchId = null, courseId = null, status = n
     const { count, rows } = await Slot.findAndCountAll({
         where,
         include: [
-            { model: Batch, as: 'batch', attributes: ['id', 'batch_id'] },
             { model: Course, as: 'course', attributes: ['id', 'title'] },
         ],
         limit,
@@ -158,6 +155,76 @@ const listSlots = async ({ page = 1, batchId = null, courseId = null, status = n
     };
 };
 
+/**
+ * Slots for a teacher, for GET /api/public/slots/by-teacher/:teacherId.
+ *
+ * This route existed but called `slotService.listForTeacher`, which was never
+ * implemented — every request threw `listForTeacher is not a function` and
+ * returned 500. That mattered beyond this feature: the teacher dashboard fetched
+ * classes, slots and batch-students in a single Promise.all, so this 500
+ * rejected the whole chain and blanked the entire Students tab.
+ *
+ * Slots have no teacher column — a slot belongs to a BATCH, and a teacher
+ * reaches it by being assigned to that batch. Matches both assignment paths
+ * (batches.primary_teacher_id and the batch_teachers roster), same as
+ * TeacherCourseService / TeacherStudentService.
+ *
+ * Returns the roster shape the dashboard expects: { slots: [{ ..., students }] }.
+ */
+const listForTeacher = async (teacherId) => {
+    const tid = String(teacherId ?? '').trim();
+    if (!tid) return { slots: [] };
+    try {
+        const { sequelize } = require('../models');
+        const { QueryTypes } = require('sequelize');
+        const rows = await sequelize.query(
+            `SELECT s.id, s.batch_id, s.course_id, s.slot_date, s.start_time, s.end_time,
+                    s.status, s.meeting_link, s.topic,
+                    COALESCE(b.name, b.display_name) AS batch_name
+               FROM slots s
+               JOIN batches b
+                 ON (CAST(s.batch_id AS TEXT) = b.unique_id OR CAST(s.batch_id AS TEXT) = b.batch_id)
+              WHERE COALESCE(b.is_active, TRUE) = TRUE
+                AND (
+                      b.primary_teacher_id = :tid
+                   OR EXISTS (
+                        SELECT 1 FROM batch_teachers bt
+                         WHERE (bt.batch_id = b.unique_id OR bt.batch_id = b.batch_id)
+                           AND bt.user_id = :tid
+                           AND COALESCE(bt.status, 'active') = 'active'
+                      )
+                    )
+              ORDER BY s.slot_date DESC, s.start_time DESC`,
+            { replacements: { tid }, type: QueryTypes.SELECT },
+        );
+
+        // Enrolled students per slot, so the Students tab can count sessions.
+        const slots = await Promise.all(rows.map(async (r) => {
+            let students = [];
+            try {
+                const enrolled = await sequelize.query(
+                    `SELECT se.user_id AS id FROM slot_enrollments se WHERE se.slot_id = :sid`,
+                    { replacements: { sid: r.id }, type: QueryTypes.SELECT },
+                );
+                const { resolveUserNames } = require('../helpers/scheduleResolve');
+                const names = await resolveUserNames(enrolled.map((e) => e.id));
+                students = enrolled.map((e) => ({ id: String(e.id), name: names[String(e.id)] || '' }));
+            } catch (e) {
+                // Enrollment lookup is best-effort: the slot itself must still list.
+                console.warn('[slots/by-teacher] enrollment resolve failed:', e.message);
+            }
+            return { ...r, name: r.topic || r.batch_name || `Slot ${r.id}`, students };
+        }));
+
+        return { slots };
+    } catch (e) {
+        // Degrade to an empty list rather than 500ing — this endpoint is one of
+        // three parallel feeds on the teacher dashboard.
+        console.warn('[slots/by-teacher] lookup failed:', e.message);
+        return { slots: [] };
+    }
+};
+
 module.exports = {
     createSlot,
     getSlotsByDateRange,
@@ -166,4 +233,5 @@ module.exports = {
     cancelEnrollment,
     markAttended,
     listSlots,
+    listForTeacher,
 };

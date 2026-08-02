@@ -32,7 +32,7 @@ const BUCKETS: { label: string; cls: string; track: string }[] = [
 
 const parseBucket = (raw: string | null): { from: number; to: number } | null => {
   if (!raw) return null;
-  const m = /^(d{1,2})-(d{1,2})$/.exec(raw.trim());
+  const m = /^(\d{1,2})-(\d{1,2})$/.exec(raw.trim());
   if (!m) return null;
   return { from: Number(m[1]), to: Number(m[2]) };
 };
@@ -44,11 +44,92 @@ const classLabel = (c: CourseItem): string => {
   return `Up to Class ${c.class_to}`;
 };
 
+// Auto-group courses into sections by their class-access range. The section
+// heading reuses the same human label the card badge uses (classLabel), so a
+// course whose class_from/class_to = 8/12 lands under a "Class 8–12" heading
+// with no fixed bucket list to maintain. Groups are ordered by starting class
+// (open "All classes" courses sink to the bottom); courses within a group keep
+// the API's newest-first order.
+const groupByClassRange = (
+  courses: CourseItem[],
+): { key: string; label: string; sortFrom: number; courses: CourseItem[] }[] => {
+  const groups = new Map<string, { label: string; sortFrom: number; courses: CourseItem[] }>();
+  for (const c of courses) {
+    // Key by the raw range so "8–12" and "9–12" stay distinct sections.
+    const key = `${c.class_from ?? "x"}-${c.class_to ?? "x"}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        label: classLabel(c),
+        sortFrom: c.class_from == null ? Number.MAX_SAFE_INTEGER : c.class_from,
+        courses: [],
+      });
+    }
+    groups.get(key)!.courses.push(c);
+  }
+  return [...groups.entries()]
+    .map(([key, g]) => ({ key, ...g }))
+    .sort((a, b) => a.sortFrom - b.sortFrom);
+};
+
+const CourseCard = ({ c }: { c: CourseItem }) => {
+  const hours = Math.floor((c.total_duration_secs || 0) / 3600);
+  return (
+    <Link
+      to={`/courses/programs/course-details?slug=${encodeURIComponent(c.slug)}`}
+      className="card-ngo-static border-0 group overflow-hidden flex flex-col h-full rounded-2xl"
+    >
+      <div className="relative aspect-[16/9] overflow-hidden bg-muted">
+        {c.thumbnail ? (
+          <img
+            src={c.thumbnail}
+            alt={c.title}
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-hero">
+            <GraduationCap className="w-14 h-14 text-white/80" />
+          </div>
+        )}
+        <span className="absolute top-3 left-3 px-3 py-1 rounded-full bg-background/85 backdrop-blur text-xs font-semibold text-primary shadow-sm">
+          {classLabel(c)}
+        </span>
+      </div>
+      <div className="p-6 flex flex-col flex-1">
+        <h3 className="font-bold text-xl mb-2 line-clamp-2 group-hover:text-primary transition-colors">
+          {c.title}
+        </h3>
+        {c.short_description && (
+          <p className="text-muted-foreground text-sm leading-relaxed line-clamp-2 mb-4">
+            {c.short_description}
+          </p>
+        )}
+        <div className="mt-auto flex items-center gap-6 pt-4 border-t border-border/60 text-sm font-medium">
+          <span className="inline-flex items-center gap-2">
+            <FileText className="w-4 h-4 text-primary" />
+            {c.lesson_count} {c.lesson_count === 1 ? "Lesson" : "Lessons"}
+          </span>
+          {hours > 0 && (
+            <span className="inline-flex items-center gap-2">
+              <Clock className="w-4 h-4 text-primary" />
+              {hours}+ Hours
+            </span>
+          )}
+          <ArrowRight className="w-4 h-4 ml-auto text-primary opacity-0 group-hover:opacity-100 transition-opacity" />
+        </div>
+      </div>
+    </Link>
+  );
+};
+
 const CourseCatalog = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeClass = searchParams.get("class") || "";
   const activeTrack = searchParams.get("track") || "";
   const activeSearch = searchParams.get("search") || "";
+  // When any pill/track/search narrows the list we show a flat grid; with no
+  // filter we auto-group the full catalog by class range.
+  const isFiltered = Boolean(activeClass || activeTrack || activeSearch);
   const [courses, setCourses] = useState<CourseItem[]>([]);
   const [loading, setLoading] = useState(true);
   // Local text box, kept in sync with the URL so back/forward + shared links work.
@@ -179,59 +260,33 @@ const CourseCatalog = () => {
           <p className="text-center text-muted-foreground py-16">
             No courses found for this selection yet.
           </p>
-        ) : (
+        ) : isFiltered ? (
+          // A pill or search is active → the list is already narrowed to one
+          // class range / track, so show a single flat grid.
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
-            {courses.map((c) => {
-              const hours = Math.floor((c.total_duration_secs || 0) / 3600);
-              return (
-                <Link
-                  key={c.id}
-                  to={`/courses/programs/course-details?slug=${encodeURIComponent(c.slug)}`}
-                  className="card-ngo-static border-0 group overflow-hidden flex flex-col h-full rounded-2xl"
-                >
-                  <div className="relative aspect-[16/9] overflow-hidden bg-muted">
-                    {c.thumbnail ? (
-                      <img
-                        src={c.thumbnail}
-                        alt={c.title}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-gradient-hero">
-                        <GraduationCap className="w-14 h-14 text-white/80" />
-                      </div>
-                    )}
-                    <span className="absolute top-3 left-3 px-3 py-1 rounded-full bg-background/85 backdrop-blur text-xs font-semibold text-primary shadow-sm">
-                      {classLabel(c)}
-                    </span>
-                  </div>
-                  <div className="p-6 flex flex-col flex-1">
-                    <h3 className="font-bold text-xl mb-2 line-clamp-2 group-hover:text-primary transition-colors">
-                      {c.title}
-                    </h3>
-                    {c.short_description && (
-                      <p className="text-muted-foreground text-sm leading-relaxed line-clamp-2 mb-4">
-                        {c.short_description}
-                      </p>
-                    )}
-                    <div className="mt-auto flex items-center gap-6 pt-4 border-t border-border/60 text-sm font-medium">
-                      <span className="inline-flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-primary" />
-                        {c.lesson_count} {c.lesson_count === 1 ? "Lesson" : "Lessons"}
-                      </span>
-                      {hours > 0 && (
-                        <span className="inline-flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-primary" />
-                          {hours}+ Hours
-                        </span>
-                      )}
-                      <ArrowRight className="w-4 h-4 ml-auto text-primary opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
+            {courses.map((c) => (
+              <CourseCard key={c.id} c={c} />
+            ))}
+          </div>
+        ) : (
+          // Default (unfiltered) view → auto-group into sections by each
+          // course's own class-access range.
+          <div className="space-y-14">
+            {groupByClassRange(courses).map((group) => (
+              <section key={group.key}>
+                <div className="flex items-center gap-3 mb-6">
+                  <h3 className="text-2xl font-bold">{group.label}</h3>
+                  <span className="text-sm text-muted-foreground">
+                    {group.courses.length} {group.courses.length === 1 ? "course" : "courses"}
+                  </span>
+                </div>
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
+                  {group.courses.map((c) => (
+                    <CourseCard key={c.id} c={c} />
+                  ))}
+                </div>
+              </section>
+            ))}
           </div>
         )}
       </div>

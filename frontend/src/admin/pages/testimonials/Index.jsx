@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { Plus, Search, Quote } from 'lucide-react';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import Modal from '../../components/Modal';
 import ManageCard from '../../components/ManageCard';
@@ -81,31 +82,41 @@ export default function TestimonialsIndex() {
     const isEmpty = rows.length === 0;
 
     return (
-        <div>
-            <div className="ol-card rounded-ol-8 mb-3"><div className="ol-card-body py-12px px-20px my-3">
-                <div className="flex items-center justify-between flex-wrap gap-3">
-                    <h4 className="text-[16px] font-semibold text-dark m-0">Testimonials</h4>
-                    <button type="button" className="ol-btn-outline-secondary flex items-center gap-10px" onClick={() => setAddOpen(true)}>
-                        <span className="fi-rr-plus" /><span>Add Testimonial</span>
+        <div className="space-y-4">
+            {/* Toolbar — shared professional layout across Marketing pages. */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-lightgreen text-skin">
+                        <Quote className="h-[18px] w-[18px]" />
+                    </span>
+                    <div>
+                        <h1 className="m-0 text-[18px] font-bold text-dark">Testimonials</h1>
+                        <p className="m-0 mt-0.5 text-[12px] text-gray">Reviews shown on the public site.</p>
+                    </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                    <form onSubmit={onSearch} className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                        <input className="ol-form-control w-[220px] !pl-9" name="search" type="text" placeholder="Search by author" defaultValue={query.search || ''} />
+                    </form>
+                    <button type="button" className="inline-flex items-center gap-1.5 rounded-ol-8 bg-skin px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-skin-dark" onClick={() => setAddOpen(true)}>
+                        <Plus className="h-4 w-4" /> Add Testimonial
                     </button>
                 </div>
-            </div></div>
+            </div>
 
-            <div className="ol-card"><div className="ol-card-body p-3">
-                <form onSubmit={onSearch} className="flex justify-end gap-3 mb-3 mt-3">
-                    <input className="ol-form-control max-w-[280px]" name="search" type="text" placeholder="Search by author" defaultValue={query.search || ''} />
-                    <button type="submit" className="ol-btn-primary">Search</button>
-                </form>
-
-                {isEmpty ? (
-                    <div className="py-12 text-center border border-dashed border-border rounded-ol-8">
-                        <p className="text-[16px] font-semibold text-dark mb-1">No testimonials yet</p>
-                        <p className="text-[13px] text-gray">Click “Add Testimonial” to create the first one.</p>
-                    </div>
-                ) : (
-                    <>
-                        <p className="text-gray text-[14px] mb-3">Showing {rows.length} of {data.testimonials.total}{loading && <span className="ml-2 text-[12px]">Refreshing…</span>}</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {isEmpty ? (
+                <div className="rounded-ol-8 border border-dashed border-ebordermuted bg-white py-16 text-center">
+                    <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-lightgreen text-skin">
+                        <Quote className="h-6 w-6" />
+                    </span>
+                    <p className="mb-1 text-[15px] font-semibold text-dark">{query.search ? 'No testimonials match your search' : 'No testimonials yet'}</p>
+                    <p className="text-[13px] text-gray">{query.search ? 'Try a different author.' : 'Click “Add Testimonial” to create the first one.'}</p>
+                </div>
+            ) : (
+                <>
+                    <p className="text-[13px] text-gray tabular-nums">Showing {rows.length} of {data.testimonials.total}{loading && <span className="ml-2 text-[12px]">Refreshing…</span>}</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                             {rows.map((t) => (
                                 <ManageCard
                                     key={t.id}
@@ -131,7 +142,6 @@ export default function TestimonialsIndex() {
                         </div>
                     </>
                 )}
-            </div></div>
 
             {addOpen && (
                 <Modal title="Add Testimonial" size="md" onClose={() => setAddOpen(false)}>

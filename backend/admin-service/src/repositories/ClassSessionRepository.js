@@ -25,4 +25,31 @@ const listForTeacher = (teacherId) => {
     });
 };
 
-module.exports = { paginate, findOne, create, listForTeacher };
+/**
+ * Active class sessions for a set of course ids, ending at or after `from`.
+ *
+ * `course_id` is a free-text VARCHAR (it can hold a numeric course id OR an
+ * ad-hoc label), so the ids are compared as strings. Filtering on end_at — not
+ * start_at — keeps a class visible while it is actually running; a session that
+ * started an hour ago but runs for another hour is still "upcoming" to a
+ * student who needs to join it. Rows with no end_at fall back to start_at.
+ */
+const listUpcomingForCourses = (courseIds, from = new Date(), limit = 20) => {
+    const ids = [...new Set((courseIds || []).map((c) => String(c).trim()).filter(Boolean))];
+    if (ids.length === 0) return Promise.resolve([]);
+    return ClassSession.findAll({
+        where: {
+            status: 1,
+            course_id: { [Op.in]: ids },
+            [Op.or]: [
+                { end_at: { [Op.gte]: from } },
+                { end_at: null, start_at: { [Op.gte]: from } },
+            ],
+        },
+        order: [['start_at', 'ASC'], ['id', 'ASC']],
+        limit,
+        raw: true,
+    });
+};
+
+module.exports = { paginate, findOne, create, listForTeacher, listUpcomingForCourses };

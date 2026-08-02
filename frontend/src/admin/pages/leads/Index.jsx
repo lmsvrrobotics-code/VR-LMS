@@ -52,6 +52,21 @@ export default function LeadsIndex() {
         try { await updateLead(lead.id, { notes }); toast.success('Saved'); }
         catch (e) { toast.error(e?.response?.data?.error || 'Failed'); }
     };
+    // Convert. A self-signup (has_account) ALREADY has a login they chose the
+    // password for — converting only reveals them in Manage Students, so there is
+    // nothing to ask and we go straight through. Only a pure enquiry with no
+    // account needs the password modal, because converting it creates the login.
+    const convert = async (lead) => {
+        if (!lead.has_account) return setConvertFor(lead);
+        try {
+            await convertLead(lead.id, {});
+            toast.success(`${lead.name} added to Manage Students.`);
+            load();
+        } catch (e) {
+            toast.error(e?.uiMessage || e?.response?.data?.error || 'Convert failed');
+        }
+    };
+
     const remove = async (lead) => {
         if (!window.confirm(`Delete lead ${lead.name}?`)) return;
         try { await deleteLead(lead.id); toast.success('Lead removed'); load(); }
@@ -66,7 +81,7 @@ export default function LeadsIndex() {
                     <div className="flex items-center justify-between flex-wrap gap-3">
                         <div>
                             <h4 className="text-[16px] font-semibold text-dark m-0">Leads</h4>
-                            <p className="text-[13px] text-gray mt-1">New signups from the portal. Follow up and convert interested students into accounts.</p>
+                            <p className="text-[13px] text-gray mt-1">New signups from the portal. Follow up and convert them — once converted they move to Manage Students and leave this list (see the “converted” tab for history).</p>
                         </div>
                         <div className="flex gap-2 flex-wrap">
                             {STATUSES.map((s) => (
@@ -129,7 +144,7 @@ export default function LeadsIndex() {
                                                             {l.status === 'new' && (
                                                                 <button type="button" onClick={() => setStatus(l, 'contacted')} className="text-[12px] text-amber-700 hover:underline">Mark contacted</button>
                                                             )}
-                                                            <button type="button" onClick={() => setConvertFor(l)} className="text-[12px] text-green-700 font-semibold hover:underline">Convert</button>
+                                                            <button type="button" onClick={() => convert(l)} className="text-[12px] text-green-700 font-semibold hover:underline">Convert</button>
                                                             {l.status !== 'rejected' && (
                                                                 <button type="button" onClick={() => setStatus(l, 'rejected')} className="text-[12px] text-gray hover:underline">Reject</button>
                                                             )}

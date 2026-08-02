@@ -1,6 +1,7 @@
 const resourceRepo = require('../repositories/ResourceRepository');
 const { upload, removeFile, niceFileName } = require('../helpers/fileUploader');
 const { HttpError } = require('../middlewares/error');
+const { buildStudentResources } = require('./studentResourcesLogic');
 
 const PER_PAGE = 10;
 
@@ -157,4 +158,52 @@ const listForTeacher = async (teacherId) => {
     }
 };
 
-module.exports = { list, get, create, update, remove, toggleStatus, listForTeacher };
+// Student-facing "Materials": the PDFs a student can reach through the courses
+// they are enrolled in (user_progress) or delegated to (batch membership) —
+// the same access rule /api/public/my-courses uses, so Materials can never show
+// a course the student cannot already see.
+//
+// Deliberately NOT gated behind lesson releases: resources are course-level
+// support material (lesson plans, visual aids), not lesson content, and they
+// carry no lesson_id to gate on. Teacher uploads it → enrolled students see it.
+const listForStudent = async (userId) => {
+    const uid = String(userId ?? '').trim();
+    if (!uid) return { resources: [], sections: [] };
+    try {
+        const { ResourceCategory, Course, UserProgress } = require('../models');
+        const teachingSvc = require('./TeachingAssignmentService');
+
+        // Same two-source enrollment resolution as PublicCourseService.myCourses.
+        const [enrolledRows, delegatedIds] = await Promise.all([
+            UserProgress.findAll({ where: { user_id: uid, enrolled: true }, attributes: ['course_id'], raw: true }),
+            teachingSvc.coursesForStudent(uid),
+        ]);
+        const courseIds = [...new Set([
+            ...enrolledRows.map((r) => Number(r.course_id)),
+            ...delegatedIds.map(Number),
+        ].filter((n) => Number.isInteger(n) && n > 0))];
+        if (!courseIds.length) return { resources: [], sections: [] };
+
+        const rows = await resourceRepo.listForCourses(courseIds);
+        if (!rows.length) return { resources: [], sections: [] };
+
+        // Resolve display names in two small batched queries, as listForTeacher does.
+        const catIds = [...new Set(rows.map((r) => r.resource_category_id).filter(Boolean))];
+        const usedCourseIds = [...new Set(rows.map((r) => Number(r.course_id)).filter(Boolean))];
+        const [cats, courses] = await Promise.all([
+            catIds.length ? ResourceCategory.findAll({ where: { id: catIds }, raw: true }) : [],
+            usedCourseIds.length ? Course.findAll({ where: { id: usedCourseIds }, attributes: ['id', 'title'], raw: true }) : [],
+        ]);
+
+        return buildStudentResources(rows, courseIds, {
+            categoryNames: new Map(cats.map((c) => [c.id, c.name])),
+            courseTitles: new Map(courses.map((c) => [Number(c.id), c.title])),
+        });
+    } catch (err) {
+        // Match listForTeacher: a resources outage must not break the dashboard.
+        console.warn('[resources] student resources failed:', err.message);
+        return { resources: [], sections: [] };
+    }
+};
+
+module.exports = { list, get, create, update, remove, toggleStatus, listForTeacher, listForStudent };

@@ -9,6 +9,7 @@ import { listColleges } from '../../api/college';
 import { listBatchesByColleges } from '../../api/batch';
 import { listProgramsForCollegeBatch } from '../../api/program';
 import { BsThreeDotsVertical } from 'react-icons/bs';
+import { Plus, Search, Users } from 'lucide-react';
 
 const API = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:5000';
 
@@ -126,73 +127,75 @@ export default function StudentIndex() {
         // min-w-0 lets this column shrink below the table's intrinsic width
         // inside the admin layout's flex <main>; without it the wide table
         // pushes the whole page wider and the viewport scrolls horizontally.
-        <div className="min-w-0">
-            <div className="ol-card rounded-ol-8 mb-3">
-                <div className="ol-card-body py-12px px-20px my-3">
-                    <div className="flex items-center justify-between flex-wrap gap-3">
-                        <h4 className="text-[16px] font-semibold text-dark m-0 flex items-center gap-2">
-                            <i className="fi-rr-settings-sliders" />
-                            Student List
-                        </h4>
-                        <Link
-                            to="/admin/students/create"
-                            className="ol-btn-outline-secondary flex items-center gap-10px"
+        <div className="min-w-0 space-y-4">
+            {/* Toolbar — shared professional layout across admin list pages. */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-lightgreen text-skin">
+                        <Users className="h-[18px] w-[18px]" />
+                    </span>
+                    <div>
+                        <h1 className="m-0 text-[18px] font-bold text-dark">Students</h1>
+                        <p className="m-0 mt-0.5 text-[12px] text-gray">Registered learners, their schools, batches &amp; enrolments.</p>
+                    </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                    <form onSubmit={onSearch} className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                        <input
+                            className="ol-form-control w-[220px] !pl-9"
+                            name="search"
+                            type="text"
+                            placeholder="Search user"
+                            defaultValue={query.search || ''}
+                        />
+                    </form>
+                    <Link
+                        to="/admin/students/create"
+                        className="inline-flex items-center gap-1.5 rounded-ol-8 bg-skin px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-skin-dark"
+                    >
+                        <Plus className="h-4 w-4" /> Add Student
+                    </Link>
+                </div>
+            </div>
+
+            {/* Filter bar — school / batch scoping + export + bulk action. */}
+            <div className="flex flex-col gap-3 rounded-ol-12 border border-ebordermuted bg-white p-3 md:flex-row md:items-center md:justify-between">
+                <ExportDropdown onPdf={handlePrint} onPrint={handlePrint} />
+                <div className="flex flex-col md:flex-row md:items-center gap-2.5">
+                    {/* Bulk Request requires BOTH a college AND a batch
+                        so the bulk action targets a well-scoped group
+                        rather than every student of a college. */}
+                    {query.college && query.batch && (
+                        <button
+                            type="button"
+                            className="ol-btn-primary whitespace-nowrap w-full md:w-auto"
+                            onClick={() => setBulkOpen(true)}
                         >
-                            <span className="fi-rr-plus" />
-                            <span>Add new Student</span>
-                        </Link>
+                            Bulk Request
+                        </button>
+                    )}
+                    {/* Batch sits LEFT of College per the spec; it's
+                        disabled until a college is chosen and only
+                        lists batches that belong to that college. */}
+                    <div className="w-full md:w-[220px]">
+                        <BatchFilter
+                            collegeName={query.college || ''}
+                            value={query.batch || ''}
+                            onChange={onBatchFilter}
+                        />
+                    </div>
+                    <div className="w-full md:w-[220px]">
+                        <CollegeFilter
+                            value={query.college || ''}
+                            onChange={onCollegeFilter}
+                        />
                     </div>
                 </div>
             </div>
 
-            <div className="ol-card p-3 min-w-0">
-                <div className="ol-card-body min-w-0">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3 mt-3">
-                        <div className="w-full md:w-auto">
-                            <ExportDropdown onPdf={handlePrint} onPrint={handlePrint} />
-                        </div>
-                        {/* Bulk Request + Batch + College search + Search user grouped on the right. */}
-                        <div className="flex flex-col md:flex-row md:items-center gap-3">
-                            {/* Bulk Request requires BOTH a college AND a batch
-                                so the bulk action targets a well-scoped group
-                                rather than every student of a college. */}
-                            {query.college && query.batch && (
-                                <button
-                                    type="button"
-                                    className="ol-btn-primary whitespace-nowrap w-full md:w-auto"
-                                    onClick={() => setBulkOpen(true)}
-                                >
-                                    Bulk Request
-                                </button>
-                            )}
-                            {/* Batch sits LEFT of College per the spec; it's
-                                disabled until a college is chosen and only
-                                lists batches that belong to that college. */}
-                            <div className="w-full md:w-[220px]">
-                                <BatchFilter
-                                    collegeName={query.college || ''}
-                                    value={query.batch || ''}
-                                    onChange={onBatchFilter}
-                                />
-                            </div>
-                            <div className="w-full md:w-[220px]">
-                                <CollegeFilter
-                                    value={query.college || ''}
-                                    onChange={onCollegeFilter}
-                                />
-                            </div>
-                            <form onSubmit={onSearch} className="flex gap-3">
-                                <input
-                                    className="ol-form-control w-full md:w-[240px]"
-                                    name="search"
-                                    type="text"
-                                    placeholder="Search user"
-                                    defaultValue={query.search || ''}
-                                />
-                                <button type="submit" className="ol-btn-primary whitespace-nowrap">Search</button>
-                            </form>
-                        </div>
-                    </div>
+            <div className="min-w-0">
+                <div className="min-w-0">
                     {(query.college || query.batch) && (
                         <div className="mb-3 flex flex-wrap items-center gap-2">
                             {query.college && (
@@ -225,27 +228,30 @@ export default function StudentIndex() {
                     )}
 
                     {isEmpty ? (
-                        <div className="py-12 text-center border border-dashed border-border rounded-ol-8">
-                            <p className="text-[16px] font-semibold text-dark mb-1">No students found</p>
+                        <div className="rounded-ol-8 border border-dashed border-ebordermuted bg-white py-16 text-center">
+                            <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-lightgreen text-skin">
+                                <Users className="h-6 w-6" />
+                            </span>
+                            <p className="mb-1 text-[15px] font-semibold text-dark">No students found</p>
                             <p className="text-[13px] text-gray">Try adjusting your search or add a new student.</p>
                         </div>
                     ) : (
                         <>
-                            <div className="flex justify-between items-center flex-wrap gap-3 mb-3">
-                                <p className="text-gray text-[14px] m-0">
-                                    Showing {rows.length} of {data.total} data
-                                </p>
-                                {loading && <span className="text-[12px] text-gray">Refreshing…</span>}
-                            </div>
+                            <p className="text-gray text-[13px] m-0 mb-3">
+                                Showing {rows.length} of {data.total} data
+                                {loading && <span className="ml-2 text-[12px]">Refreshing…</span>}
+                            </p>
                             {/* Scrollbar lives on THIS container only — the
                                 wide table scrolls here instead of widening
                                 the page. w-full + max-w-full + min-w-0 make
                                 the box clip rather than grow to fit content. */}
-                            <div className="w-full max-w-full min-w-0 overflow-x-auto">
-                                <table className="e-table">
+                            <div className="w-full max-w-full min-w-0 overflow-hidden rounded-ol-12 border border-ebordermuted bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+                                <div className="w-full max-w-full overflow-x-auto">
+                                    <table className="e-table">
                                     <thead>
                                         <tr>
                                             <th scope="col">#</th>
+                                            <th scope="col">ID</th>
                                             <th scope="col">Name</th>
                                             <th scope="col">Phone</th>
                                             <th scope="col">School</th>
@@ -258,6 +264,16 @@ export default function StudentIndex() {
                                         {rows.map((s, i) => (
                                             <tr key={s.id}>
                                                 <td>{((data.page || 1) - 1) * (data.per_page || rows.length) + i + 1}</td>
+                                                {/* Public student id (VRS<year><serial>). Null for accounts
+                                                    created before the id system, and for self-signups whose
+                                                    lead an admin hasn't converted yet — both render as —. */}
+                                                <td>
+                                                    {s.unique_id ? (
+                                                        <span className="whitespace-nowrap font-mono text-[13px] text-dark">{s.unique_id}</span>
+                                                    ) : (
+                                                        <span className="text-[12px] text-gray">—</span>
+                                                    )}
+                                                </td>
                                                 <td className="min-w-[200px]">
                                                     <div className="flex items-center gap-2">
                                                         <img
@@ -295,6 +311,7 @@ export default function StudentIndex() {
                                         ))}
                                     </tbody>
                                 </table>
+                                </div>
                             </div>
                         </>
                     )}

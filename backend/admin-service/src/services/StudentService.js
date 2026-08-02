@@ -8,6 +8,7 @@ const supabaseAdmin = require('../lib/supabaseAdmin');
 const env = require('../config/env');
 const { enqueue } = require('../jobs/emailQueue');
 const { studentWelcome, passwordReset } = require('../helpers/emailTemplates');
+const publicId = require('../lib/uniqueId');
 
 // Students sign up through auth-service, which writes to lucy_devdb.users
 // (string userId PK, roleId -> roles table). The admin "Manage Students"
@@ -15,6 +16,30 @@ const { studentWelcome, passwordReset } = require('../helpers/emailTemplates');
 // lms_admin.users. We query the auth DB read-only via authDb and map the
 // columns to the shape the existing frontend table expects (id, name,
 // email, phone, photo, enrolled_count) so no UI change is needed.
+// Manage Students shows only CONVERTED people.
+//
+// Public self-signup (POST /api/public/signup) creates a real login AND files a
+// lead, so a signup would otherwise appear here immediately and the Leads
+// "Convert" button would be meaningless — the person is already a student. The
+// rule is therefore: hide a student while they still have an OPEN (unconverted)
+// lead. Once an admin converts that lead, they show up.
+//
+// Deliberately "hide only if an open lead exists" rather than "show only if a
+// converted lead exists": admin-created and pre-existing students have NO lead
+// row at all, and the latter rule would hide every one of them. A student with
+// no lead is a directly-created student and must stay visible.
+//
+// leads lives in lms_admin, users in lucy_devdb — different Sequelize handles
+// but the SAME physical Postgres, so this is one cross-schema NOT EXISTS rather
+// than a second round trip / in-memory filter. Matched on email (leads have no
+// userId until convert() sets converted_user_id).
+const HIDE_UNCONVERTED = `
+    AND NOT EXISTS (
+        SELECT 1 FROM lms_admin.leads l
+         WHERE lower(l.email) = lower(u.email)
+           AND l.status <> 'converted'
+    )`;
+
 const list = async ({ page = 1, per_page = 10, search = '', college = '', batch = '' }) => {
     const limit = Number(per_page);
     const offset = (Number(page) - 1) * limit;
@@ -29,17 +54,20 @@ const list = async ({ page = 1, per_page = 10, search = '', college = '', batch 
             ? `AND COALESCE(c."clgName", NULLIF(TRIM(u."collegeName"), '')) = :college`
             : '';
 
+        // NOTE: HIDE_UNCONVERTED must be applied to the COUNT and the SELECT
+        // identically — filtering only the rows would leave the total counting
+        // hidden students and paginate into empty pages.
         const [{ count }] = await authDb.query(
             `SELECT COUNT(*) AS count
                FROM users u
                JOIN roles r ON r."roleId" = u."roleId"
                LEFT JOIN colleges c ON c."clgId" = u."collegeId"
-              WHERE r.role = 'student' ${searchClause} ${collegeClause}`,
+              WHERE r.role = 'student' ${searchClause} ${collegeClause} ${HIDE_UNCONVERTED}`,
             { replacements: { like, college: collegeName }, type: QueryTypes.SELECT }
         );
 
         const rows = await authDb.query(
-            `SELECT u."userId" AS id, u.name, u.email, u.phone,
+            `SELECT u."userId" AS id, u.unique_id, u.name, u.email, u.phone,
                     u."createdAt", u."preScore", u."preScoreDuration",
                     u."postScore", u."postScoreDuration",
                     u."studentPhoto",
@@ -52,7 +80,7 @@ const list = async ({ page = 1, per_page = 10, search = '', college = '', batch 
                JOIN roles r ON r."roleId" = u."roleId"
                LEFT JOIN colleges c ON c."clgId" = u."collegeId"
                LEFT JOIN program_requests pr ON pr.user_id = u."userId"
-              WHERE r.role = 'student' ${searchClause} ${collegeClause}
+              WHERE r.role = 'student' ${searchClause} ${collegeClause} ${HIDE_UNCONVERTED}
               ORDER BY
                   -- 1. Group same-college students together (A→Z); students
                   --    with no college fall to the very end.
@@ -277,7 +305,7 @@ const list = async ({ page = 1, per_page = 10, search = '', college = '', batch 
 
 const get = async (id) => {
     const rows = await authDb.query(
-        `SELECT u."userId" AS id, u.name, u.email, u.phone, u.dob, u.gender,
+        `SELECT u."userId" AS id, u.unique_id, u.name, u.email, u.phone, u.dob, u.gender,
                 u."educationLevel", u.branch, u."collegeName", u."collegeId",
                 u."graduationYear", u."collegeCode", u."programInterested",
                 u."studentPhoto", u."createdAt"
@@ -318,32 +346,22 @@ const isAuthEmailTaken = async (email) => {
     return rows.length > 0;
 };
 
-const generateUniqueStudentTeacherId = async (fullName) => {
-    try {
-        // Extract first name (first word only)
-        const firstName = (fullName || '').trim().split(' ')[0] || 'User';
-
-        // Get today's date in YYYYMMDD format
-        const today = new Date();
-        const year = today.getFullYear();
-        const month = String(today.getMonth() + 1).padStart(2, '0');
-        const day = String(today.getDate()).padStart(2, '0');
-        const dateStr = `${year}${month}${day}`;
-
-        // Count how many users were created today
-        const result = await authDb.query(
-            `SELECT COUNT(*) as count FROM users WHERE DATE("createdAt") = CURRENT_DATE`,
-            { type: QueryTypes.SELECT }
-        );
-
-        const serialNumber = (result[0]?.count || 0) + 1;
-        const paddedSerial = String(serialNumber).padStart(2, '0');
-
-        const uniqueId = `${firstName}${dateStr}-${paddedSerial}`;
-        return uniqueId;
-    } catch (error) {
-        throw new HttpError(500, `Failed to generate unique ID: ${error.message}`);
-    }
+// Resolve an existing student by email → { id } or null. Used by LeadService
+// .convert: a self-signup ALREADY has an account, so converting their lead must
+// link to it rather than call create() (which rejects a duplicate email).
+// Returns { id, unique_id } — `unique_id` is NULL for a self-signup that no
+// admin has converted yet, which is what LeadService.convert keys off to decide
+// whether it still owes this student a public VRS id.
+const findStudentByEmail = async (email) => {
+    const rows = await authDb.query(
+        `SELECT u."userId" AS id, u.unique_id
+           FROM users u
+           JOIN roles r ON r."roleId" = u."roleId"
+          WHERE lower(u.email) = lower(:email) AND r.role = 'student'
+          LIMIT 1`,
+        { replacements: { email: String(email || '') }, type: QueryTypes.SELECT }
+    );
+    return rows[0] || null;
 };
 
 // Students added from Manage Students must land in the same auth schema
@@ -353,7 +371,9 @@ const generateUniqueStudentTeacherId = async (fullName) => {
 //   2. INSERT into lucy_devdb.users — the application profile row keyed on
 //      our legacy generated userId, with `supabase:<uid>` stashed in
 //      passwordHash so the auth middleware can map JWT.sub back to a row.
-const create = async (body, file) => {
+// `opts.skipUniqueId` — create the account WITHOUT a public VRS id. Used by the
+// public self-signup route; the id is assigned later by LeadService.convert.
+const create = async (body, file, opts = {}) => {
     if (!body.name || !body.email || !body.password) {
         throw new HttpError(422, 'Name, email, and password are required');
     }
@@ -366,8 +386,11 @@ const create = async (body, file) => {
 
     const roleId = await resolveStudentRoleId();
     const userId = generateUserId();
-    // Generate unique ID: FirstName + YYYYMMDD + "-" + SerialNumber
-    const uniqueId = await generateUniqueStudentTeacherId(body.name);
+    // Public student id (VRS<year><serial>). Self-signup deliberately passes
+    // skipUniqueId: the person has an account but is NOT a student of record
+    // until an admin converts their lead — LeadService.convert assigns the id
+    // then. Admin-created students get one right here.
+    const uniqueId = opts.skipUniqueId ? null : await publicId.generate('student');
 
     // 1. Supabase Auth user — owns the password from here on.
     const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
@@ -395,14 +418,15 @@ const create = async (body, file) => {
     try {
         await authDb.query(
             `INSERT INTO users
-                ("userId", name, email, "passwordHash", phone, "roleId",
+                ("userId", unique_id, name, email, "passwordHash", phone, "roleId",
                  "collegeId", "studentPhoto", "createdAt", "updatedAt")
              VALUES
-                (:userId, :name, :email, :passwordHash, :phone, :roleId,
+                (:userId, :uniqueId, :name, :email, :passwordHash, :phone, :roleId,
                  :collegeId, :studentPhoto, NOW(), NOW())`,
             {
                 replacements: {
                     userId,
+                    uniqueId,
                     name: body.name,
                     email: body.email,
                     passwordHash: `supabase:${supabaseUid}`,
@@ -704,6 +728,7 @@ const respondProgramRequest = async (userId, action) => {
 
 module.exports = {
     list, get, create, update, remove, collegeOptions,
+    findStudentByEmail,
     sendProgramRequest, PROGRAM_OPTIONS,
     getStudentProgramRequest, respondProgramRequest, getAcceptedProgram,
 };

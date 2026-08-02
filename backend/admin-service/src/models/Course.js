@@ -78,7 +78,13 @@ module.exports = (sequelize) => {
 
     Course.associate = (models) => {
         Course.belongsTo(models.Category, { foreignKey: 'category_id' });
-        Course.belongsTo(models.User, { as: 'creator', foreignKey: 'user_id' });
+        // courses.user_id stores the owner's varchar `unique_id` (e.g.
+        // "VR20260618-ADMIN"), not the integer PK — CourseService.create
+        // resolves the JWT id → unique_id before saving. Target unique_id so
+        // the join is varchar = varchar; targeting the default User.id (integer)
+        // throws `character varying = integer` and silently drops every course
+        // from the admin list.
+        Course.belongsTo(models.User, { as: 'creator', foreignKey: 'user_id', targetKey: 'unique_id' });
     };
 
     return Course;

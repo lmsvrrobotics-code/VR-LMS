@@ -4,7 +4,6 @@ import Navbar from '@/components/layout/Navbar';
 import { logout as adminLogout, getStoredUser } from '@/admin/api/auth';
 import { getToken as getAdminToken } from '@/admin/api/client';
 import { leadStats } from '@/admin/api/leads';
-import { feedbackStats } from '@/admin/api/feedback';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { useDashboardTheme } from '@/hooks/useDashboardTheme';
 
@@ -60,17 +59,9 @@ const ICONS = {
 const MENU = [
     { key: 'dashboard', label: 'Dashboard', icon: ICONS.dashboard, to: '/admin/dashboard' },
     { key: 'calendar', label: 'Calendar', icon: ICONS.category, to: '/admin/calendar' },
-    // Feedback section — grouped: Student Feedback, Forms, and Messages
-    {
-        key: 'feedback-section',
-        label: 'Feedback',
-        icon: ICONS.feedback,
-        children: [
-            { label: 'Student Feedback', to: '/admin/feedback' },
-            { label: 'Feedback Forms', to: '/admin/feedback-forms' },
-            { label: 'Messages', to: '/admin/messages' },
-        ],
-    },
+    // Feedback — the Student Feedback and Messages pages were removed, so this
+    // is a single top-level link rather than a collapsible section.
+    { key: 'feedback-forms', label: 'Feedback Forms', icon: ICONS.feedback, to: '/admin/feedback-forms' },
     // Category sidebar entry removed — course grouping is now driven by the
     // `clg_ids` JSON column written from the course form (CollegeMultiSelect).
     // The /admin/categories route still exists in App.tsx for direct access,
@@ -307,21 +298,6 @@ export default function AdminLayout() {
         return () => { alive = false; clearInterval(id); window.removeEventListener('leads:changed', onLeadsChanged); };
     }, []);
 
-    // Live "new feedback" counter for the feedback section badge. Polls every 60s.
-    const [newFeedback, setNewFeedback] = useState(0);
-    useEffect(() => {
-        let alive = true;
-        const fetchCount = () => feedbackStats()
-            .then((s) => { if (alive) setNewFeedback(Number(s?.unreviewed) || 0); })
-            .catch(() => {});
-        fetchCount();
-        const id = setInterval(fetchCount, 60000);
-        window.addEventListener('feedback:changed', (e) => {
-            if (e?.detail && typeof e.detail.newCount === 'number') setNewFeedback(e.detail.newCount);
-            else fetchCount();
-        });
-        return () => { alive = false; clearInterval(id); };
-    }, []);
     // The admin JWT is the authoritative source for is_root_admin / role /
     // college_id — it's freshly signed at login, whereas the cached admin_user
     // can be stale or (in older sessions) missing is_root_admin entirely. Read
@@ -585,14 +561,6 @@ export default function AdminLayout() {
                                                         title={`${newLeads} new lead${newLeads === 1 ? '' : 's'} awaiting follow-up`}
                                                     >
                                                         {newLeads > 99 ? '99+' : newLeads}
-                                                    </span>
-                                                )}
-                                                {item.key === 'feedback-section' && newFeedback > 0 && (
-                                                    <span
-                                                        className="ml-2 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-blue-500 text-white text-[11px] font-bold leading-none"
-                                                        title={`${newFeedback} new feedback item${newFeedback === 1 ? '' : 's'}`}
-                                                    >
-                                                        {newFeedback > 99 ? '99+' : newFeedback}
                                                     </span>
                                                 )}
                                                 <span className={`ml-auto transition-transform ${isOpen ? 'rotate-180' : ''}`}>

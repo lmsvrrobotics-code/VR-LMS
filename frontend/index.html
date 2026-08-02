@@ -7,7 +7,17 @@
     <meta name="description" content="VR Robotics Academy offers live robotics, coding, AI, and VR courses. Hands-on curriculum with expert mentors and certified programs." />
     <meta name="author" content="VR Robotics Academy" />
 
-    <link rel="icon" type="image/png" href="https://res.cloudinary.com/dicfqwlfq/image/upload/v1764505259/VR_Robotics_Logo_upscaled_1_rrrrn8.png" />
+    <!-- Favicons. These are the SQUARE robot-arm mark cropped out of the wide
+         logo: the full logo is a 2.65:1 banner, and pointing the icon at it made
+         the browser squash the whole lockup (emblem + "VR Robotics" text) into
+         the square tab slot, which rendered as an unreadable smear. Served
+         locally — the previous remote URL shipped a 1.66 MB PNG on every load.
+         og:image below deliberately KEEPS the wide logo: social cards want the
+         full lockup, not the icon. -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 
     <meta property="og:title" content="VR Robotics Academy — Live in Future" />
     <meta property="og:description" content="Live robotics, coding, AI, and VR courses with expert mentors and certified programs." />

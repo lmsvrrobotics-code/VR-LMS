@@ -2,6 +2,9 @@ const { FeedbackForm, FeedbackResponse } = require('../models');
 const { HttpError } = require('../middlewares/error');
 const { resolveUserNames, resolveCourseTitles } = require('../helpers/scheduleResolve');
 const teachingSvc = require('./TeachingAssignmentService');
+// Batch-membership roster — the real source of a teacher's students. Used by
+// the Send flow because teachingSvc.studentsByTeacher() is still a stub ([]).
+const teacherStudentSvc = require('./TeacherStudentService');
 
 // Teacher-authored dynamic feedback forms. Teachers build the questions and
 // enable a form; enabling snapshots the teacher's assigned roster as the
@@ -133,6 +136,143 @@ const deleteForm = async (id, teacherId) => {
     return { success: 'Form deleted' };
 };
 
+/**
+ * The batches this teacher can send a form to, each with its student count.
+ *
+ * Sourced from TeacherStudentService, the same query that powers the teacher's
+ * Students tab — so the batches offered here are exactly the ones the teacher
+ * actually teaches, resolved through BOTH admin flows (batch_teachers roster
+ * and batches.primary_teacher_id).
+ */
+const listBatchesForTeacher = async (teacherId) => {
+    const tid = String(teacherId || '').trim();
+    if (!tid) return { batches: [] };
+    try {
+        const rows = await teacherStudentSvc.batchStudentRowsForTeacher(tid);
+        const byBatch = new Map();
+        for (const r of rows) {
+            if (!r.batch_id) continue;
+            const key = String(r.batch_id);
+            if (!byBatch.has(key)) {
+                byBatch.set(key, { id: key, name: r.batch_name || key, student_ids: new Set() });
+            }
+            byBatch.get(key).student_ids.add(String(r.student_user_id));
+        }
+        const batches = [...byBatch.values()]
+            .map((b) => ({ id: b.id, name: b.name, student_count: b.student_ids.size }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        return { batches };
+    } catch (e) {
+        console.warn('[feedback-forms] batch lookup failed:', e.message);
+        return { batches: [] };
+    }
+};
+
+/**
+ * Send a form to specific batches — the teacher's explicit "Send" action.
+ *
+ * Enabling alone used to snapshot `studentsByTeacher()`, which is a STUB that
+ * returns [] — so every form went out to an empty audience and no student ever
+ * saw it. This resolves the real roster from batch membership instead.
+ *
+ * The audience is ADDITIVE: sending to a second batch adds those students
+ * rather than replacing the first batch's, so a teacher can send to one group
+ * today and another next week without silently revoking the earlier one.
+ * Students who already answered keep their response (listForStudent filters
+ * them out), so re-sending is safe and only reaches people who haven't replied.
+ */
+const sendForm = async (id, teacherId, batchIds) => {
+    const form = await ownForm(id, teacherId);
+
+    const wanted = (Array.isArray(batchIds) ? batchIds : [batchIds])
+        .map((b) => String(b ?? '').trim())
+        .filter(Boolean);
+    if (!wanted.length) throw new HttpError(422, 'Choose at least one batch to send to.');
+
+    if (!Array.isArray(form.questions) || form.questions.length === 0) {
+        throw new HttpError(422, 'Add at least one question before sending.');
+    }
+
+    // Resolve students from the teacher's OWN batches only. A batch id the
+    // teacher does not teach contributes nobody, so a tampered request cannot
+    // address students outside their roster.
+    const rows = await teacherStudentSvc.batchStudentRowsForTeacher(form.teacher_id);
+    const allowed = new Set(wanted);
+    const recipients = new Set();
+    const matchedBatches = new Set();
+    for (const r of rows) {
+        if (!r.batch_id || !allowed.has(String(r.batch_id))) continue;
+        matchedBatches.add(String(r.batch_id));
+        recipients.add(String(r.student_user_id));
+    }
+
+    if (recipients.size === 0) {
+        throw new HttpError(
+            422,
+            matchedBatches.size === 0
+                ? 'Those batches are not assigned to you.'
+                : 'That batch has no active students yet.',
+        );
+    }
+
+    // Union with any previous audience, then enable so it reaches students.
+    const previous = Array.isArray(form.audience_student_ids)
+        ? form.audience_student_ids.map(String)
+        : [];
+    const merged = [...new Set([...previous, ...recipients])];
+
+    form.audience_student_ids = merged;
+    form.enabled = true;
+    form.enabled_at = new Date();
+    await form.save();
+
+    const count = await FeedbackResponse.count({ where: { form_id: form.id } });
+    const added = merged.length - previous.length;
+    return {
+        success: `Sent to ${recipients.size} student${recipients.size === 1 ? '' : 's'}.`,
+        sent_to: recipients.size,
+        newly_added: added,
+        form: shapeForm(form, count),
+    };
+};
+
+/**
+ * Per-question aggregates for ONE of the teacher's own forms.
+ *
+ * Same shape the admin sees (adminStats), but gated through ownForm() so a
+ * teacher can only read a form they authored. Teachers previously saw nothing
+ * but a response COUNT — they had to ask an admin what students actually said.
+ */
+const teacherStats = async (formId, teacherId) => {
+    const form = await ownForm(formId, teacherId);
+    return buildStats(form.get ? form.get({ plain: true }) : form);
+};
+
+/**
+ * Individual responses for one of the teacher's own forms, WITH the responding
+ * student's identity.
+ *
+ * Named (not anonymous) by product decision: on a targeted form a teacher needs
+ * to know who answered — to chase the students who haven't, and to follow up on
+ * a specific answer. Same shape as adminResponses; the difference between the
+ * two reads is only WHO may call them (ownForm gates this one to the author).
+ */
+const teacherResponses = async (formId, teacherId) => {
+    const form = await ownForm(formId, teacherId);
+    const rows = await FeedbackResponse.findAll({ where: { form_id: form.id }, order: [['id', 'DESC']], raw: true });
+    const names = await resolveUserNames(rows.map((r) => r.student_id));
+    return {
+        form: { id: form.id, title: form.title, questions: form.questions || [] },
+        responses: rows.map((r) => ({
+            id: r.id,
+            student_id: r.student_id,
+            student_name: names[String(r.student_id)] || `Student ${r.student_id}`,
+            answers: r.answers || {},
+            created_at: r.created_at,
+        })),
+    };
+};
+
 // ---- Student operations ----
 
 // Enabled forms addressed to this student that they haven't answered yet.
@@ -241,9 +381,9 @@ const round1 = (n) => Math.round(n * 10) / 10;
 
 // Per-question aggregates for one form: rating → avg + count; mcq → counts per
 // option; yesno → yes/no counts; text → list of answers.
-const adminStats = async (formId) => {
-    const form = await FeedbackForm.findByPk(Number(formId), { raw: true });
-    if (!form) throw new HttpError(404, 'Form not found.');
+// Shared by the admin and teacher stats reads, which differ only in who is
+// allowed to ask — the aggregation itself is identical and carries no identity.
+const buildStats = async (form) => {
     const rows = await FeedbackResponse.findAll({ where: { form_id: form.id }, raw: true });
 
     const questions = (form.questions || []).map((q) => {
@@ -271,6 +411,12 @@ const adminStats = async (formId) => {
     };
 };
 
+const adminStats = async (formId) => {
+    const form = await FeedbackForm.findByPk(Number(formId), { raw: true });
+    if (!form) throw new HttpError(404, 'Form not found.');
+    return buildStats(form);
+};
+
 // Individual records for one form (newest first), student names resolved.
 const adminResponses = async (formId) => {
     const form = await FeedbackForm.findByPk(Number(formId), { raw: true });
@@ -291,6 +437,8 @@ const adminResponses = async (formId) => {
 
 module.exports = {
     listForTeacher, createForm, updateForm, deleteForm,
+    listBatchesForTeacher, sendForm,
+    teacherStats, teacherResponses,
     listForStudent, submit,
     adminForms, adminStats, adminResponses,
 };

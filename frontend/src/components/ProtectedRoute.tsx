@@ -34,7 +34,8 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
+import { getDeniedRedirect, roleSatisfies, UNKNOWN_ROLE_HOME } from '@/lib/roleRouting';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -44,6 +45,7 @@ interface ProtectedRouteProps {
 const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
   const { user, loading, checkAuth } = useAuth();
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
+  const location = useLocation();
 
   // Hard gate: a protected page requires an actual auth token. Without one the
   // visitor is logged out — period. This must not depend on a backend probe
@@ -83,9 +85,20 @@ const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
   }
 
   if (requiredRole) {
-    const allowed = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
-    if (!user.role || !allowed.includes(user.role)) {
-      return <Navigate to="/dashboard" replace />;
+    // roleSatisfies normalises both sides (so 'root' satisfies an 'admin'
+    // requirement) and returns false for an absent/unknown role.
+    if (!roleSatisfies(user.role, requiredRole)) {
+      // Send them to THEIR OWN dashboard, not a hard-coded route. This used to
+      // be `/dashboard`, which redirects to /courses/browse — i.e. a teacher
+      // who touched an admin-only page was silently dropped into the student
+      // site. getDeniedRedirect resolves to /auth when the role is unknown.
+      const destination = getDeniedRedirect(user.role);
+      // Safety net: if a user's own home is itself gated against them (a
+      // misconfigured route), redirecting there would ping-pong forever.
+      // Break the cycle by falling back to the auth screen.
+      const target =
+        destination === location.pathname ? UNKNOWN_ROLE_HOME : destination;
+      return <Navigate to={target} replace />;
     }
   }
 

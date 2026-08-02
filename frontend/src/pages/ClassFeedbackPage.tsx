@@ -76,9 +76,12 @@ const ClassFeedbackPage = () => {
     e.preventDefault();
     const rated = AREAS.map((a) => ratings[a.key]).filter((v) => v > 0);
     if (rated.length === 0) { toast.error("Please give at least one star rating."); return; }
+    // The course is required: the server resolves the teacher from it, and
+    // feedback with no course cannot be attributed to anyone.
+    if (!courseId) { toast.error("Please select which class you're rating."); return; }
     setSubmitting(true);
     try {
-      await submitTeacherFeedback({ courseId: courseId || undefined, ratings, enjoyed: enjoyed.trim(), suggestions: suggestions.trim() });
+      await submitTeacherFeedback({ courseId, ratings, enjoyed: enjoyed.trim(), suggestions: suggestions.trim() });
       toast.success("Thanks for your feedback! 🎉");
       setRatings({}); setEnjoyed(""); setSuggestions(""); setCourseId("");
       loadPast();
@@ -99,13 +102,16 @@ const ClassFeedbackPage = () => {
 
         {courses.length > 0 && (
           <div className="mb-5">
-            <label className="block text-sm font-medium mb-1.5">Which class / course?</label>
+            <label className="block text-sm font-medium mb-1.5">
+              Which class / course? <span className="text-red-500">*</span>
+            </label>
             <select
               value={courseId}
               onChange={(e) => setCourseId(e.target.value)}
+              required
               className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-white"
             >
-              <option value="">Select a course (optional)</option>
+              <option value="">Select a course</option>
               {courses.map((c) => <option key={c.id} value={String(c.id)}>{c.title}</option>)}
             </select>
           </div>

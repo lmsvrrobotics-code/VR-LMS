@@ -5,6 +5,7 @@ import { toast } from 'react-toastify';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { listColleges, deleteCollege, setCollegeAccess } from '../../api/college';
 import { BsThreeDotsVertical } from 'react-icons/bs';
+import { Plus, Search, School, MapPin } from 'lucide-react';
 
 export default function CollegeIndex() {
     const [params, setParams] = useSearchParams();
@@ -90,108 +91,115 @@ export default function CollegeIndex() {
     const isEmpty = rows.length === 0;
 
     return (
-        <div>
-            <div className="ol-card rounded-ol-8 mb-3">
-                <div className="ol-card-body py-12px px-20px my-3">
-                    <div className="flex items-center justify-between flex-wrap gap-3">
-                        <h4 className="text-[16px] font-semibold text-dark m-0 flex items-center gap-2">
-                            <i className="fi-rr-settings-sliders" />
-                            School List
-                        </h4>
-                        <Link
-                            to="/admin/colleges/create"
-                            className="ol-btn-outline-secondary flex items-center gap-10px"
-                        >
-                            <span className="fi-rr-plus" />
-                            <span>Add new School</span>
-                        </Link>
+        <div className="min-w-0 space-y-4">
+            {/* Toolbar — shared professional layout across admin list pages. */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-lightgreen text-skin">
+                        <School className="h-[18px] w-[18px]" />
+                    </span>
+                    <div>
+                        <h1 className="m-0 text-[18px] font-bold text-dark">Schools</h1>
+                        <p className="m-0 mt-0.5 text-[12px] text-gray">Partner schools, their batches &amp; portal access.</p>
                     </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                    <ExportDropdown onPdf={handlePrint} onPrint={handlePrint} />
+                    <form onSubmit={onSearch} className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                        <input
+                            className="ol-form-control w-[240px] !pl-9"
+                            name="search"
+                            type="text"
+                            placeholder="Search school name or ID"
+                            defaultValue={query.search || ''}
+                        />
+                    </form>
+                    <Link
+                        to="/admin/colleges/create"
+                        className="inline-flex items-center gap-1.5 rounded-ol-8 bg-skin px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-skin-dark"
+                    >
+                        <Plus className="h-4 w-4" /> Add School
+                    </Link>
                 </div>
             </div>
 
-            <div className="ol-card p-3">
-                <div className="ol-card-body">
-                    <div className="grid grid-cols-12 gap-3 mb-3 mt-3 items-center">
-                        <div className="col-span-12 md:col-span-6">
-                            <ExportDropdown onPdf={handlePrint} onPrint={handlePrint} />
-                        </div>
-                        <div className="col-span-12 md:col-span-6">
-                            <form onSubmit={onSearch} className="grid grid-cols-12 gap-3">
-                                <div className="col-span-12 md:col-span-9">
-                                    <input
-                                        className="ol-form-control w-full"
-                                        name="search"
-                                        type="text"
-                                        placeholder="Search school name or ID"
-                                        defaultValue={query.search || ''}
-                                    />
-                                </div>
-                                <div className="col-span-12 md:col-span-3">
-                                    <button type="submit" className="ol-btn-primary w-full">Search</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-
-                    {isEmpty ? (
-                        <div className="py-12 text-center border border-dashed border-border rounded-ol-8">
-                            <p className="text-[16px] font-semibold text-dark mb-1">No schools found</p>
-                            <p className="text-[13px] text-gray">Try adjusting your search or add a new school.</p>
-                        </div>
-                    ) : (
-                        <>
-                            <div className="flex justify-between items-center flex-wrap gap-3 mb-3">
-                                <p className="text-gray text-[14px] m-0">
-                                    Showing {rows.length} of {data.total} data
-                                </p>
-                                {loading && <span className="text-[12px] text-gray">Refreshing…</span>}
-                            </div>
-                            <div className="overflow-x-auto">
-                                <table className="e-table">
-                                    <thead>
-                                        <tr>
-                                            <th scope="col">#</th>
-                                            <th scope="col">School Name</th>
-                                            <th scope="col">School ID</th>
-                                            <th scope="col">Batches</th>
-                                            <th scope="col">Options</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {rows.map((c, i) => (
-                                            <tr key={c.clgId}>
-                                                <td>{((data.page || 1) - 1) * (data.per_page || rows.length) + i + 1}</td>
-                                                <td>
-                                                    <h4 className="text-[14px] font-semibold text-dark m-0">{c.clgName}</h4>
-                                                    {c.clgAddress && (
-                                                        <p className="text-[12px] text-gray m-0">{c.clgAddress}</p>
-                                                    )}
-                                                </td>
-                                                <td>
-                                                    <p className="m-0 text-dark">{c.clgId}</p>
-                                                </td>
-                                                <td>
-                                                    <span className="inline-block px-2 py-0.5 rounded text-[12px] font-semibold bg-skin/10 text-skin">
-                                                        {c.batches_count ?? 0}
+            {isEmpty ? (
+                <div className="rounded-ol-8 border border-dashed border-ebordermuted bg-white py-16 text-center">
+                    <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-lightgreen text-skin">
+                        <School className="h-6 w-6" />
+                    </span>
+                    <p className="mb-1 text-[15px] font-semibold text-dark">No schools found</p>
+                    <p className="text-[13px] text-gray">Try adjusting your search or add a new school.</p>
+                </div>
+            ) : (
+                <>
+                    <p className="text-gray text-[13px] m-0">
+                        Showing {rows.length} of {data.total} data
+                        {loading && <span className="ml-2 text-[12px]">Refreshing…</span>}
+                    </p>
+                    <div className="overflow-hidden rounded-ol-12 border border-ebordermuted bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+                        <div className="overflow-x-auto">
+                            <table className="e-table">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">#</th>
+                                        <th scope="col">School</th>
+                                        <th scope="col">School ID</th>
+                                        <th scope="col">Batches</th>
+                                        <th scope="col">Access</th>
+                                        <th scope="col">Options</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {rows.map((c, i) => (
+                                        <tr key={c.clgId}>
+                                            <td>{((data.page || 1) - 1) * (data.per_page || rows.length) + i + 1}</td>
+                                            <td className="min-w-[220px]">
+                                                <div className="flex items-center gap-2.5">
+                                                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-lightgreen text-skin">
+                                                        <School className="h-[18px] w-[18px]" />
                                                     </span>
-                                                </td>
-                                                <td>
-                                                    <CollegeOptions
-                                                        college={c}
-                                                        onDelete={() => setConfirm({ type: 'delete', id: c.clgId, name: c.clgName })}
-                                                        onRevoke={() => setConfirm({ type: 'revoke', id: c.clgId, name: c.clgName })}
-                                                        onGive={() => setConfirm({ type: 'give', id: c.clgId, name: c.clgName })}
-                                                    />
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </>
-                    )}
-                </div>
-            </div>
+                                                    <div className="min-w-0">
+                                                        <h4 className="text-[14px] font-semibold text-dark m-0 truncate">{c.clgName}</h4>
+                                                        {c.clgAddress && (
+                                                            <p className="text-[12px] text-gray m-0 inline-flex items-center gap-1">
+                                                                <MapPin className="h-3 w-3 shrink-0" /> {c.clgAddress}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span className="font-mono text-[12px] text-dark">{c.clgId}</span>
+                                            </td>
+                                            <td>
+                                                <span className="inline-block px-2 py-0.5 rounded text-[12px] font-semibold bg-skin/10 text-skin">
+                                                    {c.batches_count ?? 0}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${c.isActive === false ? 'bg-gray-200 text-gray-600' : 'bg-green-100 text-green-700'}`}>
+                                                    <span className={`h-1.5 w-1.5 rounded-full ${c.isActive === false ? 'bg-gray-400' : 'bg-green-500'}`} />
+                                                    {c.isActive === false ? 'Revoked' : 'Active'}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <CollegeOptions
+                                                    college={c}
+                                                    onDelete={() => setConfirm({ type: 'delete', id: c.clgId, name: c.clgName })}
+                                                    onRevoke={() => setConfirm({ type: 'revoke', id: c.clgId, name: c.clgName })}
+                                                    onGive={() => setConfirm({ type: 'give', id: c.clgId, name: c.clgName })}
+                                                />
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </>
+            )}
 
             {confirm && (
                 <ConfirmDialog

@@ -10,13 +10,14 @@ import { Pencil, Eye, EyeOff, Trash2 } from 'lucide-react';
 export default function ManageCard({ cover, active, onEdit, onToggle, onDelete, children }) {
     return (
         <div className="group relative rounded-ol-12 border border-ebordermuted bg-white overflow-hidden transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_16px_36px_-18px_rgba(0,0,0,0.32)]">
-            <div className="relative h-44 overflow-hidden bg-gray-100">
+            <div className="relative h-44 overflow-hidden bg-gray-50">
                 {cover}
                 <span
-                    className={`absolute top-2 left-2 z-10 px-2 py-0.5 rounded-full text-[11px] font-semibold shadow-sm ${
-                        active ? 'bg-green-500 text-white' : 'bg-gray-500 text-white'
+                    className={`absolute top-2.5 left-2.5 z-10 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold shadow-sm backdrop-blur ${
+                        active ? 'bg-green-100/90 text-green-700' : 'bg-gray-200/90 text-gray-600'
                     }`}
                 >
+                    <span className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-green-500' : 'bg-gray-400'}`} />
                     {active ? 'Active' : 'Hidden'}
                 </span>
                 <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity duration-200">

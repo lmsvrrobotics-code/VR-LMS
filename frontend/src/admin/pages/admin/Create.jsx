@@ -13,7 +13,7 @@ export default function AdminCreate() {
             nav('/admin/admins');
         } catch (e) {
             console.error('Create admin failed:', e);
-            const message = e.response?.data?.error || e.response?.data?.message || e.message || 'Failed';
+            const message = e.uiMessage || e.response?.data?.error || e.response?.data?.message || e.message || 'Failed';
             toast.error(message);
         }
     };

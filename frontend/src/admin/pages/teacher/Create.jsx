@@ -13,7 +13,9 @@ export default function TeacherCreate() {
             nav('/admin/teachers');
         } catch (e) {
             console.error('Create teacher failed:', e);
-            const message = e.response?.data?.error || e.response?.data?.message || e.message || 'Failed';
+            // uiMessage is set by the api client and names the offending field(s)
+            // on a validation failure — far more useful than a bare status line.
+            const message = e.uiMessage || e.response?.data?.error || e.response?.data?.message || e.message || 'Failed';
             toast.error(message);
         }
     };

@@ -1,6 +1,7 @@
 const { TeacherFeedback, Course } = require('../models');
 const { HttpError } = require('../middlewares/error');
 const { resolveUserNames, resolveCourseTitles } = require('../helpers/scheduleResolve');
+const { groupByTeacher } = require('./studentFeedbackGrouping');
 
 // Student → teacher/class feedback (table teacher_feedback). Student submits
 // after a class; admin reads aggregate stats + per-teacher breakdowns.
@@ -39,14 +40,23 @@ const create = async ({ studentId, courseId, ratings, enjoyed, suggestions }) =>
     });
     if (Object.keys(clean).length === 0) throw new HttpError(422, 'Give at least one rating.');
 
+    // The course is REQUIRED: teacher_id is derived from it, and feedback that
+    // cannot name a teacher is invisible in the admin's teacher-wise view (it
+    // falls into "Unassigned"). Rejecting here keeps the attribution correct at
+    // the source rather than guessing later.
+    if (!courseId) throw new HttpError(422, 'Please select the class you are rating.');
+
     // Resolve the course's teacher (first teacher_id) so the admin can group
-    // feedback by teacher. Best-effort — feedback is still saved without it.
+    // feedback by teacher. A course with no teacher assigned still saves — the
+    // student did nothing wrong — but it is an admin data gap worth logging.
     let teacher_id = null;
-    if (courseId) {
-        try {
-            const c = await Course.findByPk(Number(courseId), { attributes: ['teacher_ids'] });
-            teacher_id = toIdArray(c && c.teacher_ids)[0] || null;
-        } catch { /* ignore */ }
+    const course = await Course.findByPk(Number(courseId), { attributes: ['id', 'teacher_ids', 'user_id'] });
+    if (!course) throw new HttpError(422, 'That course does not exist.');
+    // Fall back to the course creator when teacher_ids is empty — the same
+    // resolution the course player uses to name a course's teacher.
+    teacher_id = toIdArray(course.teacher_ids)[0] || (course.user_id ? String(course.user_id) : null);
+    if (!teacher_id) {
+        console.warn(`[teacher-feedback] course ${courseId} has no teacher; feedback will be unattributed`);
     }
 
     const item = await TeacherFeedback.create({
@@ -61,12 +71,61 @@ const create = async ({ studentId, courseId, ratings, enjoyed, suggestions }) =>
 };
 
 // A student's own past submissions (so the dashboard can show what they sent).
+// Also grouped BY TEACHER so the student dashboard can render a tab per
+// teacher they have rated. Teacher names are resolved here (the student is the
+// author, so there is no anonymity to preserve in this direction — unlike
+// forTeacher(), which withholds student identity from the teacher being rated).
 const listForStudent = async (studentId) => {
-    if (!studentId) return { feedback: [] };
+    if (!studentId) return { feedback: [], teachers: [] };
     const rows = await TeacherFeedback.findAll({ where: { student_id: String(studentId) }, order: [['id', 'DESC']], raw: true });
     const titles = await resolveCourseTitles(rows.map((r) => r.course_id));
+    const names = await resolveUserNames([...new Set(rows.map((r) => r.teacher_id).filter(Boolean).map(String))]);
+
+    const feedback = rows.map((r) => ({
+        id: r.id,
+        course_id: r.course_id,
+        course_title: r.course_id ? (titles[String(r.course_id)] || null) : null,
+        teacher_id: r.teacher_id ? String(r.teacher_id) : null,
+        teacher_name: r.teacher_id ? (names[String(r.teacher_id)] || `Teacher ${r.teacher_id}`) : null,
+        ratings: r.ratings || {},
+        overall: round1(overallOf(r.ratings)),
+        enjoyed: r.enjoyed || '',
+        suggestions: r.suggestions || '',
+        created_at: r.created_at,
+    }));
+
+    return { feedback, teachers: groupByTeacher(feedback) };
+};
+
+// ---- Teacher reads ----
+// What one teacher sees about themselves: their own aggregate scores plus the
+// individual responses. Student identity is deliberately withheld so ratings
+// stay anonymous to the teacher being rated (admins still see names via list()).
+const forTeacher = async (teacherId, { limit = 200 } = {}) => {
+    if (!teacherId) throw new HttpError(401, 'Sign in to view your feedback.');
+    const rows = await TeacherFeedback.findAll({
+        where: { teacher_id: String(teacherId) },
+        order: [['id', 'DESC']],
+        raw: true,
+    });
+
+    const perAttribute = {};
+    ATTR_KEYS.forEach((k) => {
+        const vals = rows.map((r) => Number(r.ratings && r.ratings[k])).filter((v) => v > 0);
+        perAttribute[k] = round1(avg(vals));
+    });
+
+    const capped = rows.slice(0, Math.min(Number(limit) || 200, 500));
+    const titles = await resolveCourseTitles(capped.map((r) => r.course_id));
+
     return {
-        feedback: rows.map((r) => ({
+        stats: {
+            total_feedback: rows.length,
+            overall_avg: round1(avg(rows.map((r) => overallOf(r.ratings)).filter((v) => v > 0))),
+            per_attribute: perAttribute,
+            attributes: ATTRS,
+        },
+        feedback: capped.map((r) => ({
             id: r.id,
             course_id: r.course_id,
             course_title: r.course_id ? (titles[String(r.course_id)] || null) : null,
@@ -150,4 +209,4 @@ const list = async ({ teacherId, limit = 200 } = {}) => {
     };
 };
 
-module.exports = { create, listForStudent, stats, byTeacher, list, ATTRS };
+module.exports = { create, listForStudent, forTeacher, stats, byTeacher, list, ATTRS };

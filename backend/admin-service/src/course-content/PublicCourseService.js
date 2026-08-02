@@ -138,7 +138,16 @@ const resolveTeacher = async (course) => {
         // that also misses.
         const fromAuth = await fetchAuthUser(course.user_id);
         if (fromAuth && fromAuth.name) return fromAuth;
-        const creator = await User.findByPk(course.user_id);
+        // The local admin `User` PK is an INTEGER. course.user_id can be a
+        // non-numeric string id (e.g. an auth-service "VR20260618-ADMIN"), in
+        // which case findByPk throws `invalid input syntax for type integer`
+        // and takes the whole course-details request down (503). Only look up
+        // the local user when the id is actually numeric; otherwise there's no
+        // local row to find and we fall through to returning null.
+        const numericUserId = /^\d+$/.test(String(course.user_id).trim())
+            ? Number(course.user_id)
+            : null;
+        const creator = numericUserId != null ? await User.findByPk(numericUserId) : null;
         if (creator) {
             return {
                 id: creator.id,

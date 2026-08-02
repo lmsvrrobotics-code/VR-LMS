@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import {
+    Plus, Search, GraduationCap, Pencil, Eye, EyeOff, Trash2,
+    Calendar, BookOpen, Users, Video,
+} from 'lucide-react';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import Modal from '../../components/Modal';
 import { listClasses, storeClass, updateClass, deleteClass, toggleClassStatus, getClass } from '../../api/class';
@@ -12,6 +16,10 @@ import { MultiSelect, fmtDateTime, toLocalInput } from '../../components/schedul
 /**
  * Manage Classes — admin CRUD for class sessions (name + course + time window
  * + teacher(s) + student(s) + meeting link). ?action=add auto-opens Add.
+ *
+ * UI mirrors the professional Marketing pages (Demo Videos / Demos): icon-badge
+ * toolbar header, search-with-icon, gradient primary action, and a clean
+ * card-style table with status pills and icon actions.
  */
 export default function ClassesIndex() {
     const [params, setParams] = useSearchParams();
@@ -57,43 +65,166 @@ export default function ClassesIndex() {
     const handleToggle = async (id) => { try { await toggleClassStatus(id); toast.success('Status updated'); load(); } catch (e) { toast.error(e.response?.data?.error || 'Failed'); } };
     const openEdit = async (id) => { try { const res = await getClass(id); setEditItem(res.item); } catch (e) { toast.error(e.response?.data?.error || 'Failed to load class'); } };
 
-    if (loading && !data) return <div className="flex flex-col items-center justify-center py-20 text-gray"><div className="w-10 h-10 border-4 border-gray-200 border-t-skin rounded-full animate-spin mb-3" /><p className="text-[14px]">Loading classes…</p></div>;
-    if (error && !data) return <div className="ol-card rounded-ol-8"><div className="ol-card-body py-10 px-6 text-center"><p className="text-[16px] font-semibold text-danger mb-2">Couldn’t load classes</p><p className="text-[13px] text-gray mb-4">{error}</p><button className="ol-btn-primary" onClick={load}>Retry</button></div></div>;
+    if (loading && !data) {
+        return (
+            <div className="flex flex-col items-center justify-center py-20 text-gray">
+                <div className="w-10 h-10 border-4 border-gray-200 border-t-skin rounded-full animate-spin mb-3" />
+                <p className="text-[14px]">Loading classes…</p>
+            </div>
+        );
+    }
+    if (error && !data) {
+        return (
+            <div className="ol-card rounded-ol-8">
+                <div className="ol-card-body py-10 px-6 text-center">
+                    <p className="text-[16px] font-semibold text-danger mb-2">Couldn’t load classes</p>
+                    <p className="text-[13px] text-gray mb-4">{error}</p>
+                    <button className="ol-btn-primary" onClick={load}>Retry</button>
+                </div>
+            </div>
+        );
+    }
 
     const rows = data.classes.data;
     const isEmpty = rows.length === 0;
     const formProps = { courses, teachers, students };
 
     return (
-        <div>
-            <div className="ol-card rounded-ol-8 mb-3"><div className="ol-card-body py-12px px-20px my-3"><div className="flex items-center justify-between flex-wrap gap-3"><h4 className="text-[16px] font-semibold text-dark m-0">Classes</h4><button type="button" className="ol-btn-outline-secondary flex items-center gap-10px" onClick={() => setAddOpen(true)}><span className="fi-rr-plus" /><span>Add Class</span></button></div></div></div>
+        <div className="space-y-4">
+            {/* Toolbar — shared professional layout across Marketing/Scheduling pages. */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-lightgreen text-skin">
+                        <GraduationCap className="h-[18px] w-[18px]" />
+                    </span>
+                    <div>
+                        <h1 className="m-0 text-[18px] font-bold text-dark">Classes</h1>
+                        <p className="m-0 mt-0.5 text-[12px] text-gray">Live class sessions — course, schedule, teachers &amp; meeting link.</p>
+                    </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                    <form onSubmit={onSearch} className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                        <input className="ol-form-control w-[220px] !pl-9" name="search" type="text" placeholder="Search by class name" defaultValue={query.search || ''} />
+                    </form>
+                    <button type="button" className="inline-flex items-center gap-1.5 rounded-ol-8 bg-skin px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-skin-dark" onClick={() => setAddOpen(true)}>
+                        <Plus className="h-4 w-4" /> Add Class
+                    </button>
+                </div>
+            </div>
 
-            <div className="ol-card"><div className="ol-card-body p-3">
-                <form onSubmit={onSearch} className="flex justify-end gap-3 mb-3 mt-3"><input className="ol-form-control max-w-[280px]" name="search" type="text" placeholder="Search by class name" defaultValue={query.search || ''} /><button type="submit" className="ol-btn-primary">Search</button></form>
+            {isEmpty ? (
+                <div className="rounded-ol-8 border border-dashed border-ebordermuted bg-white py-16 text-center">
+                    <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-lightgreen text-skin">
+                        <GraduationCap className="h-6 w-6" />
+                    </span>
+                    <p className="mb-1 text-[15px] font-semibold text-dark">{query.search ? 'No classes match your search' : 'No classes yet'}</p>
+                    <p className="text-[13px] text-gray">{query.search ? 'Try a different name.' : 'Click “Add Class” to create the first one.'}</p>
+                </div>
+            ) : (
+                <>
+                    <p className="text-gray text-[13px]">
+                        Showing {rows.length} of {data.classes.total}
+                        {loading && <span className="ml-2 text-[12px]">Refreshing…</span>}
+                    </p>
 
-                {isEmpty ? (
-                    <div className="py-12 text-center border border-dashed border-border rounded-ol-8"><p className="text-[16px] font-semibold text-dark mb-1">No classes yet</p><p className="text-[13px] text-gray">Click “Add Class” to create the first one.</p></div>
-                ) : (
-                    <>
-                        <p className="text-gray text-[14px] mb-3">Showing {rows.length} of {data.classes.total}{loading && <span className="ml-2 text-[12px]">Refreshing…</span>}</p>
-                        <div className="overflow-x-auto"><table className="w-full text-[13px]">
-                            <thead><tr className="text-left text-gray border-b border-ebordermuted"><th className="py-2 pr-3 font-semibold">Class</th><th className="py-2 pr-3 font-semibold">Course</th><th className="py-2 pr-3 font-semibold">Timeline</th><th className="py-2 pr-3 font-semibold">Teachers</th><th className="py-2 pr-3 font-semibold">Link</th><th className="py-2 pr-3 font-semibold">Status</th><th className="py-2 pr-3 font-semibold">Actions</th></tr></thead>
-                            <tbody>{rows.map((c) => { const tN = teacherNames(c.teacher_ids); return (
-                                <tr key={c.id} className="border-b border-ebordermuted align-top">
-                                    <td className="py-3 pr-3 font-semibold text-dark">{c.name}</td>
-                                    <td className="py-3 pr-3">{courseName(c.course_id)}</td>
-                                    <td className="py-3 pr-3 whitespace-nowrap">{fmtDateTime(c.start_at)}<br />→ {fmtDateTime(c.end_at)}</td>
-                                    <td className="py-3 pr-3" title={tN.join(', ')}>{tN.length ? `${tN.length}: ${tN.slice(0, 2).join(', ')}${tN.length > 2 ? '…' : ''}` : '—'}</td>
-                                    <td className="py-3 pr-3">{c.meeting_link ? <a href={c.meeting_link} target="_blank" rel="noopener noreferrer" className="text-skin underline">Join</a> : '—'}</td>
-                                    <td className="py-3 pr-3"><span className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${c.status ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{c.status ? 'Active' : 'Hidden'}</span></td>
-                                    <td className="py-3 pr-3"><div className="flex gap-2"><button className="ol-btn-light text-[12px] px-3 py-1" onClick={() => openEdit(c.id)}>Edit</button><button className="ol-btn-outline-secondary text-[12px] px-3 py-1" onClick={() => handleToggle(c.id)}>{c.status ? 'Hide' : 'Show'}</button><button className="ol-btn-danger text-[12px] px-3 py-1" onClick={() => setConfirm(c.id)}>Delete</button></div></td>
-                                </tr>); })}</tbody>
-                        </table></div>
+                    <div className="overflow-hidden rounded-ol-12 border border-ebordermuted bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-[13px]">
+                                <thead>
+                                    <tr className="border-b border-ebordermuted bg-gray-50/70 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                                        <th className="px-4 py-3">Class</th>
+                                        <th className="px-4 py-3">Course</th>
+                                        <th className="px-4 py-3">Schedule</th>
+                                        <th className="px-4 py-3">Teachers</th>
+                                        <th className="px-4 py-3">Status</th>
+                                        <th className="px-4 py-3 text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {rows.map((c) => {
+                                        const tN = teacherNames(c.teacher_ids);
+                                        return (
+                                            <tr key={c.id} className="border-b border-ebordermuted last:border-0 align-middle transition-colors hover:bg-lightgreen/40">
+                                                <td className="px-4 py-3">
+                                                    <div className="flex items-center gap-2.5">
+                                                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-lightgreen text-skin">
+                                                            <GraduationCap className="h-4 w-4" />
+                                                        </span>
+                                                        <div className="min-w-0">
+                                                            <div className="truncate font-semibold text-dark">{c.name}</div>
+                                                            {c.meeting_link && (
+                                                                <a href={c.meeting_link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] text-skin hover:underline">
+                                                                    <Video className="h-3 w-3" /> Join meeting
+                                                                </a>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <span className="inline-flex items-center gap-1.5 text-dark">
+                                                        <BookOpen className="h-3.5 w-3.5 text-gray-400" />
+                                                        {courseName(c.course_id)}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 whitespace-nowrap">
+                                                    <div className="flex items-center gap-1.5 text-dark">
+                                                        <Calendar className="h-3.5 w-3.5 text-gray-400" />
+                                                        {fmtDateTime(c.start_at)}
+                                                    </div>
+                                                    <div className="mt-0.5 pl-5 text-[12px] text-gray">→ {fmtDateTime(c.end_at)}</div>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {tN.length ? (
+                                                        <span className="inline-flex items-center gap-1.5 text-dark" title={tN.join(', ')}>
+                                                            <Users className="h-3.5 w-3.5 text-gray-400" />
+                                                            <span className="truncate max-w-[180px]">{tN.slice(0, 2).join(', ')}{tN.length > 2 ? ` +${tN.length - 2}` : ''}</span>
+                                                        </span>
+                                                    ) : <span className="text-gray">—</span>}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${c.status ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>
+                                                        <span className={`h-1.5 w-1.5 rounded-full ${c.status ? 'bg-green-500' : 'bg-gray-400'}`} />
+                                                        {c.status ? 'Active' : 'Hidden'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <div className="flex items-center justify-end gap-1.5">
+                                                        <button type="button" title="Edit" onClick={() => openEdit(c.id)}
+                                                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-ebordermuted text-gray-600 transition-colors hover:border-skin hover:bg-skin hover:text-white">
+                                                            <Pencil className="h-4 w-4" />
+                                                        </button>
+                                                        <button type="button" title={c.status ? 'Hide' : 'Show'} onClick={() => handleToggle(c.id)}
+                                                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-ebordermuted text-gray-600 transition-colors hover:border-skin hover:bg-skin hover:text-white">
+                                                            {c.status ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                        </button>
+                                                        <button type="button" title="Delete" onClick={() => setConfirm(c.id)}
+                                                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-ebordermuted text-danger transition-colors hover:border-danger hover:bg-danger hover:text-white">
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
 
-                        {data.classes.last_page > 1 && (<nav className="mt-4"><ul className="flex flex-wrap gap-2 list-none p-0 m-0">{Array.from({ length: data.classes.last_page }, (_, i) => i + 1).map((p) => (<li key={p}><button className={`e-page-link ${p === data.classes.current_page ? 'e-page-link-active' : ''}`} onClick={() => setParams({ ...query, page: p })}>{p}</button></li>))}</ul></nav>)}
-                    </>
-                )}
-            </div></div>
+                    {data.classes.last_page > 1 && (
+                        <nav className="mt-4">
+                            <ul className="flex flex-wrap gap-2 list-none p-0 m-0">
+                                {Array.from({ length: data.classes.last_page }, (_, i) => i + 1).map((p) => (
+                                    <li key={p}>
+                                        <button className={`e-page-link ${p === data.classes.current_page ? 'e-page-link-active' : ''}`} onClick={() => setParams({ ...query, page: p })}>{p}</button>
+                                    </li>
+                                ))}
+                            </ul>
+                        </nav>
+                    )}
+                </>
+            )}
 
             {addOpen && (<Modal title="Add Class" size="lg" onClose={() => setAddOpen(false)}><ClassForm {...formProps} submitLabel="Add class" onSubmit={async (body) => { try { await storeClass(body); toast.success('Class created'); setAddOpen(false); load(); } catch (e) { toast.error(e.response?.data?.error || 'Failed'); } }} /></Modal>)}
             {editItem && (<Modal title="Edit Class" size="lg" onClose={() => setEditItem(null)}><ClassForm {...formProps} initial={editItem} submitLabel="Update class" onSubmit={async (body) => { try { await updateClass(editItem.id, body); toast.success('Class updated'); setEditItem(null); load(); } catch (e) { toast.error(e.response?.data?.error || 'Failed'); } }} /></Modal>)}

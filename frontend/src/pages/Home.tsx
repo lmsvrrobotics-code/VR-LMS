@@ -677,16 +677,19 @@ const Home = () => {
       </section>
 
       {/* ───────────── Student Projects ───────────── */}
-      <section id="projects" className="section-padding">
-        <div className="container-ngo">
-          <div className="text-center space-y-3 mb-14">
-            <p className="text-primary font-semibold">Student Projects</p>
-            <h2 className="text-3xl md:text-4xl font-bold">
-              {projectItems.length > 0 ? "Let's explore creativity" : "What our students build"}
-            </h2>
-          </div>
-          {projectItems.length > 0 ? (
-            // Admin-managed projects (image + date + title + author).
+      {/* Hidden entirely until an admin adds a project — same rule as the
+          Testimonials and Gallery sections below. An empty section on the home
+          page reads as a broken/unfinished site, so we show nothing instead of
+          a "coming soon" placeholder. (The /books and /locations PAGES keep
+          their empty states: hiding everything there would leave a blank page.) */}
+      {projectItems.length > 0 && (
+        <section id="projects" className="section-padding">
+          <div className="container-ngo">
+            <div className="text-center space-y-3 mb-14">
+              <p className="text-primary font-semibold">Student Projects</p>
+              <h2 className="text-3xl md:text-4xl font-bold">Let's explore creativity</h2>
+            </div>
+            {/* Admin-managed projects (image + date + title + author). */}
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {projectItems.map((p) => {
                 const card = (
@@ -726,12 +729,9 @@ const Home = () => {
                 );
               })}
             </div>
-          ) : (
-            // No hardcoded placeholders — projects come from the admin panel.
-            <p className="text-center text-muted-foreground">Student projects will be showcased here soon.</p>
-          )}
-        </div>
-      </section>
+          </div>
+        </section>
+      )}
 
       {/* ───────────── Testimonials ───────────── */}
       {testimonials.length > 0 && (

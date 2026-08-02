@@ -1,4 +1,6 @@
 import app, { initDb } from './src/app.js';
+import { initRedis } from './src/cache/redis.js';
+import { runMigrationsViaPg } from './src/db/runMigrations.js';
 
 // Last-resort guards: a stray async throw or rejected promise must NOT silently
 // kill the auth process (that = login down). Log so Sentry/host capture it; the
@@ -12,11 +14,31 @@ process.on('uncaughtException', (err) => {
 
 const PORT = process.env.PORT || 8001;
 
-initDb().then(async () => {
-  app.listen(PORT, () => {
-    console.log(`🔐 Auth Service running on port ${PORT}---`);
-  });
-}).catch(err => {
-  console.error('Failed to init DB:', err);
-  process.exit(1);
-});
+async function startup() {
+  try {
+    console.log('🚀 Starting auth-service...');
+
+    // 1. Init database
+    console.log('📦 Initializing database...');
+    await initDb();
+
+    // 2. Run migrations (creates indexes)
+    console.log('🔄 Running migrations...');
+    await runMigrationsViaPg();
+
+    // 3. Init Redis (optional, fails gracefully)
+    console.log('📍 Initializing Redis cache...');
+    await initRedis();
+
+    // 4. Start server
+    app.listen(PORT, () => {
+      console.log(`🔐 Auth Service running on port ${PORT}---`);
+      console.log(`📊 Metrics available at http://localhost:${PORT}/metrics`);
+    });
+  } catch (err) {
+    console.error('Startup error:', err);
+    process.exit(1);
+  }
+}
+
+startup();

@@ -9,6 +9,9 @@ module.exports = (sequelize) => {
         // is the first user created regardless of this flag.
         is_root_admin: { type: DataTypes.BOOLEAN, allowNull: true, defaultValue: false },
         email: { type: DataTypes.STRING(255), unique: true, allowNull: false },
+        // Human-readable tracking ID (e.g. "Name20260701-01"). NOT NULL in the
+        // DB; generated via lms_admin.get_next_user_id() when creating users.
+        unique_id: { type: DataTypes.STRING(100), unique: true, allowNull: false },
         status: { type: DataTypes.INTEGER },
         name: { type: DataTypes.STRING(255) },
         phone: { type: DataTypes.STRING(255) },

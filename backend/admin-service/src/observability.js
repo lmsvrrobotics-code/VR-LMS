@@ -15,9 +15,29 @@ if (enabled) {
         environment: process.env.NODE_ENV || 'development',
         release: process.env.SENTRY_RELEASE || undefined,
         serverName: process.env.SERVICE_NAME || 'admin-service',
-        tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE || 0.1),
+        // Sample rate: 1.0 for production (100% of traces), 0.1 for dev (10%)
+        // If you have high volume, use adaptive sampling or 0.5 (50%)
+        tracesSampleRate: process.env.NODE_ENV === 'production'
+            ? Number(process.env.SENTRY_TRACES_SAMPLE_RATE || 1.0)
+            : Number(process.env.SENTRY_TRACES_SAMPLE_RATE || 0.1),
+        // Capture performance metrics for slow transactions.
+        //
+        // @sentry/node v8 removed the `Sentry.Integrations.*` namespace in
+        // favour of factory functions. The old `new Sentry.Integrations.Http()`
+        // form threw "Cannot read properties of undefined (reading 'Http')" at
+        // require time — and because this whole block is gated on SENTRY_DSN,
+        // it only crashed where a DSN is actually set. Local dev (no DSN) was a
+        // silent no-op, so the fault first appeared in the container.
+        integrations: [
+            Sentry.httpIntegration(),
+            Sentry.onUncaughtExceptionIntegration(),
+            Sentry.onUnhandledRejectionIntegration(),
+        ],
+        // Breadcrumbs for debugging
+        maxBreadcrumbs: 50,
+        attachStacktrace: true,
     });
-    console.log('[observability] Sentry initialised');
+    console.log('[observability] Sentry initialised with traces enabled');
 }
 
 function attachErrorHandler(app) {

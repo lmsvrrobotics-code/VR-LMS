@@ -127,6 +127,10 @@ import { sanitizeMiddleware } from './lib/sanitize.js';
 import auditLog from './lib/auditLog.js';
 import bruteForce from './lib/bruteForceProtection.js';
 
+// ✅ PERFORMANCE IMPORTS
+import { metricsMiddleware, getRegister } from './monitoring/metrics.js';
+import { cacheMiddleware } from './cache/cachingMiddleware.js';
+
 const app = express();
 
 // Behind Railway's proxy the client IP is in X-Forwarded-For. Without this,
@@ -146,7 +150,15 @@ const corsAllow = (process.env.CORS_ORIGINS || process.env.ALLOWED_ORIGINS || ''
   .filter(Boolean);
 const corsOrigin = (origin, cb) => {
   if (!origin) return cb(null, true); // same-origin / curl / mobile
-  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return cb(null, true);
+  // Blanket localhost trust is a dev-only convenience. Deployed, it lets any
+  // page served from loopback on the host (or a co-located container) make
+  // credentialed cross-origin calls to auth. Explicit allow-list in production.
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+  ) {
+    return cb(null, true);
+  }
   if (corsAllow.includes(origin)) return cb(null, true);
   return cb(new Error('Not allowed by CORS'));
 };
@@ -158,15 +170,41 @@ app.use(cors({
 app.use(helmet());
 app.use(express.json());
 
+// ✅ PERFORMANCE: Add monitoring middleware
+app.use(metricsMiddleware());
+
+// ✅ PERFORMANCE: Add caching middleware (for GET requests)
+app.use(cacheMiddleware(300)); // 5-min cache
+
 // ✅ SECURITY: Sanitize all inputs (removes XSS)
 app.use(sanitizeMiddleware);
 
 app.use(morgan('dev'));
 app.use(cookieParser());
-app.use(rateLimit({ windowMs: 60_000, max: 200 }));
+// Liveness/metrics endpoints are exempt from rate limiting. Bastion probes
+// /health from a single IP, so under load those probes shared the same 200/min
+// bucket as real traffic and started getting 429s. The gateway reads a non-200
+// probe as "service down" and then 503s EVERY user request — a fully healthy
+// auth-service taken offline by its own rate limiter. Measured: at 50 concurrent
+// logins, 280 of 711 responses were 503s from exactly this cascade.
+app.use(
+  rateLimit({
+    windowMs: 60_000,
+    max: 200,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => req.path === '/health' || req.path === '/metrics',
+  }),
+);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: process.env.SERVICE_NAME });
+});
+
+// ✅ MONITORING: Prometheus metrics endpoint
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', getRegister().contentType);
+  res.end(await getRegister().metrics());
 });
 
 app.get("/", (req, res) => {

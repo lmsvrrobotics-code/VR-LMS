@@ -133,7 +133,6 @@ All services run independently in `npm run dev` during local development. In pro
 ### Configuration & Documentation
 - `DEVELOPER_GUIDE.md` — Architecture, endpoints, security patterns
 - `SETUP_GUIDE.md` — Initial Supabase, R2, Bunny, SMTP setup
-- `TEST_PLAN.md` — Test cases and verification steps
 - `STUDENT_DASHBOARD_GUIDE.md` — User guide for dashboard features
 - `PRODUCTION_DEPLOYMENT_GUIDE.md` — Railway deployment steps
 - `credentials.env` — Master credentials (DO NOT COMMIT; auto-synced to service .env files)
@@ -444,7 +443,6 @@ This project has evolved significantly. Key decision points and workarounds:
 
 - `DEVELOPER_GUIDE.md` — Deep dive into architecture, endpoints, security
 - `STUDENT_DASHBOARD_GUIDE.md` — User guide for dashboard features
-- `TEST_PLAN.md` — Test cases and verification checklist
 - `PRODUCTION_DEPLOYMENT_GUIDE.md` — How to deploy to Railway or other platforms
 - `LMS_Infrastructure_reference.md` — Detailed infrastructure and API reference
 

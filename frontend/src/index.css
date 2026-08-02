@@ -848,6 +848,124 @@ button, .btn, [role="button"] { transition: transform .2s ease, box-shadow .2s e
 /* Pagination + page-link borders. */
 .admin-dark .e-page-link { border-color: rgba(255, 255, 255, 0.14); color: #c7ccd6; }
 
+/* ---- react-big-calendar professional light polish (admin calendar) ----
+   rbc's default stylesheet looks dated (heavy borders, chunky toolbar, bold
+   headers). Repaint it into the clean analytics-admin look used across the
+   dashboard: hairline grid, quiet uppercase day headers, a soft brand "today"
+   tint, and pill toolbar buttons. Scoped to .admin-cal so nothing else moves. */
+/* NOTE: the toolbar is now a React component (CalendarToolbar in
+   admin/pages/calendar/Index.jsx) — icon prev/next + a segmented view switcher.
+   rbc's default .rbc-toolbar is no longer rendered, so the button styling that
+   used to live here has been removed rather than left as dead CSS. */
+
+/* Grid + headers */
+.admin-cal .rbc-month-view,
+.admin-cal .rbc-time-view { border: 1px solid #eef0f6; border-radius: 10px; overflow: hidden; }
+.admin-cal .rbc-header {
+  padding: 9px 6px; font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.05em; color: #878d97; border-bottom: 1px solid #eef0f6;
+}
+.admin-cal .rbc-header + .rbc-header,
+.admin-cal .rbc-day-bg + .rbc-day-bg,
+.admin-cal .rbc-month-row + .rbc-month-row,
+.admin-cal .rbc-time-content > * + * > * { border-color: #f1f3f9; }
+.admin-cal .rbc-date-cell { padding: 4px 8px; font-size: 12px; color: #4b5675; }
+.admin-cal .rbc-off-range-bg { background: #fafbfd; }
+.admin-cal .rbc-off-range { color: #c3c9da; }
+.admin-cal .rbc-today { background: rgba(255, 106, 0, 0.06); }
+/* Current-day number gets a filled brand chip so "today" is unmistakable —
+   the faint cell tint alone was easy to miss on a busy month. */
+.admin-cal .rbc-now .rbc-button-link {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #FF6A00;
+  color: #fff;
+  font-weight: 700;
+}
+.admin-cal .rbc-event {
+  box-shadow: 0 1px 2px rgba(15,23,42,0.12);
+  transition: transform .12s ease, filter .12s ease;
+}
+/* Lift on hover so blocks read as clickable (they open the detail modal). */
+.admin-cal .rbc-event:hover { transform: translateY(-1px); filter: brightness(1.06); }
+.admin-cal .rbc-event.rbc-selected { filter: brightness(0.94); }
+.admin-cal .rbc-event:focus { outline: 2px solid rgba(255,106,0,0.4); }
+.admin-cal .rbc-event:focus-visible { outline: 2px solid rgba(255,106,0,0.55); outline-offset: 1px; }
+
+/* Roomier month rows so days with several sessions don't feel cramped. Taller
+   rows also fit more events before rbc collapses them into "+N more" — with
+   ~92px only about two fit, so a day with 10 classes hid almost everything. */
+.admin-cal .rbc-month-row { min-height: 124px; }
+
+/* "+N more" is now the primary signal that a day is over-full, so make it a
+   real button rather than faint text. Clicking it opens that date's Day view
+   (onShowMore in Index.jsx), which lists every session with no cap. */
+.admin-cal .rbc-show-more {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(255, 106, 0, 0.1);
+  color: #FF6A00;
+  font-size: 11px;
+  font-weight: 700;
+}
+.admin-cal .rbc-show-more:hover {
+  background: #FF6A00;
+  color: #fff;
+  text-decoration: none;
+}
+
+/* The hover popup rbc renders for an over-full day. Its stock styling is a
+   fixed white box with NO max-height, so ten events ran off-screen with no way
+   to scroll, and the hard-coded white was unreadable on the dark shell. */
+.rbc-overlay {
+  max-height: 320px;
+  overflow-y: auto;
+  border-radius: 12px;
+  border-color: #e0e5f3;
+  padding: 8px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
+}
+.rbc-overlay > * + * { margin-top: 3px; }
+.rbc-overlay-header {
+  margin: -8px -8px 6px;
+  padding: 8px 10px;
+  border-bottom-color: #e0e5f3;
+  font-size: 12px;
+  font-weight: 700;
+  color: #2a2a2a;
+}
+.admin-dark .rbc-overlay,
+.teacher-dark .rbc-overlay {
+  background-color: #1c1c26;
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.admin-dark .rbc-overlay-header,
+.teacher-dark .rbc-overlay-header {
+  border-bottom-color: rgba(255, 255, 255, 0.12);
+  color: #e6e8ee;
+}
+
+/* Empty-cell affordance: the grid is click-to-schedule (onSelectSlot), which
+   was previously undiscoverable — nothing indicated the cells were interactive. */
+.admin-cal .rbc-day-bg { transition: background-color .12s ease; }
+.admin-cal .rbc-month-view .rbc-day-bg:hover { background-color: rgba(255, 106, 0, 0.05); cursor: pointer; }
+.admin-cal .rbc-current-time-indicator { background-color: #FF6A00; height: 2px; }
+/* (the .rbc-show-more pill is styled above — a later duplicate here used to
+   override it back to plain text, so it was removed) */
+.admin-cal .rbc-time-header-content,
+.admin-cal .rbc-timeslot-group { border-color: #f1f3f9; }
+.admin-cal .rbc-agenda-view table.rbc-agenda-table { border-color: #eef0f6; font-size: 13px; }
+.admin-cal .rbc-agenda-view table.rbc-agenda-table thead > tr > th {
+  border-color: #eef0f6; color: #878d97; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+}
+
 /* ---- react-big-calendar dark theme (teacher + admin calendars) ----
    rbc ships a light-only stylesheet; repaint its grid, toolbar, headers,
    today/off-range cells and agenda so the calendar matches the dark shell.
@@ -926,3 +1044,130 @@ button, .btn, [role="button"] { transition: transform .2s ease, box-shadow .2s e
   border-color: rgba(255, 255, 255, 0.1);
   color: #c7ccd6;
 }
+
+/* ---- Admin dark: neutral gray scale used by the calendar ----
+   .admin-dark repaints .bg-white/.text-dark/.text-gray, but NOT Tailwind's
+   raw gray-* scale. The calendar's segmented view switcher uses a solid
+   gray-100 track and the modals use gray-50 hovers, which would stay light-mode
+   grey on the dark shell. Scoped to .admin-dark so light mode is untouched. */
+.admin-dark .bg-gray-100 { background-color: rgba(255, 255, 255, 0.07); }
+.admin-dark .bg-gray-50 { background-color: rgba(255, 255, 255, 0.04); }
+.admin-dark .hover\:bg-gray-50:hover { background-color: rgba(255, 255, 255, 0.06); }
+.admin-dark .hover\:bg-gray-100:hover { background-color: rgba(255, 255, 255, 0.09); }
+.admin-dark .hover\:bg-gray-50\/70:hover { background-color: rgba(255, 255, 255, 0.05); }
+.admin-dark .text-gray-400 { color: #8b93a3; }
+.admin-dark .text-gray-300 { color: #6b7383; }
+/* The month/agenda grid sits on the card surface, not pure white. */
+.admin-dark .admin-cal .rbc-off-range-bg { background-color: rgba(0, 0, 0, 0.22); }
+.admin-dark .admin-cal .rbc-month-view .rbc-day-bg:hover { background-color: rgba(255, 106, 0, 0.10); }
+.admin-dark .admin-cal .rbc-now .rbc-button-link { color: #fff; }
+
+/* ---- Teacher calendar polish (.teacher-cal) ----
+   The teacher calendar previously used rbc's stock stylesheet while the admin
+   one had a bespoke look, so the same product had two visual languages. This
+   repaints the teacher grid to match .admin-cal — hairline borders, quiet
+   uppercase day headers, roomier rows — but drives every colour from the app's
+   CSS variables instead of hard-coded hexes, so the SAME rules serve light and
+   dark and the existing .teacher-dark overrides above stay authoritative.
+   The toolbar is a React component now (see ScheduleCalendar.tsx), so there is
+   deliberately no .rbc-toolbar styling here. */
+.teacher-cal .rbc-month-view,
+.teacher-cal .rbc-time-view {
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  overflow: hidden;
+}
+.teacher-cal .rbc-header {
+  padding: 10px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: hsl(var(--muted-foreground));
+  border-bottom: 1px solid hsl(var(--border));
+}
+.teacher-cal .rbc-header + .rbc-header,
+.teacher-cal .rbc-day-bg + .rbc-day-bg,
+.teacher-cal .rbc-month-row + .rbc-month-row,
+.teacher-cal .rbc-time-content > * + * > *,
+.teacher-cal .rbc-time-header-content,
+.teacher-cal .rbc-timeslot-group {
+  border-color: hsl(var(--border));
+}
+.teacher-cal .rbc-date-cell {
+  padding: 6px 8px 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+}
+.teacher-cal .rbc-off-range-bg { background: hsl(var(--muted) / 0.4); }
+.teacher-cal .rbc-off-range { opacity: 0.45; }
+.teacher-cal .rbc-today { background: hsl(var(--primary) / 0.06); }
+
+/* Today's date number gets a filled brand chip so the current day reads
+   instantly without relying on the faint cell tint alone. */
+.teacher-cal .rbc-now .rbc-button-link {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: hsl(var(--primary));
+  color: #fff;
+  font-weight: 700;
+}
+
+/* Events: lift slightly on hover so they read as clickable. */
+.teacher-cal .rbc-event {
+  transition: transform .12s ease, filter .12s ease;
+}
+.teacher-cal .rbc-event:hover { transform: translateY(-1px); filter: brightness(1.06); }
+.teacher-cal .rbc-event:focus-visible {
+  outline: 2px solid hsl(var(--primary) / 0.55);
+  outline-offset: 1px;
+}
+.teacher-cal .rbc-event.rbc-selected { filter: brightness(0.94); }
+/* "+N more" is the signal that a day is over-full, so make it a real button.
+   Clicking it opens that date's Day view, which lists every session uncapped. */
+.teacher-cal .rbc-show-more {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: hsl(var(--primary) / 0.1);
+  color: hsl(var(--primary));
+  font-size: 11px;
+  font-weight: 700;
+}
+.teacher-cal .rbc-show-more:hover {
+  background: hsl(var(--primary));
+  color: #fff;
+  text-decoration: none;
+}
+
+/* Roomier month rows so multi-session days don't feel cramped — taller rows
+   also fit more events before rbc collapses them into "+N more". */
+.teacher-cal .rbc-month-row { min-height: 124px; }
+
+/* Agenda + time gutter */
+.teacher-cal .rbc-agenda-view table.rbc-agenda-table {
+  border-color: hsl(var(--border));
+  font-size: 13px;
+}
+.teacher-cal .rbc-agenda-view table.rbc-agenda-table thead > tr > th {
+  border-color: hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.teacher-cal .rbc-agenda-view table.rbc-agenda-table tbody > tr:hover > td {
+  background: hsl(var(--muted) / 0.5);
+}
+.teacher-cal .rbc-time-gutter .rbc-timeslot-group,
+.teacher-cal .rbc-label {
+  font-size: 11.5px;
+  color: hsl(var(--muted-foreground));
+}
+.teacher-cal .rbc-current-time-indicator { background: hsl(var(--primary)); height: 2px; }

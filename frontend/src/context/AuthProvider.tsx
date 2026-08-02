@@ -90,8 +90,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     let cancelled = false;
 
+    // An auth-service (student/teacher) session is indicated ONLY by an
+    // accessToken. An admin_token is NOT an auth-service token — treating it as
+    // one made the block below call the student /auth/profile probe first for a
+    // freshly-logged-in admin, resolving them to a leftover student/cookie
+    // session and dropping them on the student site. Admin hydration is handled
+    // by the admin-token branch (with priority) instead.
     const hasAuthToken =
-      typeof window !== "undefined" && (Boolean(localStorage.getItem("accessToken")) || Boolean(localStorage.getItem("admin_token")));
+      typeof window !== "undefined" && Boolean(localStorage.getItem("accessToken"));
     const hasAdminToken = Boolean(getAdminToken());
 
     // Logged-out visitors have no tokens — skip the profile probe entirely.
@@ -103,36 +109,39 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setLoading(true);
     (async () => {
       try {
+        // Admin token takes PRIORITY (mirrors checkAuth). When an admin_token is
+        // present, hydrate the admin via adminMe() FIRST — before the
+        // auth-service probe — so a freshly-logged-in admin resolves to their
+        // admin identity instead of a leftover student/teacher session.
+        if (hasAdminToken) {
+          try {
+            const res = await adminMe();
+            if (cancelled) return;
+            const profile = normalizeAdminProfile(res);
+            setUser(profile);
+            const idForStorage = extractUserId(profile);
+            if (idForStorage) localStorage.setItem("userId", String(idForStorage));
+            // Store the unwrapped user (not the {user: ...} envelope) — that's
+            // the shape AdminLayout's getStoredUser() reads to decide whether to
+            // show the college-admin sidebar.
+            localStorage.setItem("admin_user", JSON.stringify(res?.user ?? res));
+            return;
+          } catch {
+            /* admin token invalid/expired — try the auth-service path below */
+          }
+        }
+
         // Only probe auth-service when we actually hold an auth-service token.
-        // When only an admin token exists, fall straight through to adminMe()
-        // instead of provoking a 401 from /auth/profile.
-        try {
-          if (hasAuthToken) {
+        if (hasAuthToken) {
+          try {
             const res = await getProfile();
             if (cancelled) return;
             setUser(res.data);
             const idForStorage = extractUserId(res.data);
             if (idForStorage) localStorage.setItem("userId", String(idForStorage));
-            return;
+          } catch {
+            /* auth-service token invalid/expired — nothing to hydrate */
           }
-        } catch {
-          /* auth-service token invalid/expired — try the admin path below */
-        }
-
-        if (!getAdminToken()) return;
-        try {
-          const res = await adminMe();
-          if (cancelled) return;
-          const profile = normalizeAdminProfile(res);
-          setUser(profile);
-          const idForStorage = extractUserId(profile);
-          if (idForStorage) localStorage.setItem("userId", String(idForStorage));
-          // Store the unwrapped user (not the {user: ...} envelope) — that's
-          // the shape AdminLayout's getStoredUser() reads to decide whether to
-          // show the college-admin sidebar.
-          localStorage.setItem("admin_user", JSON.stringify(res?.user ?? res));
-        } catch {
-          /* not logged in — fine, render the public site */
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -260,9 +269,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const refreshToken = loginRes.data?.refreshToken;
       if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
 
+      // The login response already carries the authoritative role. Capture it
+      // BEFORE the profile fetch: routing depends on it, and /auth/profile is a
+      // second network call that can fail or return a partial shape. Previously
+      // the role was taken ONLY from the profile response, so any hiccup there
+      // produced a role-less user — which the old routing treated as "student"
+      // and is why teachers were landing on the student dashboard.
+      const loginRole = loginRes.data?.user?.role ?? null;
+
       // After auth-service login, fetch full profile
-      const profileRes = await getProfile();
-      const profile = profileRes.data as User;
+      let profile: User;
+      try {
+        const profileRes = await getProfile();
+        profile = profileRes.data as User;
+      } catch {
+        // Profile probe failed — fall back to the user object from the login
+        // response rather than dropping the session (and its role) entirely.
+        profile = (loginRes.data?.user ?? {}) as User;
+      }
+
+      // Never let a missing/blank profile role silently erase a known-good role
+      // from the login response.
+      if (!profile.role && loginRole) {
+        profile = { ...profile, role: loginRole };
+      }
+
       setUser(profile);
       const idForStorage = extractUserId(profile);
       if (idForStorage) localStorage.setItem("userId", String(idForStorage));

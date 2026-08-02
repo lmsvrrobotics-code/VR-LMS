@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
-import axios from 'axios';
-
-const API_BASE = (import.meta.env.VITE_ADMIN_API_URL as string) || 'http://localhost:5000';
+// The shared admin client attaches the admin_token. A bare axios instance does
+// not, so every /api/admin call from here 401'd and the pickers rendered empty.
+import api from '../../api/client';
 
 // New batch creation form:
 // - Select Course (from active courses)
@@ -31,14 +31,21 @@ export default function CreateBatchForm({ onBatchCreated }) {
             try {
                 setLoading(true);
                 const [coursesRes, teachersRes, studentsRes] = await Promise.all([
-                    axios.get(`${API_BASE}/api/admin/courses`, { params: { per_page: 100 } }),
-                    axios.get(`${API_BASE}/api/admin/teachers`, { params: { per_page: 100 } }),
-                    axios.get(`${API_BASE}/api/admin/students`, { params: { per_page: 200 } }),
+                    api.get('/courses', { params: { per_page: 100 } }),
+                    api.get('/teachers', { params: { per_page: 100 } }),
+                    // per_page high enough to list everyone Manage Students shows;
+                    // the picker has its own search box rather than server paging.
+                    api.get('/students', { params: { per_page: 500 } }),
                 ]);
 
+                // Each endpoint has its OWN response shape — this is not
+                // uniform, and assuming it was is what emptied the pickers:
+                //   /courses  -> { courses: { data: [...] } }   (paginated envelope)
+                //   /teachers -> { teachers: [...] }            (plain array)
+                //   /students -> { students: [...], total }     (plain array)
                 setCourses(coursesRes.data?.courses?.data || []);
-                setTeachers(teachersRes.data?.teachers?.data || []);
-                setStudents(studentsRes.data?.students?.data || []);
+                setTeachers(teachersRes.data?.teachers || []);
+                setStudents(studentsRes.data?.students || []);
             } catch (e) {
                 toast.error('Failed to load data');
                 console.error(e);
@@ -97,7 +104,7 @@ export default function CreateBatchForm({ onBatchCreated }) {
 
         setSubmitting(true);
         try {
-            const response = await axios.post(`${API_BASE}/api/admin/batches`, {
+            const response = await api.post('/batches', {
                 courseId: Number(courseId),
                 teacherId: String(teacherId),
                 studentIds: selectedStudentIds,
@@ -235,7 +242,12 @@ export default function CreateBatchForm({ onBatchCreated }) {
                                         className="w-4 h-4 cursor-pointer"
                                     />
                                     <div>
-                                        <div className="font-medium text-sm text-dark">{s.name}</div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-medium text-sm text-dark">{s.name}</span>
+                                            {s.unique_id && (
+                                                <span className="font-mono text-[11px] text-gray-500">{s.unique_id}</span>
+                                            )}
+                                        </div>
                                         <div className="text-xs text-gray-500">{s.email}</div>
                                     </div>
                                 </label>

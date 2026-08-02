@@ -34,7 +34,7 @@ function getClient() {
 }
 
 // Build the public URL for a stored key. R2_PUBLIC_URL is your worker /
-// custom domain that fronts the bucket — e.g. https://assets.yagnatech.org
+// custom domain that fronts the bucket — e.g. https://assets.vrroboticsacademy.com
 // or https://pub-xxxx.r2.dev. The key is appended verbatim.
 function publicUrlFor(key) {
     const base = (env.r2.publicUrl || '').replace(/\/$/, '');

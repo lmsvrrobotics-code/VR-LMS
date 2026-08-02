@@ -6,6 +6,7 @@ import ConfirmDialog from '../../components/ConfirmDialog';
 import { listAdmins, deleteAdmin, grantAdminAccess, revokeAdminAccess } from '../../api/admin';
 import { getStoredUser } from '@/admin/api/auth';
 import { BsThreeDotsVertical } from 'react-icons/bs';
+import { Plus, Search, ShieldCheck } from 'lucide-react';
 
 // Only a root admin may grant/revoke root access. Read from the cached admin
 // profile; the backend enforces this too, so a stale cache can't bypass it.
@@ -116,64 +117,56 @@ export default function AdminIndex() {
     const isEmpty = rows.length === 0;
 
     return (
-        <div>
-            <div className="ol-card rounded-ol-8 mb-3">
-                <div className="ol-card-body py-12px px-20px my-3">
-                    <div className="flex items-center justify-between flex-wrap gap-3">
-                        <h4 className="text-[16px] font-semibold text-dark m-0 flex items-center gap-2">
-                            <i className="fi-rr-settings-sliders" />
-                            Admin List
-                        </h4>
-                        <Link
-                            to="/admin/admins/create"
-                            className="ol-btn-outline-secondary flex items-center gap-10px"
-                        >
-                            <span className="fi-rr-plus" />
-                            <span>Add new Admin</span>
-                        </Link>
+        <div className="min-w-0 space-y-4">
+            {/* Toolbar — shared professional layout across admin list pages. */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-lightgreen text-skin">
+                        <ShieldCheck className="h-[18px] w-[18px]" />
+                    </span>
+                    <div>
+                        <h1 className="m-0 text-[18px] font-bold text-dark">Admins</h1>
+                        <p className="m-0 mt-0.5 text-[12px] text-gray">Platform administrators and their access level.</p>
                     </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                    <ExportDropdown onPdf={handlePrint} onPrint={handlePrint} />
+                    <form onSubmit={onSearch} className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                        <input
+                            className="ol-form-control w-[220px] !pl-9"
+                            name="search"
+                            type="text"
+                            placeholder="Search user"
+                            defaultValue={query.search || ''}
+                        />
+                    </form>
+                    <Link
+                        to="/admin/admins/create"
+                        className="inline-flex items-center gap-1.5 rounded-ol-8 bg-skin px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-skin-dark"
+                    >
+                        <Plus className="h-4 w-4" /> Add Admin
+                    </Link>
                 </div>
             </div>
 
-            <div className="ol-card p-3">
-                <div className="ol-card-body">
-                    <div className="grid grid-cols-12 gap-3 mb-3 mt-3 items-center">
-                        <div className="col-span-12 md:col-span-6">
-                            <ExportDropdown onPdf={handlePrint} onPrint={handlePrint} />
-                        </div>
-                        <div className="col-span-12 md:col-span-6">
-                            <form onSubmit={onSearch} className="grid grid-cols-12 gap-3">
-                                <div className="col-span-12 md:col-span-9">
-                                    <input
-                                        className="ol-form-control w-full"
-                                        name="search"
-                                        type="text"
-                                        placeholder="Search user"
-                                        defaultValue={query.search || ''}
-                                    />
-                                </div>
-                                <div className="col-span-12 md:col-span-3">
-                                    <button type="submit" className="ol-btn-primary w-full">Search</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-
-                    {isEmpty ? (
-                        <div className="py-12 text-center border border-dashed border-border rounded-ol-8">
-                            <p className="text-[16px] font-semibold text-dark mb-1">No admins found</p>
-                            <p className="text-[13px] text-gray">Try adjusting your search or add a new admin.</p>
-                        </div>
-                    ) : (
-                        <>
-                            <div className="flex justify-between items-center flex-wrap gap-3 mb-3">
-                                <p className="text-gray text-[14px] m-0">
-                                    Showing {rows.length} of {data.total} data
-                                </p>
-                                {loading && <span className="text-[12px] text-gray">Refreshing…</span>}
-                            </div>
-                            <div className="overflow-x-auto">
-                                <table className="e-table">
+            {isEmpty ? (
+                <div className="rounded-ol-8 border border-dashed border-ebordermuted bg-white py-16 text-center">
+                    <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-lightgreen text-skin">
+                        <ShieldCheck className="h-6 w-6" />
+                    </span>
+                    <p className="mb-1 text-[15px] font-semibold text-dark">No admins found</p>
+                    <p className="text-[13px] text-gray">Try adjusting your search or add a new admin.</p>
+                </div>
+            ) : (
+                <>
+                    <p className="text-gray text-[13px] m-0">
+                        Showing {rows.length} of {data.total} data
+                        {loading && <span className="ml-2 text-[12px]">Refreshing…</span>}
+                    </p>
+                    <div className="overflow-hidden rounded-ol-12 border border-ebordermuted bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+                        <div className="overflow-x-auto">
+                            <table className="e-table">
                                     <thead>
                                         <tr>
                                             <th scope="col">#</th>
@@ -222,11 +215,10 @@ export default function AdminIndex() {
                                         ))}
                                     </tbody>
                                 </table>
-                            </div>
-                        </>
-                    )}
-                </div>
-            </div>
+                        </div>
+                    </div>
+                </>
+            )}
 
             {confirm && (
                 <ConfirmDialog

@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthProvider";
 import { CollegeProvider } from "./context/CollegeProvider";
 import ProtectedRoute from "./components/ProtectedRoute";
+import DashboardRedirect from "./components/DashboardRedirect";
 import Layout from "./components/layout/Layout";
 import Home from "./pages/Home";
 import About from "./pages/About";
@@ -16,6 +17,7 @@ import Books from "./pages/Books";
 import Gallery from "./pages/Gallery";
 import Locations from "./pages/Locations";
 import TeacherDashboard from "./pages/TeacherDashboard";
+import StudentDashboardShell from "./pages/StudentDashboardShell";
 import Auth from "./pages/Auth";
 import Contact from "./pages/Contact";
 import NotFound from "./pages/NotFound";
@@ -33,7 +35,7 @@ import CourseDetails from "./pages/CourseDetails";
 import CoursePlayer from "./pages/CoursePlayer";
 import CourseDetailsBatch from "./pages/student/CourseDetails";
 import CoursePlayerTemplate from "./pages/student/CoursePlayerTemplate";
-import StudentDashboardBatch from "./pages/student/StudentDashboard";
+import EnrolledCourses from "./pages/student/EnrolledCourses";
 import ZoomLiveClassRoom from "./zoom-live-class/player/ZoomLiveClassRoom";
 import ProgramDetailPage from "./pages/ProgramDetailPage";
 import PreAssessmentPage from "./pages/PreAssessmentPage";
@@ -65,9 +67,7 @@ import AdminSlotsIndex from "./admin/pages/slots/Index";
 import AdminDemosIndex from "./admin/pages/demos/Index";
 import AdminClassesIndex from "./admin/pages/classes/Index";
 import AdminCalendarIndex from "./admin/pages/calendar/Index";
-import AdminFeedbackIndex from "./admin/pages/feedback/Index";
 import AdminFeedbackFormsIndex from "./admin/pages/feedback-forms/Index";
-import AdminMessagesIndex from "./admin/pages/messages/Index";
 import AdminSettingsIndex from "./admin/pages/settings/Index";
 import AdminBatchesIndex from "./admin/pages/batch/Index";
 import AdminLeadsIndex from "./admin/pages/leads/Index";
@@ -125,7 +125,18 @@ const App = () => (
             <Route path="/books" element={<Layout><Books /></Layout>} />
             <Route path="/gallery" element={<Layout><Gallery /></Layout>} />
             <Route path="/locations" element={<Layout><Locations /></Layout>} />
-            <Route path="/teacher" element={<TeacherDashboard />} />
+            {/* Teacher dashboard is NOT public. It previously sat in the public
+                block with no guard at all, so any logged-out visitor could open
+                the teacher shell. Admins are allowed through because root/college
+                admins legitimately preview the mentor view. */}
+            <Route
+              path="/teacher"
+              element={
+                <ProtectedRoute requiredRole={["teacher", "admin"]}>
+                  <TeacherDashboard />
+                </ProtectedRoute>
+              }
+            />
             {/* Auth keeps the public navbar (Layout) so visitors can get back
                 to Home/Courses from the login screen. */}
             <Route path="/auth" element={<Layout><Auth /></Layout>} />
@@ -143,11 +154,13 @@ const App = () => (
             <Route path="/signup" element={<Navigate to="/auth?mode=signup" replace />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
 
-            {/* Protected Routes - redirect /dashboard to /courses/browse */}
-            <Route
-              path="/dashboard"
-              element={<Navigate to="/courses/browse" replace />}
-            />
+            {/* /dashboard is an ALIAS used from ~7 places (post-signup,
+                pre/post assessment, program pages). It used to hard-redirect to
+                /courses/browse — the PUBLIC catalog — so a student who signed up
+                or finished an assessment was dropped on the marketing site
+                instead of their dashboard. It now resolves against the logged-in
+                user's role, so every caller lands in the right place. */}
+            <Route path="/dashboard" element={<DashboardRedirect />} />
             <Route
               path="/admindashboard"
               element={
@@ -159,12 +172,27 @@ const App = () => (
               }
             />
 
-            {/* Student Batch System Routes */}
+            {/* Student dashboard — the student counterpart to /teacher. Sidebar
+                shell (Dashboard / My Courses / My Assignments / Feedback)
+                rendered INSIDE Layout, so students keep the site navbar (and
+                its profile menu) above the dashboard. Guarded: teachers/admins
+                have their own shells and are bounced to them. */}
             <Route
               path="/student/dashboard"
               element={
+                <ProtectedRoute requiredRole="student">
+                  <Layout><StudentDashboardShell /></Layout>
+                </ProtectedRoute>
+              }
+            />
+            {/* Enrolled Courses — reached from the top navbar tab. Shows the
+                logged-in student the courses they're enrolled in (same source
+                as the admin Manage Students "Enrolled Courses" column). */}
+            <Route
+              path="/enrolled-courses"
+              element={
                 <ProtectedRoute>
-                  <Layout><StudentDashboardBatch /></Layout>
+                  <Layout><EnrolledCourses /></Layout>
                 </ProtectedRoute>
               }
             />
@@ -210,9 +238,7 @@ const App = () => (
               <Route path="kits" element={<AdminKitsIndex />} />
               <Route path="books" element={<AdminBooksIndex />} />
               <Route path="calendar" element={<AdminCalendarIndex />} />
-              <Route path="feedback" element={<AdminFeedbackIndex />} />
               <Route path="feedback-forms" element={<AdminFeedbackFormsIndex />} />
-              <Route path="messages" element={<AdminMessagesIndex />} />
               <Route path="settings" element={<AdminSettingsIndex />} />
               <Route path="slots" element={<AdminSlotsIndex />} />
               <Route path="demos" element={<AdminDemosIndex />} />
@@ -327,7 +353,7 @@ const App = () => (
             />
             <Route
               path="/courses/programs/course-details"
-              element={<CourseDetails />}
+              element={<Layout><CourseDetails /></Layout>}
             />
             <Route
               path="/courses/programs/course-details/play/:slug"

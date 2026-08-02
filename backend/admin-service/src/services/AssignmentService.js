@@ -65,15 +65,24 @@ class AssignmentService {
 
         const batchIds = memberRecords.map(m => m.batch_id);
 
-        // 2. Find assignments in those batches WITH student's submissions
-        const studentId = memberRecords[0]?.student_id; // Get student_id from any active batch
+        // 2. Find assignments in those batches WITH this student's submissions.
+        // Match on EITHER key: student_id is a legacy column that is NULL on
+        // rosters written by the current batch code, so filtering on it alone
+        // hid the student's own submission (and its grade) from them.
+        const studentId = memberRecords.find(m => m.student_id)?.student_id || null;
+        const keys = [String(userId), ...(studentId ? [String(studentId)] : [])];
 
         return Assignment.findAll({
             where: { batch_id: { [Op.in]: batchIds } },
             include: [{
                 model: AssignmentSubmission,
                 as: 'submissions',
-                where: { student_id: studentId },
+                where: {
+                    [Op.or]: [
+                        { user_id: { [Op.in]: keys } },
+                        { student_id: { [Op.in]: keys } },
+                    ],
+                },
                 required: false,
             }],
             order: [['due_date', 'DESC']],
@@ -97,35 +106,45 @@ class AssignmentService {
             throw new Error('You are not enrolled in this batch');
         }
 
-        // Check if already graded (can't resubmit)
+        // Check if already graded (can't resubmit). Match either key — see the
+        // legacy student_id note in getStudentAssignments.
         const graded = await AssignmentSubmission.findOne({
-            where: { assignment_id: assignmentId, student_id: studentId, status: 'graded' }
+            where: {
+                assignment_id: assignmentId,
+                status: 'graded',
+                [Op.or]: [{ student_id: studentId }, { user_id: userId }],
+            }
         });
 
         if (graded) {
             throw new Error('Cannot resubmit a graded assignment');
         }
 
-        // Update or create submission
-        const [submission, created] = await AssignmentSubmission.findOrCreate({
-            where: { assignment_id: assignmentId, student_id: studentId },
-            defaults: {
+        // Update or create the submission. The lookup matches EITHER key so a
+        // re-submission updates the existing row instead of inserting a second
+        // one the teacher would then see twice.
+        let submission = await AssignmentSubmission.findOne({
+            where: {
+                assignment_id: assignmentId,
+                [Op.or]: [{ student_id: studentId }, { user_id: userId }],
+            }
+        });
+
+        if (submission) {
+            await submission.update({
+                submission_text: data.submission_text,
+                file_url: data.file_url,
+                status: 'submitted',
+                submitted_date: new Date(),
+            });
+        } else {
+            submission = await AssignmentSubmission.create({
                 assignment_id: assignmentId,
                 student_id: studentId,
                 user_id: userId,
                 submission_text: data.submission_text,
                 file_url: data.file_url,
                 status: 'submitted',
-            }
-        });
-
-        if (!created) {
-            // Update existing
-            await submission.update({
-                submission_text: data.submission_text,
-                file_url: data.file_url,
-                status: 'submitted',
-                submitted_date: new Date(),
             });
         }
 

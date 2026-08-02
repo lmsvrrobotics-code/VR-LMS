@@ -1,10 +1,12 @@
-const { Op, fn, col } = require('sequelize');
+const { Op, fn, col, QueryTypes } = require('sequelize');
 const { Lead } = require('../models');
+const authDb = require('../config/authDatabase');
 const { HttpError } = require('../middlewares/error');
 const studentService = require('./StudentService');
 const env = require('../config/env');
 const { enqueue } = require('../jobs/emailQueue');
 const { studentWelcome } = require('../helpers/emailTemplates');
+const publicId = require('../lib/uniqueId');
 
 // Basic email shape check — capture is public so validate before storing.
 const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v || '').trim());
@@ -40,9 +42,33 @@ const capture = async (body = {}) => {
 };
 
 // ADMIN: list with optional status filter + search.
+//
+// Each lead is tagged with has_account: true when a student login ALREADY exists
+// for that email (a public self-signup — they registered themselves and are
+// merely hidden from Manage Students until converted). The Convert UI uses this
+// to skip the "set a password" step: those accounts already have a password the
+// student chose, and convert() only links them. A lead with has_account=false is
+// a pure enquiry with no login, so converting it must create one and DOES need a
+// password.
+//
+// Resolved in ONE batched query over all the listed emails rather than a lookup
+// per lead — a per-row check here would be a classic N+1 on a page the admin
+// hits constantly.
+// Once converted, the person IS a student and shows up in Manage Students —
+// keeping them in the working Leads list is duplicate noise. So the default
+// ("all") view means the ACTIVE pipeline: everything still needing follow-up,
+// converted excluded. Asking for status=converted explicitly still returns them.
+//
+// The rows are NOT deleted: the lead is the audit trail of where the student came
+// from (source, signup date, notes, converted_user_id). Hiding is reversible;
+// deleting would destroy that history and orphan the student link.
 const list = async ({ status, search } = {}) => {
     const where = {};
-    if (status && status !== 'all') where.status = status;
+    if (status && status !== 'all') {
+        where.status = status;
+    } else {
+        where.status = { [Op.ne]: 'converted' };
+    }
     if (search) {
         const like = `%${String(search).trim()}%`;
         where[Op.or] = [
@@ -52,7 +78,32 @@ const list = async ({ status, search } = {}) => {
         ];
     }
     const leads = await Lead.findAll({ where, order: [['created_at', 'DESC']], raw: true });
-    return { leads };
+
+    const emails = [...new Set(leads.map((l) => String(l.email || '').toLowerCase()).filter(Boolean))];
+    let withAccount = new Set();
+    if (emails.length) {
+        try {
+            const rows = await authDb.query(
+                `SELECT lower(u.email) AS email
+                   FROM users u
+                   JOIN roles r ON r."roleId" = u."roleId"
+                  WHERE r.role = 'student' AND lower(u.email) IN (:emails)`,
+                { replacements: { emails }, type: QueryTypes.SELECT },
+            );
+            withAccount = new Set(rows.map((r) => r.email));
+        } catch (e) {
+            // Non-fatal: fall back to "no account", which just means the admin is
+            // asked for a password. Better a redundant prompt than a broken page.
+            console.warn('[leads] account lookup failed:', e.message);
+        }
+    }
+
+    return {
+        leads: leads.map((l) => ({
+            ...l,
+            has_account: withAccount.has(String(l.email || '').toLowerCase()),
+        })),
+    };
 };
 
 // ADMIN: pipeline counts for the dashboard alert badge.
@@ -95,36 +146,81 @@ const convert = async (id, body = {}) => {
     if (!lead) throw new HttpError(404, 'Lead not found');
     if (lead.status === 'converted') throw new HttpError(409, 'Lead is already converted');
 
-    const password = String(body.password || '');
-    if (password.length < 8) throw new HttpError(422, 'Password must be at least 8 characters');
+    // TWO kinds of lead reach this point:
+    //
+    //  a) Self-signup (POST /api/public/signup) — the person ALREADY has a
+    //     student login; they were just hidden from Manage Students until now
+    //     (see StudentService.HIDE_UNCONVERTED). Converting must LINK the
+    //     existing account, not create one: studentService.create() rejects a
+    //     duplicate email with "Email already in use", which would make their
+    //     lead permanently unconvertible — and, because the filter keys off the
+    //     open lead, permanently invisible.
+    //
+    //  b) Pure lead (contact/interest form, admin-entered) — no account exists,
+    //     so we create it here as before. Only this path needs a password.
+    const existing = await studentService.findStudentByEmail(lead.email);
 
-    const result = await studentService.create({
-        name: lead.name,
-        email: lead.email,
-        password,
-        phone: lead.phone || undefined,
-        collegeId: body.collegeId || lead.clg_id || undefined,
-    });
+    let student;
+    let password = null;
 
-    const student = result.student || {};
+    if (existing) {
+        // Account already exists (self-signup) — it was created WITHOUT a public
+        // id. Conversion is the moment the person becomes a student of record,
+        // so issue the VRS id now. Idempotent: a lead that somehow reaches here
+        // twice must not burn a second serial or overwrite the first id.
+        student = existing;
+        if (!existing.unique_id) {
+            const issued = await publicId.generate('student');
+            // The `AND unique_id IS NULL` guard makes this a no-op if a
+            // concurrent convert already issued one, so the first id wins.
+            await authDb.query(
+                'UPDATE users SET unique_id = :uid, "updatedAt" = NOW() WHERE "userId" = :userId AND unique_id IS NULL',
+                { replacements: { uid: issued, userId: String(existing.id) }, type: QueryTypes.UPDATE },
+            );
+            student = { ...existing, unique_id: issued };
+        }
+    } else {
+        password = String(body.password || '');
+        if (password.length < 8) throw new HttpError(422, 'Password must be at least 8 characters');
+
+        const result = await studentService.create({
+            name: lead.name,
+            email: lead.email,
+            password,
+            phone: lead.phone || undefined,
+            collegeId: body.collegeId || lead.clg_id || undefined,
+        });
+        student = result.student || {};
+    }
+
     await lead.update({ status: 'converted', converted_user_id: String(student.id || '') || null });
 
     // Smooth onboarding: email the student their login details so they can sign
     // in immediately. Best-effort — a mail failure must NOT fail the conversion
     // the admin just saw succeed (the worker handles SMTP retries).
-    try {
-        const { subject, html } = studentWelcome({
-            studentName: lead.name,
-            email: lead.email,
-            password,
-            loginUrl: env.mail?.lmsLoginUrl,
-        });
-        await enqueue({ to: lead.email, subject, html });
-    } catch (e) {
-        console.warn('[leads] welcome email enqueue failed:', e.message);
+    // Only for newly-created accounts: a self-signup already chose their own
+    // password, and we neither know it nor should overwrite it.
+    if (password) {
+        try {
+            const { subject, html } = studentWelcome({
+                studentName: lead.name,
+                email: lead.email,
+                password,
+                loginUrl: env.mail?.lmsLoginUrl,
+            });
+            await enqueue({ to: lead.email, subject, html });
+        } catch (e) {
+            console.warn('[leads] welcome email enqueue failed:', e.message);
+        }
     }
 
-    return { message: 'Lead converted — welcome email sent with login details', student, lead };
+    return {
+        message: password
+            ? 'Lead converted — welcome email sent with login details'
+            : 'Lead converted — existing account linked and added to Manage Students',
+        student,
+        lead,
+    };
 };
 
 const remove = async (id) => {

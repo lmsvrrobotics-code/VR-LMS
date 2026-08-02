@@ -23,6 +23,7 @@ const Program = require('./Program')(sequelize);
 const Batch = require('./Batch')(sequelize);
 const BatchCourse = require('./BatchCourse')(sequelize);
 const BatchMember = require('./BatchMember')(sequelize);
+const BatchTeacher = require('./BatchTeacher')(sequelize);
 const BatchClass = require('./BatchClass')(sequelize);
 const BatchLessonRelease = require('./BatchLessonRelease')(sequelize);
 const EmailJob = require('./EmailJob')(sequelize);
@@ -65,7 +66,7 @@ const AssignmentSubmission = require('./AssignmentSubmission')(sequelize);
 // Notifications for students and teachers
 const Notification = require('./Notification')(sequelize);
 
-const models = { Category, Course, SeoField, User, Lesson, Section, Question, QuizSubmission, Setting, LiveClass, Coupon, Certificate, PreAssessmentResult, UserProgress, LessonCompletion, LessonWatchProgress, Language, Forum, ForumReport, Program, Batch, BatchCourse, BatchMember, BatchClass, BatchLessonRelease, EmailJob, Gallery, Book, Kit, BookOrder, KitOrder, Slot, SlotEnrollment, Demo, ClassSession, Project, Testimonial, Resource, ResourceCategory, TeacherFreeSchedule, StudentRecord, StudentLearning, Lead, Payment, AppSetting, Location, TeacherFeedback, DemoVideo, FeedbackForm, FeedbackResponse, ContactMessage, Assignment, AssignmentSubmission, Notification };
+const models = { Category, Course, SeoField, User, Lesson, Section, Question, QuizSubmission, Setting, LiveClass, Coupon, Certificate, PreAssessmentResult, UserProgress, LessonCompletion, LessonWatchProgress, Language, Forum, ForumReport, Program, Batch, BatchCourse, BatchMember, BatchTeacher, BatchClass, BatchLessonRelease, EmailJob, Gallery, Book, Kit, BookOrder, KitOrder, Slot, SlotEnrollment, Demo, ClassSession, Project, Testimonial, Resource, ResourceCategory, TeacherFreeSchedule, StudentRecord, StudentLearning, Lead, Payment, AppSetting, Location, TeacherFeedback, DemoVideo, FeedbackForm, FeedbackResponse, ContactMessage, Assignment, AssignmentSubmission, Notification };
 Object.values(models).forEach((m) => m.associate && m.associate(models));
 
 module.exports = { sequelize, ...models };

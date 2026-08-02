@@ -9,6 +9,8 @@ const { attachErrorHandler } = require('./observability');
 const { sequelize } = require('./models');
 const { adminOnly, auth, adminOrTeacher, optionalAuth } = require('./middlewares/auth');
 const { errorHandler } = require('./middlewares/error');
+const { requestIdMiddleware, userContextMiddleware } = require('./lib/logger');
+const securityHeaders = require('./middlewares/security-headers');
 
 const authRoutes = require('./routes/auth.routes');
 const adminRoutes = require('./routes/admin.routes');
@@ -45,6 +47,7 @@ const leadRoutes = require('./routes/lead.routes');
 const preAssessmentRoutes = require('./routes/preassessment.routes');
 const languageRoutes = require('./routes/language.routes');
 const assignmentRoutes = require('./routes/assignment.routes');
+const teacherAssignmentRoutes = require('./routes/teacherAssignment.routes');
 const notificationRoutes = require('./routes/notification.routes');
 const profileRoutes = require('./routes/profile.routes');
 const studentDataRoutes = require('./routes/student-routes');
@@ -53,6 +56,9 @@ const app = express();
 
 // Behind Railway/any single proxy → trust 1 hop so rate-limit sees the real IP.
 app.set('trust proxy', 1);
+
+// Security headers (OWASP: X-Frame-Options, CSP, HSTS, etc)
+app.use(securityHeaders);
 
 // CORS allowlist. This is the public service exposing admin + payment APIs and
 // it accepts cookie auth (credentials:true), so `cors()` (reflect-any-origin)
@@ -143,6 +149,22 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// Request correlation IDs and logging middleware (MUST run after body parsing)
+app.use(requestIdMiddleware);
+app.use(userContextMiddleware);
+
+// Liveness health check.
+app.get(['/api/health', '/health'], (_req, res) => res.json({ ok: true, service: 'admin-service' }));
+
+// NOTE: CSRF/session middleware intentionally disabled. This service is a
+// stateless JWT/Bearer API consumed by a separate SPA — auth rides in the
+// Authorization header, not cookies, so cookie-based CSRF protection is
+// unnecessary. The previous global csurf (cookie mode, no cookie-parser) threw
+// "misconfigured csrf" and 500'd every POST/PUT/PATCH/DELETE, including login.
+// If cookie-based auth is ever introduced, re-add sessionMiddleware +
+// csrfProtection (from ./middlewares/csrf) here, install cookie-parser, and
+// have the SPA fetch/send a CSRF token.
+
 // Asset serving moved off-box:
 //   - Images / PDFs / docs → Cloudflare R2 (served via R2_PUBLIC_URL)
 //   - Videos               → Bunny Stream CDN (BUNNY_STREAM_CDN_HOSTNAME)
@@ -164,8 +186,6 @@ app.get('/uploads/*', (req, res) => {
     if (!target) return res.status(404).end();
     return res.redirect(302, target);
 });
-
-app.get(['/api/health', '/health'], (_req, res) => res.json({ ok: true, service: 'admin-service' }));
 
 // Deep health for uptime monitors (UptimeRobot / Railway healthcheck / Grafana):
 // pings Postgres and reports Redis state so degradation is visible BEFORE
@@ -360,6 +380,43 @@ app.get('/api/public/resources/by-teacher/:teacherId', ...requireTeacherSelfOrAd
     try { res.set('Cache-Control', 'no-store'); res.json(await resourceSvc.listForTeacher(req.params.teacherId)); } catch (e) { next(e); }
 });
 
+// Teacher "My Courses" — every course the teacher reaches through batch
+// assignment, each with its FULL curriculum (sections + lessons). Replaces the
+// placeholder the tab showed after the old teaching-assignment feature was
+// removed. no-store: an admin adding the teacher to a batch must show on the
+// teacher's next load, not after a cache TTL.
+const teacherCourseSvc = require('./services/TeacherCourseService');
+app.get('/api/public/teacher-courses/by-teacher/:teacherId', ...requireTeacherSelfOrAdmin, async (req, res, next) => {
+    try { res.set('Cache-Control', 'no-store'); res.json(await teacherCourseSvc.listForTeacher(req.params.teacherId)); } catch (e) { next(e); }
+});
+
+// Teacher "Students" — every student the teacher reaches through BATCH
+// assignment. Replaces the removed teaching-assignment endpoint of the same
+// purpose (see the REMOVED note further down): the dashboard kept calling the
+// old path, which 404'd silently, so batch students never showed in the tab.
+// no-store: an admin adding a student to the batch must appear on the teacher's
+// next load, not after a cache TTL.
+const teacherStudentSvc = require('./services/TeacherStudentService');
+app.get('/api/public/teacher-students/by-teacher/:teacherId', ...requireTeacherSelfOrAdmin, async (req, res, next) => {
+    try { res.set('Cache-Control', 'no-store'); res.json(await teacherStudentSvc.listForTeacher(req.params.teacherId)); } catch (e) { next(e); }
+});
+
+// Teacher "Course progress" (per student) — how far ONE student is through each
+// course this teacher reaches them on, counted in RELEASED lessons. Replaces the
+// removed teaching-assignment endpoint of the same path (see the REMOVED note
+// further down): the dashboard kept calling the old path, which 404'd silently,
+// so the panel always read "No courses assigned to you for this student yet".
+// Scoped to batches the teacher and student SHARE, so a teacher never sees a
+// student's progress on a course they don't teach them on.
+// no-store: a lesson the student just completed must show on the next load.
+const studentProgressSvc = require('./services/StudentProgressService');
+app.get('/api/public/teaching/student-progress/:teacherId/:studentId', ...requireTeacherSelfOrAdmin, async (req, res, next) => {
+    try {
+        res.set('Cache-Control', 'no-store');
+        res.json(await studentProgressSvc.forTeacherStudent(req.params.teacherId, req.params.studentId));
+    } catch (e) { next(e); }
+});
+
 // Teacher Free Schedule — teacher-authored weekly availability. The teacher
 // manages their own slots from the dashboard, so these are public endpoints
 // keyed by teacherId (same trust model as the other by-teacher routes).
@@ -428,6 +485,15 @@ app.post('/api/public/teacher-feedback', ...attachVerifiedId, async (req, res, n
         res.json(await teacherFeedbackSvc.create({ studentId, courseId, ratings, enjoyed, suggestions }));
     } catch (e) { next(e); }
 });
+// The feedback a teacher has received about their own classes. Guarded by
+// requireTeacherSelfOrAdmin so a teacher can only read their own ratings.
+// Declared BEFORE /mine is irrelevant (distinct paths), but kept adjacent.
+app.get('/api/public/teacher-feedback/by-teacher/:teacherId', ...requireTeacherSelfOrAdmin, async (req, res, next) => {
+    try {
+        res.set('Cache-Control', 'no-store');
+        res.json(await teacherFeedbackSvc.forTeacher(req.params.teacherId, { limit: req.query.limit }));
+    } catch (e) { next(e); }
+});
 app.get('/api/public/teacher-feedback/mine', ...attachVerifiedId, async (req, res, next) => {
     try {
         res.set('Cache-Control', 'no-store');
@@ -467,7 +533,39 @@ app.patch('/api/public/feedback-forms/:id', ...requireTeacherWrite, async (req, 
 app.delete('/api/public/feedback-forms/:id', ...requireTeacherWrite, async (req, res, next) => {
     try { res.json(await feedbackFormSvc.deleteForm(req.params.id, req.query.teacherId)); } catch (e) { next(e); }
 });
+// Batches the teacher can send a form to (id, name, student_count).
+app.get('/api/public/feedback-forms/batches/:teacherId', ...requireTeacherSelfOrAdmin, async (req, res, next) => {
+    try {
+        res.set('Cache-Control', 'no-store');
+        res.json(await feedbackFormSvc.listBatchesForTeacher(req.params.teacherId));
+    } catch (e) { next(e); }
+});
+// Send a form to one or more of the teacher's own batches. Ownership of both
+// the form and the batches is enforced in the service.
+app.post('/api/public/feedback-forms/:id/send', ...requireTeacherWrite, async (req, res, next) => {
+    try {
+        const tid = req.body?.teacherId ?? req.query?.teacherId;
+        res.json(await feedbackFormSvc.sendForm(req.params.id, tid, req.body?.batchIds));
+    } catch (e) { next(e); }
+});
 // Student: pending forms addressed to me + one-time submit.
+// A teacher reading the results of their OWN form. requireTeacherWrite checks
+// the teacherId in the query against the token; the service re-checks ownership
+// of the form itself, so neither alone can be used to read someone else's.
+// Responses are returned WITHOUT student identity.
+app.get('/api/public/feedback-forms/:id/stats', ...requireTeacherWrite, async (req, res, next) => {
+    try {
+        res.set('Cache-Control', 'no-store');
+        res.json(await feedbackFormSvc.teacherStats(req.params.id, req.query.teacherId));
+    } catch (e) { next(e); }
+});
+app.get('/api/public/feedback-forms/:id/responses', ...requireTeacherWrite, async (req, res, next) => {
+    try {
+        res.set('Cache-Control', 'no-store');
+        res.json(await feedbackFormSvc.teacherResponses(req.params.id, req.query.teacherId));
+    } catch (e) { next(e); }
+});
+
 app.get('/api/public/feedback-forms/for-student', ...attachVerifiedId, async (req, res, next) => {
     try { res.set('Cache-Control', 'no-store'); res.json(await feedbackFormSvc.listForStudent(req.verifiedUserId || req.headers['x-user-id'] || null)); } catch (e) { next(e); }
 });
@@ -499,7 +597,9 @@ const signupLeadSvc = require('./services/LeadService');
 app.post('/api/public/signup', writeLimiter, async (req, res, next) => {
     try {
         const { name, email, password, phone } = req.body || {};
-        const result = await signupStudentSvc.create({ name, email, password, phone });
+        // skipUniqueId: a self-signup gets an account but NO public VRS id — it
+        // is issued only when an admin converts the resulting lead.
+        const result = await signupStudentSvc.create({ name, email, password, phone }, undefined, { skipUniqueId: true });
         // Best-effort follow-up lead — never fail the signup if this errors
         // (e.g. an open lead already exists for the same email).
         try { await signupLeadSvc.capture({ name, email, phone, source: 'self-signup' }); } catch (_) { /* non-fatal */ }
@@ -572,6 +672,40 @@ app.get('/api/public/kits', async (_req, res, next) => {
     try {
         res.set('Cache-Control', 'no-store');
         res.json(await cache.wrap('pub:kits', PUB_TTL, () => kitService.listPublic()));
+    } catch (e) { next(e); }
+});
+
+/**
+ * How much public content exists, per marketing section.
+ *
+ * Drives navbar visibility: a tab whose content is empty is hidden from the
+ * site rather than leading visitors to an empty page. The navbar renders on
+ * EVERY page, so this exists to avoid five parallel list fetches per page load
+ * — it reuses the same cached `pub:*` entries the list endpoints populate and
+ * returns only counts.
+ *
+ * Never fails the navbar: a section whose lookup throws is reported as 0 and
+ * simply stays hidden (see the frontend's fail-open note for the inverse case
+ * where the whole request fails).
+ */
+app.get('/api/public/content-counts', async (_req, res, next) => {
+    try {
+        const sizeOf = async (key, ttl, fn) => {
+            try {
+                const rows = await cache.wrap(key, ttl, fn);
+                return Array.isArray(rows) ? rows.length : 0;
+            } catch { return 0; }
+        };
+        const [books, kits, gallery, locations, projects, testimonials] = await Promise.all([
+            sizeOf('pub:books', PUB_TTL, () => bookService.listPublic()),
+            sizeOf('pub:kits', PUB_TTL, () => kitService.listPublic()),
+            sizeOf('pub:gallery', PUB_TTL, () => galleryService.listPublic()),
+            sizeOf('pub:locations', PUB_TTL, () => locationService.listPublic()),
+            sizeOf('pub:projects', PUB_TTL, () => projectService.listPublic()),
+            sizeOf('pub:testimonials', PUB_TTL, () => testimonialService.listPublic()),
+        ]);
+        res.set('Cache-Control', 'no-store');
+        res.json({ books, kits, gallery, locations, projects, testimonials });
     } catch (e) { next(e); }
 });
 
@@ -788,6 +922,37 @@ app.get('/api/public/my-courses', ...attachVerifiedId, async (req, res) => {
     }
 });
 
+// Student "Upcoming classes" — scheduled class sessions for the courses the
+// verified student has access to. requireStudent (not attachVerifiedId) so an
+// anonymous caller gets 401 rather than an empty list, and the student id comes
+// only from the token — a class schedule names teachers and carries join links,
+// so it must never be readable by passing someone else's id.
+app.get('/api/public/my-classes', ...requireStudent, async (req, res) => {
+    try {
+        res.set('Cache-Control', 'no-store');
+        const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 50);
+        return res.json(await classSvc.listForStudent(req.verifiedUserId, { limit }));
+    } catch (e) {
+        console.warn('[public/my-classes] failed:', e.message);
+        return res.status(500).json({ error: 'Could not load your classes' });
+    }
+});
+
+// Student "Materials" — the PDF resources attached to the courses the verified
+// student can reach. requireStudent (not attachVerifiedId) so an anonymous
+// caller gets 401 rather than an empty list, and the student id comes only from
+// the token: these are course-restricted files, so they must never be readable
+// by passing someone else's id.
+app.get('/api/public/my-resources', ...requireStudent, async (req, res) => {
+    try {
+        res.set('Cache-Control', 'no-store');
+        return res.json(await resourceSvc.listForStudent(req.verifiedUserId));
+    } catch (e) {
+        console.warn('[public/my-resources] failed:', e.message);
+        return res.status(500).json({ error: 'Could not load your materials' });
+    }
+});
+
 // Student leaderboard — points (completed lessons + best quiz scores). With
 // ?course_id=X it's per-course; without, it's overall. Includes the verified
 // student's own rank ("me") even if they're outside the top.
@@ -808,10 +973,17 @@ app.get('/api/public/leaderboard', ...attachVerifiedId, async (req, res) => {
 // Replaced by new Batch Management System
 // The following endpoints were removed:
 //   - GET /api/public/teaching/students-by-teacher/:teacherId
+//         → REIMPLEMENTED on the batch system as
+//           GET /api/public/teacher-students/by-teacher/:teacherId (see above).
 //   - GET /api/public/teaching/student-progress/:teacherId/:studentId
+//         → REIMPLEMENTED on the batch system at the SAME path (see above),
+//           because the dashboard still called it.
 //   - GET /api/public/my-lessons
-// These should be reimplemented using the batch system instead
-// See BATCH_MANAGEMENT_SYSTEM.md for migration guide
+// The remaining one should be reimplemented using the batch system: read the
+// batches the student belongs to, then union their batch_lesson_releases.
+// TeacherCourseService / StudentProgressService both do this join already and
+// are the working reference. (The old BATCH_MANAGEMENT_SYSTEM.md migration
+// guide this used to point at no longer exists.)
 
 // Persist one quiz attempt so re-entering the lesson restores the last score
 // and remaining-retry state. user_id comes from the x-user-id header (set by
@@ -942,6 +1114,20 @@ app.use('/api/admin', auth, zoomLiveClassRoutes.admin);
 app.use('/api/public', zoomLiveClassRoutes.public);
 app.use('/api/admin', auth, forumRoutes.admin);
 app.use('/api/public', forumRoutes.public);
+
+// Lesson release/revoke: a TEACHER unlocks lessons for their batch so students
+// can see them in the course player. This MUST sit here, above the adminOnly
+// block below — for exactly the reason described in the comment above. Those
+// mounts are bare `/api/admin` middleware, so `adminOnly` runs for EVERY
+// /api/admin request and 403s the teacher long before Express ever looks for a
+// matching route down there. Authorization is not weakened: BatchService still
+// verifies the caller is an admin or a teacher attached to that batch.
+app.use('/api/admin', adminOrTeacher, batchRoutes.releaseRouter);
+
+// Teacher assignment workflow (create → collect responses → grade). Mounted
+// here for the same reason as the release router above: the adminOnly block
+// further down would 403 a teacher before routing ever reaches it.
+app.use('/api/admin', adminOrTeacher, teacherAssignmentRoutes);
 
 // Teacher-delegation: admin assigns course+roster, teacher drips lessons.
 // Student performance feedback — teacher-authored post-class evaluations
@@ -1156,6 +1342,17 @@ let httpServer = null;
 const start = () => {
     httpServer = app.listen(env.port, () => {
         console.log(`admin-service running on ${env.port}`);
+        // Plain `node src/server.js` never reloads: you edit a file, the process
+        // keeps serving the OLD code, and nothing says so — a fixed bug looks
+        // unfixed. nodemon sets NODE_ENV-independent env vars, so detect it and
+        // warn loudly in dev when edits will NOT be picked up. Use `npm run dev`.
+        const underNodemon = Boolean(process.env.npm_lifecycle_event === 'dev' || process.env.NODEMON);
+        if (process.env.NODE_ENV !== 'production' && !underNodemon) {
+            console.warn(
+                '[dev] auto-reload is OFF (started with plain `node`). Code edits will NOT take ' +
+                'effect until you restart this process. Use `npm run dev` for hot reload.'
+            );
+        }
     });
 
     // Start the email queue worker now that the HTTP server is up. Jobs

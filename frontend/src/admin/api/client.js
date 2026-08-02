@@ -82,7 +82,24 @@ api.interceptors.response.use(
             return Promise.reject(error);
         }
 
-        if (error?.message) {
+        // Surface the server's error BODY, not just the status line. Validation
+        // failures (400) come back as { error, details: [{ field, message }] };
+        // logging only error.message reduced that to a bare "Request failed with
+        // status code 400" and hid which field was actually rejected — a real bug
+        // took far longer to find than it should have. Keep the detail visible
+        // and attach a readable summary so callers can toast something useful.
+        const data = error?.response?.data;
+        if (Array.isArray(data?.details) && data.details.length) {
+            const summary = data.details
+                .map((d) => (d.field ? `${d.field}: ${d.message}` : d.message))
+                .join('; ');
+            error.fieldErrors = data.details;
+            error.uiMessage = summary;
+            console.error(`[admin api] ${status} on ${url} — ${data.error || 'error'}: ${summary}`);
+        } else if (data?.error || data?.message) {
+            error.uiMessage = data.error || data.message;
+            console.error(`[admin api] ${status} on ${url}:`, error.uiMessage);
+        } else if (error?.message) {
             console.error(`[admin api] error on ${url}:`, error.message);
         }
         return Promise.reject(error);

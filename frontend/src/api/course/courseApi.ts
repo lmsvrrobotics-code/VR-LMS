@@ -41,6 +41,65 @@ export const submitTeacherFeedback = (payload: {
 export const getMyTeacherFeedback = () =>
   api.get("/teacher-feedback/mine").then((r) => (r.data?.feedback ?? []) as unknown[]);
 
+/** One of the student's own feedback submissions. */
+export interface MyFeedbackItem {
+  id: number;
+  course_id: string | null;
+  course_title: string | null;
+  teacher_id: string | null;
+  teacher_name: string | null;
+  ratings: Record<string, number>;
+  overall: number;
+  enjoyed: string;
+  suggestions: string;
+  created_at: string;
+}
+
+/** The student's submissions grouped into one entry per teacher they rated. */
+export interface MyFeedbackByTeacher {
+  teacher_id: string | null;
+  teacher_name: string;
+  count: number;
+  avg_overall: number;
+  latest_at: string | null;
+  feedback: MyFeedbackItem[];
+}
+
+/**
+ * The student's own past feedback, grouped by teacher — powers the teacher-wise
+ * tabs on the student dashboard. Server derives the student from the JWT.
+ */
+export const getMyTeacherFeedbackByTeacher = () =>
+  api
+    .get("/teacher-feedback/mine")
+    .then((r) => (r.data?.teachers ?? []) as MyFeedbackByTeacher[]);
+
+// Feedback a teacher has RECEIVED about their classes (their own only —
+// the server enforces self-or-admin). Student names are withheld server-side.
+export interface ReceivedFeedbackItem {
+  id: number;
+  course_id?: string | null;
+  course_title?: string | null;
+  ratings: Record<string, number>;
+  overall: number;
+  enjoyed?: string;
+  suggestions?: string;
+  created_at?: string;
+}
+export interface ReceivedFeedback {
+  stats: {
+    total_feedback: number;
+    overall_avg: number;
+    per_attribute: Record<string, number>;
+    attributes: { key: string; label: string }[];
+  };
+  feedback: ReceivedFeedbackItem[];
+}
+export const getFeedbackForTeacher = (teacherId: string) =>
+  api
+    .get(`/teacher-feedback/by-teacher/${encodeURIComponent(teacherId)}`)
+    .then((r) => r.data as ReceivedFeedback);
+
 // Student leaderboard. Pass a courseId for the per-course board; omit for overall.
 export const getLeaderboard = (courseId?: number) =>
   api

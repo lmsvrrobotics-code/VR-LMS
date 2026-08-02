@@ -12,6 +12,11 @@ module.exports = (sequelize) => {
         due_date: { type: DataTypes.DATE, allowNull: false },
         max_score: { type: DataTypes.INTEGER, defaultValue: 100 },
         file_url: { type: DataTypes.STRING },
+        // Ordered list of { kind: 'file'|'link', url, name, mime }. Replaces
+        // the single file_url, which couldn't hold "PDF + image + link".
+        attachments: { type: DataTypes.JSONB, allowNull: true },
+        // Heading for the attachments block ("Reference material", "Read first"…).
+        attachments_title: { type: DataTypes.STRING(200), allowNull: true },
         status: { type: DataTypes.ENUM('draft', 'published', 'closed'), defaultValue: 'published' },
         created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
         updated_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },

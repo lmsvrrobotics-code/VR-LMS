@@ -70,10 +70,10 @@ export default function CollegeForm({ college, onSubmit, submitLabel = 'Save' })
                     onChange={onChange}
                 />
             </div>
-            <div className="col-span-12 mt-2">
+            <div className="col-span-12 mt-2 flex justify-end border-t border-ebordermuted pt-4">
                 <button
                     type="submit"
-                    className="ol-btn-primary disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="inline-flex items-center gap-1.5 rounded-ol-8 bg-skin px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-skin-dark disabled:opacity-60 disabled:cursor-not-allowed"
                     disabled={submitting}
                 >
                     {submitting ? 'Saving…' : submitLabel}

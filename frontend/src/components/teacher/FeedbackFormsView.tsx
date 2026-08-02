@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  ClipboardList, Plus, Trash2, Star, Type, ListChecks, ToggleLeft, X, Users, MessageSquareText,
+  ClipboardList, Plus, Trash2, Star, Type, ListChecks, ToggleLeft, X, Users, MessageSquareText, Send, BarChart3,
 } from "lucide-react";
+import FormResultsModal from "./FormResultsModal";
 import {
   listTeacherForms, createForm, deleteForm, setFormEnabled,
-  type FeedbackFormSummary, type FormQuestion, type QuestionType,
+  listSendableBatches, sendForm,
+  type FeedbackFormSummary, type FormQuestion, type QuestionType, type SendableBatch,
 } from "@/api/feedbackFormsApi";
 
 // Teacher's "Feedback Forms" tab: build dynamic post-class forms (star ratings,
@@ -45,14 +47,18 @@ export default function FeedbackFormsView({ teacherId }: { teacherId?: string })
 
   useEffect(() => { load(); }, [load]);
 
-  const toggleEnabled = async (f: FeedbackFormSummary) => {
+  // Which form the Send dialog is open for (null = closed).
+  const [sending, setSending] = useState<FeedbackFormSummary | null>(null);
+  // Which form the results view is open for (null = closed).
+  const [viewing, setViewing] = useState<FeedbackFormSummary | null>(null);
+
+  // Stopping delivery is still a single toggle; STARTING it now goes through
+  // the Send dialog so the teacher picks which batch receives the form.
+  const stopSending = async (f: FeedbackFormSummary) => {
     if (!teacherId) return;
-    if (!f.enabled && f.audience_count === 0 &&
-      !window.confirm("You have no assigned students yet, so no one will receive this form. Enable anyway?")) return;
-    if (!f.enabled &&
-      !window.confirm(`Enable this form? It will be sent to your ${f.audience_count} assigned student(s) as a notification.`)) return;
+    if (!window.confirm(`Stop sending "${f.title}"? Students who haven't answered yet will no longer see it.`)) return;
     setBusyId(f.id);
-    try { await setFormEnabled(f.id, teacherId, !f.enabled); load(); }
+    try { await setFormEnabled(f.id, teacherId, false); load(); }
     catch { alert("Could not update the form."); }
     finally { setBusyId(null); }
   };
@@ -120,7 +126,7 @@ export default function FeedbackFormsView({ teacherId }: { teacherId?: string })
                   <span className={`text-[11px] font-semibold rounded-full px-2 py-0.5 ${
                     f.enabled ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"
                   }`}>
-                    {f.enabled ? "Enabled" : "Draft"}
+                    {f.enabled ? "Sent" : "Draft"}
                   </span>
                 </div>
                 {f.description && <p className="text-[13px] text-muted-foreground mt-0.5 line-clamp-2">{f.description}</p>}
@@ -131,17 +137,33 @@ export default function FeedbackFormsView({ teacherId }: { teacherId?: string })
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                {/* Results — what the students actually answered (anonymous). */}
                 <button
-                  onClick={() => toggleEnabled(f)}
-                  disabled={busyId === f.id}
-                  className={`text-[13px] font-semibold rounded-lg px-3 py-2 transition-colors disabled:opacity-50 ${
-                    f.enabled
-                      ? "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                      : "bg-emerald-500 text-white hover:bg-emerald-600"
-                  }`}
+                  onClick={() => setViewing(f)}
+                  className="inline-flex items-center gap-1.5 text-[13px] font-semibold rounded-lg px-3 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
                 >
-                  {f.enabled ? "Disable" : "Enable & send"}
+                  <BarChart3 className="w-3.5 h-3.5" />
+                  View results
                 </button>
+                {/* Send is always available — a teacher can send a form to one
+                    batch now and another later; the audience is additive. */}
+                <button
+                  onClick={() => setSending(f)}
+                  disabled={busyId === f.id}
+                  className="inline-flex items-center gap-1.5 text-[13px] font-semibold rounded-lg px-3 py-2 bg-emerald-500 text-white hover:bg-emerald-600 transition-colors disabled:opacity-50"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  {f.enabled ? "Send again" : "Send to batch"}
+                </button>
+                {f.enabled && (
+                  <button
+                    onClick={() => stopSending(f)}
+                    disabled={busyId === f.id}
+                    className="text-[13px] font-semibold rounded-lg px-3 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors disabled:opacity-50"
+                  >
+                    Stop
+                  </button>
+                )}
                 <button
                   onClick={() => remove(f)}
                   disabled={busyId === f.id}
@@ -155,6 +177,147 @@ export default function FeedbackFormsView({ teacherId }: { teacherId?: string })
           ))}
         </ul>
       )}
+
+      {sending && (
+        <SendDialog
+          form={sending}
+          teacherId={teacherId}
+          onClose={() => setSending(null)}
+          onSent={() => { setSending(null); load(); }}
+        />
+      )}
+
+      {viewing && teacherId && (
+        <FormResultsModal
+          form={viewing}
+          teacherId={teacherId}
+          onClose={() => setViewing(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Batch picker for sending a form. Lists the batches this teacher actually
+ * teaches with their student counts; on send the chosen batches' students are
+ * added to the form's audience and the form is enabled, so it shows up in each
+ * student's Feedback tab.
+ */
+function SendDialog({ form, teacherId, onClose, onSent }: {
+  form: FeedbackFormSummary;
+  teacherId: string;
+  onClose: () => void;
+  onSent: () => void;
+}) {
+  const [batches, setBatches] = useState<SendableBatch[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    listSendableBatches(teacherId)
+      .then((b) => { if (alive) setBatches(b); })
+      .catch(() => { if (alive) setBatches([]); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [teacherId]);
+
+  const toggle = (id: string) =>
+    setPicked((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+
+  // Students in the chosen batches. A student in two selected batches is
+  // counted once, matching what the server actually sends.
+  const reach = batches
+    .filter((b) => picked.has(b.id))
+    .reduce((n, b) => n + b.student_count, 0);
+
+  const submit = async () => {
+    setError(null);
+    if (picked.size === 0) { setError("Choose at least one batch."); return; }
+    setBusy(true);
+    try {
+      const res = await sendForm(form.id, teacherId, [...picked]);
+      alert(`"${form.title}" sent to ${res.sent_to} student${res.sent_to === 1 ? "" : "s"}.`);
+      onSent();
+    } catch (e) {
+      const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      setError(msg || "Could not send the form. Please try again.");
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
+      <div className="w-full max-w-md rounded-2xl bg-white dark:bg-[#16161f] p-6 shadow-xl">
+        <div className="flex items-start justify-between gap-3 mb-1">
+          <h3 className="text-lg font-bold m-0">Send feedback form</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <p className="text-[13px] text-muted-foreground mb-4">
+          Choose which batch receives “{form.title}”. Students see it in their Feedback tab.
+        </p>
+
+        {loading ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">Loading your batches…</p>
+        ) : batches.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            You have no batches yet. Once an admin assigns you one, you can send forms to it.
+          </p>
+        ) : (
+          <ul className="space-y-2 max-h-64 overflow-y-auto">
+            {batches.map((b) => (
+              <li key={b.id}>
+                <label className={`flex items-center gap-3 rounded-xl border p-3 cursor-pointer transition-colors ${
+                  picked.has(b.id) ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10" : "border-gray-200 hover:bg-gray-50 dark:hover:bg-white/5"
+                }`}>
+                  <input
+                    type="checkbox"
+                    checked={picked.has(b.id)}
+                    onChange={() => toggle(b.id)}
+                    className="accent-emerald-500"
+                    disabled={b.student_count === 0}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-medium text-sm truncate">{b.name}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {b.student_count} student{b.student_count === 1 ? "" : "s"}
+                      {b.student_count === 0 ? " — nobody to send to" : ""}
+                    </span>
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+
+        <div className="mt-5 flex items-center justify-between gap-3">
+          <span className="text-xs text-muted-foreground">
+            {picked.size > 0 ? `Sending to ~${reach} student${reach === 1 ? "" : "s"}` : "No batch selected"}
+          </span>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold">
+              Cancel
+            </button>
+            <button
+              onClick={submit}
+              disabled={busy || picked.size === 0}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+            >
+              <Send className="w-4 h-4" /> {busy ? "Sending…" : "Send"}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

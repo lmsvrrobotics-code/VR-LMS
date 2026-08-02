@@ -12,7 +12,10 @@ export const leadStats = () =>
 export const updateLead = (id, body) =>
     api.put(`/leads/${id}`, body).then((r) => r.data);
 
-// body: { password, collegeId? } — creates the student login + marks converted.
+// Marks the lead converted so the student appears in Manage Students.
+// body: { password?, collegeId? } — password is needed ONLY when the lead has no
+// account yet (has_account === false). A self-signup already has a login, so the
+// server just links it and body can be {}.
 export const convertLead = (id, body) =>
     api.post(`/leads/${id}/convert`, body).then((r) => r.data);
 

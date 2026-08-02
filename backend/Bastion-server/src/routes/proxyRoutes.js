@@ -7,9 +7,12 @@ import { isAllowedOrigin } from '../utils/cors.js';
 const router = Router();
 const healthMonitor = new HealthMonitor(serviceMap);
 
-// run checks automatically every 2hrs
-healthMonitor.startMonitoring(7200000);
-// healthMonitor.startMonitoring(30000); // every 30s for demo
+// Probe every 30s by default. The previous 2hr interval meant the health map
+// could be ~2hrs stale, so /api/_services/health reported a long-dead service
+// as healthy — useless for on-call triage and for the gating check below.
+// Override with BASTION_HEALTH_INTERVAL_MS if the probe traffic ever matters.
+const HEALTH_INTERVAL_MS = Number(process.env.BASTION_HEALTH_INTERVAL_MS) || 30_000;
+healthMonitor.startMonitoring(HEALTH_INTERVAL_MS);
 
 // Run health check once on startup
 (async () => {
@@ -56,17 +59,28 @@ Object.entries(serviceMap).forEach(([name, service]) => {
       }
       return headers;
     },
-    // Upstream died mid-request (crashed between health probes, connection
-    // reset, timeout). Without this handler the error falls through to
-    // Express's default HTML error page. Respond with a clean 502 JSON and
-    // immediately re-probe the service so the health map reflects reality
-    // now — not at the next periodic check.
+    // Transport-level failure only (upstream crashed, connection reset,
+    // timeout). An upstream that *answered* — including 4xx/5xx — never
+    // reaches here; express-http-proxy streams that response through
+    // untouched, preserving its real status code and body.
+    //
+    // Only genuine connection errors mean the service is actually down, so
+    // only those trigger a re-probe. Re-probing on an upstream 429/401 would
+    // be pointless load against a service that is plainly alive.
+    //
+    // Map the socket error to the status that describes it: a timeout is 504,
+    // anything else unreachable is 502. Returning a blanket 502 for every
+    // failure mode hides *why* a request failed, which turns a one-minute
+    // diagnosis into an hour of guessing.
     proxyErrorHandler: (err, res, next) => {
       healthMonitor.checkOne(name).catch(() => {});
       if (res.headersSent) return next(err);
-      return res.status(502).json({
+
+      const timedOut = err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT';
+      return res.status(timedOut ? 504 : 502).json({
         error: `${service.path} did not respond`,
-        details: err.code || err.message || 'Upstream error',
+        code: err.code || 'UPSTREAM_ERROR',
+        details: err.message || 'Upstream connection failed',
         retryHint: 'The service is being re-probed; retry after a few seconds.',
       });
     },
@@ -78,7 +92,18 @@ Object.entries(serviceMap).forEach(([name, service]) => {
     // No status yet = the startup probe hasn't finished. Forward optimistically
     // instead of 503ing the boot race — if the upstream really is down the
     // proxyErrorHandler above returns a clean 502 and marks it for re-probe.
-    if (status && !status.healthy) {
+    //
+    // Only refuse traffic when the probe failed because the service was
+    // genuinely unreachable. A probe that got an HTTP *response* (e.g. a 429
+    // from the upstream's own rate limiter, or a 5xx on one endpoint) proves
+    // the process is alive and accepting connections, so blocking every user
+    // on that signal converts a partial degradation into a total outage — the
+    // gateway becomes the thing causing the downtime. Forward instead and let
+    // the real response (or a transport error) decide.
+    const unreachable =
+      status && !status.healthy && !/status code/i.test(status.error || '');
+
+    if (unreachable) {
       console.warn(`[Bastion] ${service.path} is DOWN (last checked: ${status?.lastChecked ?? 'never'})`);
       return res.status(503).json({
         error: `${service.path} unavailable`,

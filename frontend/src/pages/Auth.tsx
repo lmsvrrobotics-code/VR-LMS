@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { GraduationCap, Users, Eye, EyeOff, Loader2 } from "lucide-react";
+import { getLandingRoute, isAdminRole, UNKNOWN_ROLE_HOME } from "@/lib/roleRouting";
 
 /**
  * VR Robotics Academy — basic authentication UI (Login + Sign Up).
@@ -70,22 +71,32 @@ const Auth = () => {
           dob: "2000-01-01",
           gender: "male",
         });
-        navigate(role === "teacher" ? "/teacher" : "/", { replace: true });
+        navigate(getLandingRoute(role), { replace: true });
       } else {
         const profile = await loginUser({ email: email.trim(), password });
-        // Route by role: admins → admin dashboard, teachers → their
-        // dashboard, everyone else → home.
-        const r = profile?.role;
-        if (r === "admin" || r === "root" || r === "manager" || r === "editor") {
+        // Route strictly by the role the backend reported. getLandingRoute
+        // enumerates every known role explicitly; an unknown/missing role
+        // resolves to /auth rather than falling through to the student site.
+        // (The previous `else → "/"` meant ANY role-resolution hiccup silently
+        // dropped teachers and admins onto the student pages.)
+        const destination = getLandingRoute(profile?.role);
+
+        if (destination === UNKNOWN_ROLE_HOME) {
+          // Authenticated but we could not establish a role — refuse to guess.
+          setError(
+            "Your account has no role assigned. Please contact your administrator.",
+          );
+          return;
+        }
+
+        if (isAdminRole(profile?.role)) {
           // Hard navigation (full reload) so the admin shell mounts cleanly with
           // admin_token / admin_user already persisted in localStorage. A SPA
           // navigate() here can race ProtectedRoute's checkAuth() and bounce
           // the freshly-logged-in admin back out before the user state commits.
-          window.location.assign("/admin/dashboard");
-        } else if (r === "teacher") {
-          navigate("/teacher", { replace: true });
+          window.location.assign(destination);
         } else {
-          navigate("/", { replace: true });
+          navigate(destination, { replace: true });
         }
       }
     } catch (err: unknown) {

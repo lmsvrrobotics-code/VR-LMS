@@ -95,9 +95,13 @@ class AssignmentController {
                 return res.status(403).json({ error: 'Not a member of any batch' });
             }
 
+            // student_id is a legacy column and is NULL on rosters written by
+            // the current batch code, which made every submission fail on a
+            // notNull violation. The JWT-verified user_id is the identity that
+            // always exists, so fall back to it.
             const submission = await AssignmentService.submitAssignment(
                 assignment_id,
-                member.student_id, // Use verified student_id from membership
+                member.student_id || user_id,
                 user_id,
                 { submission_text, file_url }
             );
@@ -162,7 +166,8 @@ class AssignmentController {
                 return res.status(403).json({ error: 'Not a member of any batch' });
             }
 
-            const submission = await AssignmentService.getStudentSubmission(assignment_id, member.student_id);
+            // Same legacy-null fallback as submitAssignment above.
+            const submission = await AssignmentService.getStudentSubmission(assignment_id, member.student_id || user_id);
             res.json({ success: true, submission });
         } catch (error) {
             console.error('Error fetching submission:', error);

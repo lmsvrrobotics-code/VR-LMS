@@ -1,5 +1,4 @@
 // Central brand config. Change values here to re-skin the whole frontend.
-// (Rebranded from YagnaTech Foundation → VR Robotics Academy.)
 
 export const BRAND = {
   name: 'VR Robotics Academy',

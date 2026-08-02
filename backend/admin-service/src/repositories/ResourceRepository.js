@@ -25,4 +25,17 @@ const listForTeacher = (teacherId) => {
     });
 };
 
-module.exports = { paginate, findOne, create, listForTeacher };
+// Active resources attached to any of `courseIds`. Student-facing: the caller
+// resolves which courses the student may reach, so this only has to scope by
+// course. An empty list short-circuits — `IN ()` is a SQL syntax error.
+const listForCourses = (courseIds) => {
+    const ids = (courseIds || []).map(Number).filter((n) => Number.isInteger(n) && n > 0);
+    if (!ids.length) return Promise.resolve([]);
+    return Resource.findAll({
+        where: { status: 1, course_id: { [Op.in]: ids } },
+        order: [['sort_order', 'ASC'], ['id', 'DESC']],
+        raw: true,
+    });
+};
+
+module.exports = { paginate, findOne, create, listForTeacher, listForCourses };

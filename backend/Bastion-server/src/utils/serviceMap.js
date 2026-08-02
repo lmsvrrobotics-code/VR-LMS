@@ -18,7 +18,10 @@ const serviceMap = {
     path: 'admin',
     url: process.env.ADMIN_SERVICE_URL || '',
     host: process.env.ADMIN_SERVICE_HOST || 'localhost',
-    port: process.env.ADMIN_SERVICE_PORT || 8007,
+    // admin-service listens on 5000 (see its server.js / .env). The old 8007
+    // default pointed at nothing; it stayed hidden because every environment
+    // happens to set ADMIN_SERVICE_URL, so the fallback was never exercised.
+    port: process.env.ADMIN_SERVICE_PORT || 5000,
     stripPrefix: '/api/v1/admin',
     // admin-service mounts its admin routes at `/api/admin/*` (e.g. the login is
     // `/api/admin/auth/login`). With forwardPrefix '/api' the gateway forwarded

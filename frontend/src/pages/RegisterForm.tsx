@@ -10,6 +10,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { getLandingRoute } from "@/lib/roleRouting";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/hooks/useAuth";
 import { publicSignup } from "@/api/leadApi";
@@ -50,9 +51,13 @@ const Register = () => {
         password,
         phone: phone.trim() || undefined,
       });
-      // 2. Log straight in and land on the (empty) student dashboard.
-      await loginUser({ email: email.trim(), password });
-      navigate("/dashboard", { replace: true });
+      // 2. Log straight in and land on the dashboard for whatever role the
+      //    backend assigned (public signup creates students, but route by the
+      //    reported role rather than assuming). Previously this went to
+      //    "/dashboard", which redirected to the PUBLIC course catalog — so a
+      //    brand-new student was dropped on the marketing site.
+      const profile = await loginUser({ email: email.trim(), password });
+      navigate(getLandingRoute(profile?.role), { replace: true });
     } catch (e2: unknown) {
       const msg =
         (e2 as { response?: { data?: { error?: string; message?: string } } })?.response?.data?.error ||

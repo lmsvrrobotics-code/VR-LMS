@@ -29,9 +29,21 @@ export const addBatchMembers = (id, userIds, clgId) =>
 export const removeBatchMember = (id, userId, clgId) =>
     api.delete(`/batches/${id}/members/${userId}`, cfg(clgId)).then((r) => r.data);
 
+export const addBatchTeachers = (id, teacherIds, clgId) =>
+    api.post(`/batches/${id}/teachers`, { teacherIds }, cfg(clgId)).then((r) => r.data);
+
+// The server refuses to remove the last teacher (422) — a batch must keep one.
+export const removeBatchTeacher = (id, teacherId, clgId) =>
+    api.delete(`/batches/${id}/teachers/${teacherId}`, cfg(clgId)).then((r) => r.data);
+
 // Students of the target college that can be added to a batch.
 export const listEligibleStudents = (clgId) =>
     api.get('/batches/eligible-students', cfg(clgId)).then((r) => r.data);
+
+// Teachers assignable to a batch. Not college-scoped server-side (a teacher can
+// run batches at any school), but clgId is passed for symmetry.
+export const listEligibleTeachers = (clgId) =>
+    api.get('/batches/eligible-teachers', cfg(clgId)).then((r) => r.data);
 
 // Lookup-only: batches across the given college IDs. Powers the Batches
 // dropdown on Add/Edit Course where the admin first picks colleges.
@@ -49,10 +61,8 @@ export const addBatchCourse = (id, courseId, clgId) =>
 export const removeBatchCourse = (id, courseId, clgId) =>
     api.delete(`/batches/${id}/courses/${courseId}`, cfg(clgId)).then((r) => r.data);
 
-// Add teacher to batch
-export const addBatchTeacher = (id, teacherId, clgId) =>
-    api.post(`/batches/${id}/teachers`, { teacherId }, cfg(clgId)).then((r) => r.data);
-
-// Remove teacher from batch
-export const removeBatchTeacher = (id, teacherId, clgId) =>
-    api.delete(`/batches/${id}/teachers/${teacherId}`, cfg(clgId)).then((r) => r.data);
+// Teacher add/remove live above (addBatchTeachers / removeBatchTeacher). Two
+// unused stubs used to sit here targeting the same URLs, and the singular
+// `{ teacherId }` body they posted doesn't match what the endpoint accepts
+// (`{ teacherIds: [...] }`) — a redeclaration of removeBatchTeacher that broke
+// the module at parse time. Removed; nothing imported them.

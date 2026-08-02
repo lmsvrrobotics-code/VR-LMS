@@ -23,6 +23,27 @@ const parseDate = (val) => {
     return Number.isNaN(d.getTime()) ? null : d;
 };
 
+/**
+ * A demo must not end before it begins. Unvalidated before, which let rows be
+ * saved with an inverted range — react-big-calendar silently drops those, so
+ * the session disappeared from the admin calendar entirely. Mirrors the same
+ * guard in ClassSessionService.
+ */
+// A single session should not run for days. Without an upper bound a typo in
+// the end DATE (e.g. picking 31 Jul instead of 16 Jul) saved a 15-day "demo"
+// that then reported itself as Live now for a fortnight, because by the rules
+// it genuinely was still running. 24h is far above any real session.
+const MAX_SESSION_MS = 24 * 60 * 60 * 1000;
+
+const assertValidRange = (start, end) => {
+    if (start && end && end.getTime() < start.getTime()) {
+        throw new HttpError(422, 'End time must be after the start time.');
+    }
+    if (start && end && end.getTime() - start.getTime() > MAX_SESSION_MS) {
+        throw new HttpError(422, 'A demo cannot run for more than 24 hours — check the end date.');
+    }
+};
+
 // Attach human-readable course title + assigned teacher names to each row so
 // the admin calendar can show "who/what". Best effort — resolution failure
 // must never drop the rows themselves.
@@ -77,11 +98,14 @@ const create = async ({ body }) => {
     if (!body.title || !String(body.title).trim()) {
         throw new HttpError(422, 'Title is required');
     }
+    const startAt = parseDate(body.start_at);
+    const endAt = parseDate(body.end_at);
+    assertValidRange(startAt, endAt);
     const item = await demoRepo.create({
         title: String(body.title).trim(),
         course_id: body.course_id ? String(body.course_id).trim() : null,
-        start_at: parseDate(body.start_at),
-        end_at: parseDate(body.end_at),
+        start_at: startAt,
+        end_at: endAt,
         teacher_ids: toIdArray(body.teacher_ids),
         meeting_link: body.meeting_link ? String(body.meeting_link).trim() : null,
         status: body.status === '0' || body.status === 0 ? 0 : 1,
@@ -92,11 +116,16 @@ const create = async ({ body }) => {
 const update = async ({ id, body }) => {
     const item = await demoRepo.findOne({ id });
     if (!item) throw new HttpError(404, 'Demo not found.');
+    // Validate the MERGED range so editing one side is still checked against
+    // the stored value on the other.
+    const nextStart = body.start_at !== undefined ? parseDate(body.start_at) : item.start_at;
+    const nextEnd = body.end_at !== undefined ? parseDate(body.end_at) : item.end_at;
+    assertValidRange(nextStart, nextEnd);
     await item.update({
         title: body.title !== undefined ? String(body.title).trim() : item.title,
         course_id: body.course_id !== undefined ? (body.course_id ? String(body.course_id).trim() : null) : item.course_id,
-        start_at: body.start_at !== undefined ? parseDate(body.start_at) : item.start_at,
-        end_at: body.end_at !== undefined ? parseDate(body.end_at) : item.end_at,
+        start_at: nextStart,
+        end_at: nextEnd,
         teacher_ids: body.teacher_ids !== undefined ? toIdArray(body.teacher_ids) : item.teacher_ids,
         meeting_link: body.meeting_link !== undefined ? (body.meeting_link ? String(body.meeting_link).trim() : null) : item.meeting_link,
         status: body.status !== undefined ? (body.status === '0' || body.status === 0 ? 0 : 1) : item.status,

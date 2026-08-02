@@ -39,7 +39,10 @@ module.exports = (sequelize) => {
     });
 
     Slot.associate = (models) => {
-        Slot.belongsTo(models.Batch, { foreignKey: 'batch_id', as: 'batch' });
+        // NOTE: no Batch association. The `batches` table is keyed by a varchar
+        // `unique_id` (no integer `id`), so a belongsTo on slots.batch_id (INTEGER)
+        // produces an `integer = character varying` join error. batch_id is kept as
+        // a plain column; callers filter/return it directly.
         Slot.belongsTo(models.Course, { foreignKey: 'course_id', as: 'course' });
         Slot.hasMany(models.SlotEnrollment, { foreignKey: 'slot_id', as: 'enrollments' });
     };

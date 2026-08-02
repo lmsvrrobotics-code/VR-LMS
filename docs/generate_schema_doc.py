@@ -1,5 +1,5 @@
 """
-One-shot generator for docs/YagnaTech-Database-Schemas.docx.
+One-shot generator for docs/VR-Robotics-Database-Schemas.docx.
 
 Reads nothing dynamic — the model definitions are flattened into Python data
 structures below so the output is deterministic and reviewable in a diff.
@@ -843,7 +843,7 @@ def main():
     # Cover
     title = doc.add_paragraph()
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = title.add_run("YagnaTech Foundation")
+    run = title.add_run("VR Robotics Academy")
     run.bold = True
     run.font.size = Pt(28)
     run.font.color.rgb = BRAND_TEAL
@@ -925,7 +925,7 @@ def main():
 
         doc.add_page_break()
 
-    out_path = Path(__file__).resolve().parent / "YagnaTech-Database-Schemas.docx"
+    out_path = Path(__file__).resolve().parent / "VR-Robotics-Database-Schemas.docx"
     doc.save(out_path)
     print(f"Wrote {out_path}")
 

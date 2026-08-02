@@ -46,25 +46,68 @@ const set = async (key, value, ttlSeconds) => {
 };
 
 // Delete keys by exact key or a glob pattern (used for invalidation on writes).
+//
+// Pattern deletes use SCAN, never KEYS. KEYS is O(N) over the whole keyspace and
+// blocks Redis (single-threaded) for its entire duration — one admin write would
+// stall every concurrent cache read. SCAN walks the keyspace in small cursor
+// batches, so other commands interleave.
 const del = async (keyOrPattern) => {
     if (!client || !ready) return;
     try {
         if (keyOrPattern.includes('*')) {
-            const keys = await client.keys(keyOrPattern);
-            if (keys.length) await client.del(keys);
+            let cursor = '0';
+            do {
+                const [next, keys] = await client.scan(cursor, 'MATCH', keyOrPattern, 'COUNT', 100);
+                cursor = next;
+                if (keys.length) await client.unlink(...keys).catch(() => client.del(...keys));
+            } while (cursor !== '0');
         } else {
             await client.del(keyOrPattern);
         }
     } catch { /* ignore */ }
 };
 
-// Cache-aside: return cached value, or compute via fn(), cache it, and return.
+// In-flight computations, keyed by cache key. Single-flight (a.k.a. request
+// coalescing) — see wrap().
+const inflight = new Map();
+
+// Cache-aside with single-flight.
+//
+// The naive check-then-compute has a cache-stampede bug: the moment a hot key
+// expires, EVERY concurrent request misses and they all run fn() at once. For
+// the leaderboard / public catalog that means thousands of simultaneous full
+// table scans against a 20-connection pool — the pool saturates, acquires queue,
+// and the whole service stalls. Expiry synchronises the herd, so the cache made
+// the spike worse rather than better.
+//
+// Here the first miss for a key stores its pending promise; concurrent callers
+// await that same promise instead of launching their own fn(). N requests → 1
+// query. Note this coalesces per-process; with multiple replicas you get one
+// query per replica, not one globally, which is the intended trade (no cross-
+// process lock, no added failure mode). Caching stays optional: with Redis down,
+// get/set no-op and this degrades to plain single-flight over the DB, which is
+// still strictly better than an unbounded herd.
 const wrap = async (key, ttlSeconds, fn) => {
     const cached = await get(key);
     if (cached !== null) return cached;
-    const fresh = await fn();
-    await set(key, fresh, ttlSeconds);
-    return fresh;
+
+    const pending = inflight.get(key);
+    if (pending) return pending;
+
+    const promise = (async () => {
+        const fresh = await fn();
+        await set(key, fresh, ttlSeconds);
+        return fresh;
+    })();
+
+    // Registered before any await above yields, so concurrent callers in the
+    // same tick see it. Always cleared — a rejected fn() must not poison the key.
+    inflight.set(key, promise);
+    try {
+        return await promise;
+    } finally {
+        inflight.delete(key);
+    }
 };
 
 const isEnabled = () => Boolean(client);

@@ -14,7 +14,6 @@ import {
   BookOpen,
   Book,
   Image as ImageIcon,
-  MapPin,
   ChevronDown,
   Home,
   Mail,
@@ -24,6 +23,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { usePublicContentCounts } from "@/hooks/usePublicContentCounts";
 import { logout as adminLogout } from "@/admin/api/auth";
 
 const Navbar = () => {
@@ -37,6 +37,9 @@ const Navbar = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logoutUser } = useAuth();
+  // Drives tab visibility: a section with no admin content is hidden entirely
+  // rather than sending visitors to an empty page.
+  const counts = usePublicContentCounts();
 
   const isActive = (path) => location.pathname === path;
 
@@ -97,9 +100,14 @@ const Navbar = () => {
     { name: "Home", href: "/", icon: Home },
     { name: "About", href: "/about", icon: Users },
     { name: "Courses", href: "/vr-courses", icon: BookOpen, dropdown: true },
-    { name: "Books & Kits", href: "/books", icon: Book, dropdown: true },
-    { name: "Gallery", href: "/gallery", icon: ImageIcon },
-    { name: "Locations", href: "/locations", icon: MapPin },
+    // "Books & Kits" is ONE tab covering TWO sections, so it survives while
+    // either has content; the dropdown below drops whichever half is empty.
+    ...(counts.books > 0 || counts.kits > 0
+      ? [{ name: "Books & Kits", href: "/books", icon: Book, dropdown: true }]
+      : []),
+    ...(counts.gallery > 0
+      ? [{ name: "Gallery", href: "/gallery", icon: ImageIcon }]
+      : []),
     { name: "Contact Us", href: "/contact", icon: Mail },
   ];
 
@@ -115,10 +123,12 @@ const Navbar = () => {
     { name: "All Courses", href: "/courses/browse" },
   ];
 
-  // Sub-items under the "Books & Kits" dropdown — navigate to sections.
+  // Sub-items under the "Books & Kits" dropdown — navigate to sections. Each
+  // is dropped when its own section is empty, so the dropdown never offers a
+  // jump to a section that renders nothing.
   const bookItems = [
-    { name: "All Books", href: "/books#books-section" },
-    { name: "Robotics Kits", href: "/books#kits-section" },
+    ...(counts.books > 0 ? [{ name: "All Books", href: "/books#books-section" }] : []),
+    ...(counts.kits > 0 ? [{ name: "Robotics Kits", href: "/books#kits-section" }] : []),
   ];
 
   // Map each dropdown nav item to its sub-items.
@@ -233,6 +243,10 @@ const Navbar = () => {
                 </Link>
               )
             )}
+            {/* The student "My Courses" link was removed from the navbar —
+                students now reach their courses from the My Courses tab in the
+                student dashboard (/student/dashboard). The /enrolled-courses
+                route itself still exists for old links and bookmarks. */}
           </div>
 
           {/* Auth Buttons */}
@@ -373,6 +387,7 @@ const Navbar = () => {
                   </Link>
                 )
               )}
+              {/* "My Courses" removed here too — see the desktop nav above. */}
               {/* Logged-in actions (logged-out Login/Register is pinned at top). */}
               {user && (
               <div className="pt-4 space-y-2">
