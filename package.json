@@ -6,7 +6,7 @@
   "scripts": {
     "postinstall": "npm run install:all",
     "install:all": "npm --prefix backend/auth-service ci --omit=dev && npm --prefix backend/admin-service ci --omit=dev && npm --prefix backend/assessment-service ci --omit=dev && npm --prefix backend/Bastion-server ci --omit=dev",
-    "start": "bash backend/start-all.sh"
+    "start": "sh backend/start-all.sh"
   },
   "engines": {
     "node": ">=20"
