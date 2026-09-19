@@ -60,6 +60,7 @@ import AdminCourseEdit from "./admin/pages/course/Edit";
 import AdminCouponIndex from "./admin/pages/coupon/Index";
 import AdminGalleryIndex from "./admin/pages/gallery/Index";
 import AdminDemoVideosIndex from "./admin/pages/demo-videos/Index";
+import AdminFounderMeetingsIndex from "./admin/pages/founder-meetings/Index";
 import AdminLocationsIndex from "./admin/pages/locations/Index";
 import AdminKitsIndex from "./admin/pages/kits/Index";
 import AdminBooksIndex from "./admin/pages/books/Index";
@@ -234,6 +235,7 @@ const App = () => (
               <Route path="coupons" element={<AdminCouponIndex />} />
               <Route path="gallery" element={<AdminGalleryIndex />} />
               <Route path="demo-videos" element={<AdminDemoVideosIndex />} />
+              <Route path="founder-meetings" element={<AdminFounderMeetingsIndex />} />
               <Route path="locations" element={<AdminLocationsIndex />} />
               <Route path="kits" element={<AdminKitsIndex />} />
               <Route path="books" element={<AdminBooksIndex />} />

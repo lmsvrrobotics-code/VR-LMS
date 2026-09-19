@@ -19,6 +19,7 @@ import {
   Send,
   CheckCircle2
 } from "lucide-react";
+import { validateEmail, validateName } from "@/lib/fieldValidation";
 
 const ADMIN_BASE = (import.meta.env.VITE_ADMIN_API_URL as string) || "http://localhost:5000";
 
@@ -34,10 +35,14 @@ const Contact = () => {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!form.firstName.trim() || !form.email.trim() || !form.message.trim()) {
-      setError("Please fill in your name, email and message.");
-      return;
-    }
+    // Name the field at fault rather than listing all three: "Please fill in
+    // your name, email and message" left someone with a typo'd address hunting
+    // for which of the three was wrong.
+    const nameErr = validateName(form.firstName, { label: "First name" });
+    if (nameErr) return setError(nameErr);
+    const emailErr = validateEmail(form.email);
+    if (emailErr) return setError(emailErr);
+    if (!form.message.trim()) return setError("Please enter a message.");
     setSending(true);
     try {
       await axios.post(`${ADMIN_BASE}/api/public/contact`, form, { timeout: 30000 });

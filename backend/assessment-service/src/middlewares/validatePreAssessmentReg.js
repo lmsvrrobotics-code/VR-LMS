@@ -1,6 +1,10 @@
 import { GENDERS } from "../utils/preAssessmentConstants.js";
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Matches admin-service/src/lib/fieldValidation.js. This service is ESM and
+// stands alone, so the rule is duplicated rather than imported — keep the two
+// in step. The previous /^[^\s@]+@[^\s@]+\.[^\s@]+$/ accepted "a@b..c" and
+// "a@-.x": addresses that store fine and then bounce on the first mail.
+const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,}$/;
 const PHONE_REGEX = /^[0-9+\-\s()]{7,20}$/;
 
 // Pre-flight validator for the registration POST. Multer has already parsed
@@ -16,7 +20,11 @@ export default function validatePreAssessmentReg(req, res, next) {
 
   const email = (body.email || "").trim().toLowerCase();
   if (!email) errors.email = "Email is required";
-  else if (!EMAIL_REGEX.test(email)) errors.email = "Invalid email format";
+  else if (email.includes("..")) errors.email = "Email address cannot contain two dots in a row.";
+  else if (!email.includes("@"))
+    errors.email = "Email address must include an @ sign — for example name@example.com.";
+  else if (!EMAIL_REGEX.test(email))
+    errors.email = "Email address doesn't look like a valid email — for example name@example.com.";
 
   const phoneNumber = (body.phoneNumber || "").trim();
   if (!phoneNumber) errors.phoneNumber = "Phone number is required";

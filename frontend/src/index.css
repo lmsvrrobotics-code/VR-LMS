@@ -78,15 +78,30 @@ All colors MUST be HSL.
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
+  /* Dark palette, tuned for the VR Robotics brand.
+   *
+   * The stock shadcn dark theme this replaced had three defects:
+   *
+   *   1. --card was IDENTICAL to --background (both #020817), so every card,
+   *      panel and modal dissolved into the page with no elevation.
+   *   2. 84% saturation at 4.9% lightness is a heavy navy. Against the brand
+   *      orange it read muddy rather than premium.
+   *   3. --border equalled --muted, so an outline and a filled surface were
+   *      the same colour and nothing separated visually.
+   *
+   * The replacement is a near-neutral charcoal with a faint warm cast (hue 24,
+   * a few percent saturation) so it sits under the orange instead of fighting
+   * it, and a real three-step elevation ladder: page < card < popover. */
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    /* Elevation ladder — each step is visibly lighter than the last. */
+    --background: 24 8% 7%;      /* page            #131110 */
+    --foreground: 30 12% 96%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 24 7% 11%;           /* raised surface  #1E1B1A */
+    --card-foreground: 30 12% 96%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 24 7% 14%;        /* modals, menus   #262322 */
+    --popover-foreground: 30 12% 96%;
 
     /* Keep the BRAND orange as primary in dark mode. The stock shadcn dark
        palette set --primary to near-white, which made every "active" state
@@ -96,29 +111,41 @@ All colors MUST be HSL.
     --primary: 25 100% 50%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 24 6% 17%;
+    --secondary-foreground: 30 12% 96%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 24 6% 17%;
+    /* Full white. This token carries real content in places — the My Courses
+       subtitle ("1 course · 0 in progress · 1 completed") is a count, not
+       decoration — and shadcn's default 65% rendered it as a ghost on the dark
+       ground. Set to white on request; it no longer reads as "muted" in dark
+       mode, so anything relying on this token for de-emphasis will now sit at
+       the same weight as body text. */
+    --muted-foreground: 0 0% 100%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 24 6% 20%;
+    --accent-foreground: 30 12% 96%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    /* Brightened from a 30% lightness that was nearly invisible on a dark
+       surface — a destructive action must be legible to be avoidable. */
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
+    /* Deliberately LIGHTER than --muted so an outline reads as an edge rather
+       than blending into the filled surface beside it. */
+    --border: 24 6% 24%;
+    --input: 24 6% 24%;
     --ring: 25 100% 50%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
+    /* Aligned to the same charcoal ramp. These previously used a blue-grey
+       with a BLUE primary, which clashed with both the page and the brand. */
+    --sidebar-background: 24 8% 9%;
+    --sidebar-foreground: 30 12% 96%;
+    --sidebar-primary: 25 100% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-accent: 24 6% 17%;
+    --sidebar-accent-foreground: 30 12% 96%;
+    --sidebar-border: 24 6% 24%;
+    --sidebar-ring: 25 100% 50%;
   }
 }
 
@@ -726,9 +753,9 @@ button, .btn, [role="button"] { transition: transform .2s ease, box-shadow .2s e
 .dash-dark .bg-gradient-hero { background: linear-gradient(135deg, #FF6A00 0%, #FF9A4D 100%); }
 /* Section backdrop (the panel behind the course cards) recedes; cards lift. */
 .dash-dark .bg-gradient-subtle,
-.dash-dark .bg-gradient-card { background: #0f0f14; }
-.dash-dark .bg-white { background-color: #16161f; }
-.dash-dark .bg-gray-50 { background-color: #14141c; }
+.dash-dark .bg-gradient-card { background: #131210; }
+.dash-dark .bg-white { background-color: #1E1C1A; }
+.dash-dark .bg-gray-50 { background-color: #191716; }
 /* Borders */
 .dash-dark .border-gray-100,
 .dash-dark .border-gray-200 { border-color: rgba(255, 255, 255, 0.08); }
@@ -746,7 +773,7 @@ button, .btn, [role="button"] { transition: transform .2s ease, box-shadow .2s e
 .dash-dark input,
 .dash-dark textarea,
 .dash-dark select {
-  background-color: #101019;
+  background-color: #131210;
   border-color: rgba(255, 255, 255, 0.12);
   color: hsl(var(--foreground));
 }
@@ -774,11 +801,41 @@ button, .btn, [role="button"] { transition: transform .2s ease, box-shadow .2s e
 .admin-dark .prose-custom h1, .admin-dark .prose-custom h2, .admin-dark .prose-custom h3 { color: #e6e8ee; }
 .dash-dark .prose-custom code,
 .teacher-dark .prose-custom code,
-.admin-dark .prose-custom code { background: #101019; color: #e6e8ee; }
+.admin-dark .prose-custom code { background: #131210; color: #e6e8ee; }
+
+/* ---- Student dashboard: premium page background + card lift ----
+   Mirrors the teacher shell so both dashboards read as one system. The flat
+   `bg-muted/40` charcoal is replaced with a warm near-black base, a faint
+   brand glow from the top, and a subtle deepening toward the foot, so cards
+   float instead of blending into the page. The section backdrops
+   (bg-gradient-subtle/card) stay #131210 per the rules above; scoping the
+   glow to the root and the lift to bg-card keeps them from clashing. */
+.dash-dark {
+  background-color: #14110f !important;
+  background-image:
+    radial-gradient(1100px 620px at 12% -8%, rgba(255, 106, 0, 0.10), transparent 60%),
+    radial-gradient(900px 700px at 100% 0%, rgba(255, 154, 77, 0.06), transparent 55%),
+    linear-gradient(180deg, #16130f 0%, #131110 46%, #100e0d 100%) !important;
+  background-attachment: fixed;
+}
+.dash-dark .bg-card {
+  background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0) 46%);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.05) inset,
+    0 10px 24px -12px rgba(0, 0, 0, 0.7);
+}
+.dash-dark .bg-card:hover {
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.07) inset,
+    0 16px 34px -14px rgba(0, 0, 0, 0.78);
+}
+.dash-dark .bg-gradient-hero {
+  box-shadow: 0 18px 40px -18px rgba(255, 106, 0, 0.45);
+}
 
 /* ===================== Teacher dashboard ===================== */
 /* Section cards / panels rendered as solid white. */
-.teacher-dark .bg-white { background-color: #16161f; }
+.teacher-dark .bg-white { background-color: #1E1C1A; }
 /* Warm cream blocks (earnings / dispute banner / incentive rows). */
 .teacher-dark .bg-\[\#fff6ee\] { background-color: #1d1d28; }
 /* Sidebar nav hover wash. */
@@ -786,26 +843,64 @@ button, .btn, [role="button"] { transition: transform .2s ease, box-shadow .2s e
 /* "View details" / link accents — soften the blue for dark. */
 .teacher-dark .text-blue-600 { color: #7aa7ff; }
 /* Muted helper headings keep readable contrast. */
-.teacher-dark .text-muted-foreground { color: #9aa3b2; }
+/* Was a hardcoded blue-grey (#9aa3b2) that overrode the token and left the
+   teacher shell paler than the student one. Defer to --muted-foreground so all
+   three dashboards read the same. */
+.teacher-dark .text-muted-foreground { color: hsl(var(--muted-foreground)); }
 /* Inputs inside teacher panels. */
 .teacher-dark input,
 .teacher-dark textarea,
 .teacher-dark select {
-  background-color: #101019;
+  background-color: #131210;
   border-color: rgba(255, 255, 255, 0.12);
   color: hsl(var(--foreground));
 }
 .teacher-dark input::placeholder,
 .teacher-dark textarea::placeholder { color: #6b7280; }
 
+/* ---- Premium page background ----
+   The flat `bg-muted/40` charcoal left the whole shell looking dead and
+   made cards (#1E1B1A on #131110) barely separate from the page. Give the
+   page real depth: a warm near-black base, a faint brand glow bleeding in
+   from the top, and a subtle darkening toward the foot so content floats.
+   The logo watermark (body::before) still shows through. */
+.teacher-dark {
+  background-color: #14110f !important;
+  background-image:
+    radial-gradient(1100px 620px at 12% -8%, rgba(255, 106, 0, 0.10), transparent 60%),
+    radial-gradient(900px 700px at 100% 0%, rgba(255, 154, 77, 0.06), transparent 55%),
+    linear-gradient(180deg, #16130f 0%, #131110 46%, #100e0d 100%) !important;
+  background-attachment: fixed;
+}
+
+/* ---- Lift the metric tiles & panels off the page ----
+   A gentle top-lit gradient on every card plus a soft shadow and a 1px
+   inset highlight reads as a raised, premium surface rather than a flat
+   box. Scoped to bg-card so hero (gradient) and muted chips are untouched. */
+.teacher-dark .bg-card {
+  background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0) 46%);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.05) inset,
+    0 10px 24px -12px rgba(0, 0, 0, 0.7);
+}
+.teacher-dark .bg-card:hover {
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.07) inset,
+    0 16px 34px -14px rgba(0, 0, 0, 0.78);
+}
+/* Warm the hero's shadow so it anchors to the page instead of floating flat. */
+.teacher-dark .bg-gradient-hero {
+  box-shadow: 0 18px 40px -18px rgba(255, 106, 0, 0.45);
+}
+
 /* ====================== Admin dashboard ====================== */
 /* Root surface + base ink (two classes beats the `.admin-theme` rule). */
-.admin-theme.admin-dark { background: #0f0f14; color: #c7ccd6; }
-.admin-dark .bg-bodybg { background-color: #0f0f14; }
+.admin-theme.admin-dark { background: #131210; color: #c7ccd6; }
+.admin-dark .bg-bodybg { background-color: #131210; }
 /* Sidebar, cards, stat cards, tables — every white surface. */
 .admin-dark .bg-white,
 .admin-dark .ol-card,
-.admin-dark .stat-card { background-color: #16161f; }
+.admin-dark .stat-card { background-color: #1E1C1A; }
 /* Hardcoded sidebar/card borders — brighter outlines so boxes/lines read
    crisply in dark mode (was a near-invisible 0.08). Applies to all three
    dashboard dark scopes incl. the course-details page (rendered in dash-dark). */
@@ -824,7 +919,7 @@ button, .btn, [role="button"] { transition: transform .2s ease, box-shadow .2s e
 .admin-dark .hover\:bg-lightgreen:hover { background-color: rgba(255, 106, 0, 0.14); }
 /* Tables. */
 .admin-dark .e-table thead th {
-  background-color: #1c1c26;
+  background-color: #262321;
   color: #e6e8ee;
   border-bottom-color: rgba(255, 255, 255, 0.1);
 }
@@ -838,13 +933,13 @@ button, .btn, [role="button"] { transition: transform .2s ease, box-shadow .2s e
 .admin-dark input,
 .admin-dark textarea,
 .admin-dark select {
-  background-color: #101019;
+  background-color: #131210;
   border-color: rgba(255, 255, 255, 0.12);
   color: #c7ccd6;
 }
 .admin-dark .ol-form-label { color: #c7ccd6; }
-.admin-dark .ol-btn-outline-secondary { background-color: #16161f; border-color: rgba(255, 255, 255, 0.14); color: #e6e8ee; }
-.admin-dark .edit-badge { background-color: #16161f; }
+.admin-dark .ol-btn-outline-secondary { background-color: #1E1C1A; border-color: rgba(255, 255, 255, 0.14); color: #e6e8ee; }
+.admin-dark .edit-badge { background-color: #1E1C1A; }
 /* Pagination + page-link borders. */
 .admin-dark .e-page-link { border-color: rgba(255, 255, 255, 0.14); color: #c7ccd6; }
 
@@ -942,7 +1037,7 @@ button, .btn, [role="button"] { transition: transform .2s ease, box-shadow .2s e
 }
 .admin-dark .rbc-overlay,
 .teacher-dark .rbc-overlay {
-  background-color: #1c1c26;
+  background-color: #262321;
   border-color: rgba(255, 255, 255, 0.14);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
 }
@@ -1062,6 +1157,50 @@ button, .btn, [role="button"] { transition: transform .2s ease, box-shadow .2s e
 .admin-dark .admin-cal .rbc-month-view .rbc-day-bg:hover { background-color: rgba(255, 106, 0, 0.10); }
 .admin-dark .admin-cal .rbc-now .rbc-button-link { color: #fff; }
 
+/* ---- Admin modal visibility in dark mode ----
+   The Add/Edit modals (shared Modal.jsx → .ol-card panel + .ol-form-control
+   fields) were nearly unreadable in dark: the panel (#1E1C1A) and the inputs
+   (#131210) sat too close in value and the field border was a 0.12 white
+   hairline that vanished, so the form read as one dark blur. This raises the
+   panel, deepens the scrim so the dialog pops, gives inputs a clear edge that
+   brightens on focus, and lifts placeholder text to a legible grey. Scoped to
+   admin-dark so every admin modal (kits, books, projects, …) benefits. */
+.admin-dark .ol-card {
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+/* Fields: a touch lighter than the panel + a visible border so each box reads
+   as a distinct, tappable target rather than blending into the surface. */
+.admin-dark .ol-form-control,
+.admin-dark .ol-card input,
+.admin-dark .ol-card textarea,
+.admin-dark .ol-card select {
+  background-color: #211E1C;
+  border-color: rgba(255, 255, 255, 0.22);
+  color: #e6e8ee;
+}
+.admin-dark .ol-form-control::placeholder,
+.admin-dark .ol-card input::placeholder,
+.admin-dark .ol-card textarea::placeholder {
+  color: rgba(230, 232, 238, 0.42);
+}
+/* Focus: brand edge + soft ring so the active field is unmistakable. */
+.admin-dark .ol-form-control:focus,
+.admin-dark .ol-card input:focus,
+.admin-dark .ol-card textarea:focus,
+.admin-dark .ol-card select:focus {
+  border-color: #FF6A00;
+  box-shadow: 0 0 0 3px rgba(255, 106, 0, 0.18);
+  outline: none;
+}
+/* Hover on a field should not steal the brand cue from focus — keep it subtle. */
+.admin-dark .ol-form-control:hover:not(:focus) {
+  border-color: rgba(255, 255, 255, 0.34);
+}
+/* Field labels a shade brighter than body text so the form scans top-down. */
+.admin-dark .ol-card .ol-form-label,
+.admin-dark .ol-card label { color: #eef0f4; }
+
 /* ---- Teacher calendar polish (.teacher-cal) ----
    The teacher calendar previously used rbc's stock stylesheet while the admin
    one had a bespoke look, so the same product had two visual languages. This
@@ -1171,3 +1310,153 @@ button, .btn, [role="button"] { transition: transform .2s ease, box-shadow .2s e
   color: hsl(var(--muted-foreground));
 }
 .teacher-cal .rbc-current-time-indicator { background: hsl(var(--primary)); height: 2px; }
+
+/* ───── Collapsible student / teacher sidebar rail ─────
+ *
+ * The rail expands on hover. Three things must move together or the motion
+ * reads as a jerk rather than a slide:
+ *
+ *   1. the panel width,
+ *   2. the horizontal padding of every row (icons drift into place instead of
+ *      snapping when the padding step lands),
+ *   3. the labels themselves.
+ *
+ * Labels stay MOUNTED and fade + slide. They used to be conditionally rendered
+ * ({expanded && <span>}), so text appeared instantly at full opacity while the
+ * panel was still widening — the pop that made the whole thing feel abrupt.
+ *
+ * The easing is a gentle "out" curve over 260ms: long enough to read as motion,
+ * short enough not to feel sluggish on a hover interaction. Width is the only
+ * animatable property here (the panel is fixed-position and overlays the page,
+ * so this does not reflow the grid behind it).
+ */
+.sidebar-rail {
+  transition:
+    width 260ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    box-shadow 260ms ease;
+}
+
+/* Promote only while the pointer is actually over the rail. A permanent
+   `will-change` keeps a compositor layer alive for the life of the page, which
+   costs memory and can itself cause flicker on adjacent content. */
+.sidebar-rail:hover {
+  will-change: width;
+}
+
+/* Row padding shifts between the collapsed and expanded step. Animating it
+   keeps the icons gliding rather than jumping at the midpoint. */
+.sidebar-pad {
+  transition: padding 260ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* Labels: fade and slide in behind the widening edge.
+ *
+ * These deliberately do NOT transition `visibility`. Doing so caused a visible
+ * blink on hover: the shorthand listed `opacity, transform, visibility`, but
+ * `.is-shown` set `transition-delay: 60ms, 0s, 0s` — which applies the 60ms to
+ * OPACITY, not visibility. So visibility flipped to `visible` instantly while
+ * opacity was still 0 and had not begun fading, and a fast hover-out/in landed
+ * mid-hold and flashed the text.
+ *
+ * Opacity alone is enough to hide them, and it composites without a repaint.
+ * Keeping the element visible costs nothing here because the rail already
+ * clips with overflow:hidden, and `content-visibility`/tab-order concerns are
+ * handled by aria-hidden + pointer-events below. */
+.sidebar-label {
+  transition:
+    opacity 180ms ease,
+    transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.sidebar-label.is-shown {
+  opacity: 1;
+  transform: translateX(0);
+}
+.sidebar-label.is-hidden {
+  opacity: 0;
+  transform: translateX(-6px);
+  /* Not focusable or clickable while faded out. The rail's overflow:hidden
+     already clips it, so nothing is visible to click at 76px wide. */
+  pointer-events: none;
+}
+
+/* Below lg the sidebar is a drawer, not a rail: it is always full width, so the
+   labels must never be hidden by the collapsed state. */
+@media (max-width: 1023.98px) {
+  .sidebar-label.is-hidden {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+}
+
+/* Collapsed rail: no scrollbar.
+ *
+ * The nav is `overflow-y-auto` so a long item list can still scroll when the
+ * rail is OPEN. Collapsed, that same rule produced a scrollbar inside a 76px
+ * column — it ate horizontal space the icons needed, and scrolling an
+ * icon-only rail is not a thing anyone wants to do.
+ *
+ * The list is only hidden, not unreachable: hovering expands the rail, which
+ * restores normal scrolling. Applied to the rail rather than the nav so both
+ * the student and teacher sidebars pick it up from one place.
+ *
+ * Desktop only: below lg the sidebar is a full-width drawer, where the list
+ * must still scroll normally. Scoped with a media query rather than Tailwind's
+ * `lg:` prefix — that prefix only works on classes Tailwind itself generates,
+ * and `lg:is-collapsed` on a hand-written class silently produces no rule.
+ */
+@media (min-width: 1024px) {
+  /* The scrollbar is suppressed on the rail at ALL times, not only while
+     `is-collapsed` is applied.
+     
+     That class toggles the instant the pointer enters, but the width takes
+     260ms to follow. For that whole window the box is still narrow while
+     scrolling is enabled again, so the global 10px `::-webkit-scrollbar`
+     (index.css, `* { scrollbar-width: thin }` + the unscoped
+     ::-webkit-scrollbar rules) appeared and vanished mid-transition — the
+     blink on hover. Scoping the suppression to the endpoint state could not
+     cover the transition itself.
+     
+     The list is still scrollable by wheel/trackpad and keyboard once expanded;
+     only the visible bar is hidden. */
+  .sidebar-rail .sidebar-scroll {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .sidebar-rail .sidebar-scroll::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+  /* Collapsed, don't scroll at all: an icon-only rail has nothing to scroll to
+     and a stray wheel event would drift the icons out of view. */
+  .sidebar-rail.is-collapsed .sidebar-scroll {
+    overflow-y: hidden;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-rail,
+  .sidebar-pad,
+  .sidebar-label { transition: none; }
+}
+
+/* ───── "Almost full" seat badge ─────
+ *
+ * Sits at the top-right of the founder-meeting card when 10% or fewer seats
+ * remain. The glow breathes rather than flashes: this is a genuine-scarcity
+ * signal, and a hard blink would read as an advert. Amber, not the brand
+ * orange, so it separates from the surrounding UI as a warning.
+ */
+@keyframes seat-badge-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.45); }
+  50%      { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
+}
+
+.seat-badge {
+  animation: seat-badge-glow 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seat-badge { animation: none; }
+}

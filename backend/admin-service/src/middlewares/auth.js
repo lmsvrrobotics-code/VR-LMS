@@ -153,7 +153,10 @@ const optionalAuth = async (req, _res, next) => {
             if (payload) {
                 const profile = await loadProfile(payload.sub, payload.email);
                 if (profile) {
-                    req.authUser = { userId: String(profile.userId), role: profile.role };
+                    // email is carried so email-keyed lookups (e.g. a student's
+                    // founder-meeting registrations made before user_id capture)
+                    // can match on it, falling back from the verified id.
+                    req.authUser = { userId: String(profile.userId), role: profile.role, email: profile.email || payload.email || null };
                     return next();
                 }
             }

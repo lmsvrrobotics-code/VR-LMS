@@ -44,7 +44,7 @@ const flush = () => Promise.all(Array.from(pending));
 
 const getHistory = (courseId, userId) => {
     courseId = Number(courseId);
-    userId = Number(userId);
+    userId = String(userId ?? '').trim();
     return histories.find((h) => h.course_id === courseId && h.student_id === userId) || null;
 };
 
@@ -59,8 +59,8 @@ const getHistoryDb = async (courseId, userId) => {
     // actually works (a numeric value triggers "varchar = bigint" and fails).
     const uid = String(userId == null ? '' : userId).trim();
     if (!courseId || !uid) return null;
-    const { LessonCompletion, UserProgress } = models();
-    const [completions, prog] = await Promise.all([
+    const { LessonCompletion, UserProgress, LessonWatchProgress } = models();
+    const [completions, prog, watched] = await Promise.all([
         LessonCompletion.findAll({
             where: { user_id: uid, course_id: courseId },
             attributes: ['lesson_id'],
@@ -71,23 +71,37 @@ const getHistoryDb = async (courseId, userId) => {
             attributes: ['last_lesson_id'],
             raw: true,
         }),
+        // Watched high-water mark per lesson, so the player can resume a
+        // half-finished video where the student left it instead of at 0.
+        LessonWatchProgress.findAll({
+            where: { user_id: uid, course_id: courseId },
+            attributes: ['lesson_id', 'current_duration'],
+            raw: true,
+        }).catch(() => []),
     ]);
     return {
         course_id: courseId,
         student_id: userId,
         watching_lesson_id: prog?.last_lesson_id ? Number(prog.last_lesson_id) : null,
         completed_lesson: completions.map((c) => Number(c.lesson_id)),
+        // { [lesson_id]: seconds }
+        watched_seconds: watched.reduce((acc, w) => {
+            acc[Number(w.lesson_id)] = Number(w.current_duration) || 0;
+            return acc;
+        }, {}),
     };
 };
 
 const listHistoriesForUser = (userId) => {
-    userId = Number(userId);
+    userId = String(userId ?? '').trim();
     return histories.filter((h) => h.student_id === userId);
 };
 
 const ensureHistory = (courseId, lessonId, userId) => {
     courseId = Number(courseId);
-    userId = Number(userId);
+    // user_id is VARCHAR and often non-numeric; Number() collapsed every such
+    // student onto a single NaN key in the in-memory cache.
+    userId = String(userId ?? '').trim();
     let h = histories.find((x) => x.course_id === courseId && x.student_id === userId);
     if (!h) {
         h = { course_id: courseId, student_id: userId, watching_lesson_id: Number(lessonId) || null, completed_lesson: [] };
@@ -130,7 +144,7 @@ const markLessonComplete = (courseId, lessonId, userId) => {
 const getDuration = (courseId, lessonId, userId) => {
     courseId = Number(courseId);
     lessonId = Number(lessonId);
-    userId = Number(userId);
+    userId = String(userId ?? '').trim();
     return durations.find(
         (d) => d.course_id === courseId && d.lesson_id === lessonId && d.student_id === userId,
     ) || null;
@@ -139,7 +153,10 @@ const getDuration = (courseId, lessonId, userId) => {
 const upsertDuration = (courseId, lessonId, userId, seconds) => {
     courseId = Number(courseId);
     lessonId = Number(lessonId);
-    userId = Number(userId);
+    // user_id is VARCHAR and often non-numeric (e.g. "VR20260701-01").
+    // Number() turned those into NaN, so the cache key never matched and the
+    // row was never written. Keep the trimmed string.
+    userId = String(userId ?? '').trim();
     seconds = Math.max(0, Math.floor(Number(seconds) || 0));
     let d = durations.find(
         (x) => x.course_id === courseId && x.lesson_id === lessonId && x.student_id === userId,
@@ -150,24 +167,29 @@ const upsertDuration = (courseId, lessonId, userId, seconds) => {
         capArray(durations);
     }
     const next = Math.max(d.current_duration, seconds);
-    const grew = next > d.current_duration;
     d.current_duration = next;
     if (!d.watched_counter.includes(seconds)) d.watched_counter.push(seconds);
 
     // Only write when the high-water mark actually advanced — avoids hammering
     // MySQL with one update every 5s of identical playback position.
-    if (grew) {
-        persist(async () => {
-            const { LessonWatchProgress } = models();
-            const [row, created] = await LessonWatchProgress.findOrCreate({
-                where: { user_id: String(userId), lesson_id: lessonId },
-                defaults: { user_id: String(userId), course_id: courseId, lesson_id: lessonId, current_duration: next },
-            });
-            if (!created && row.current_duration < next) {
-                await row.update({ current_duration: next });
-            }
+    // Always persist, not only when the high-water mark advanced: `updated_at`
+    // is what "Last opened" reads, so re-watching a finished lesson has to
+    // touch the row even though current_duration does not change. The write is
+    // still cheap — one row per (user, lesson), at most once per 5s tick.
+    persist(async () => {
+        const { LessonWatchProgress } = models();
+        const [row, created] = await LessonWatchProgress.findOrCreate({
+            where: { user_id: userId, lesson_id: lessonId },
+            defaults: { user_id: userId, course_id: courseId, lesson_id: lessonId, current_duration: next },
         });
-    }
+        if (!created) {
+            // `changed('updated_at', true)` forces a touch even when no column
+            // value differs, which is exactly the re-open case.
+            if (row.current_duration < next) row.set('current_duration', next);
+            row.changed('updated_at', true);
+            await row.save();
+        }
+    });
     return d;
 };
 

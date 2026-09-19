@@ -59,7 +59,7 @@ export default function SectionSort({ sections, onDone, onClose }) {
         }
     };
 
-    if (items.length === 0) return <div className="text-[14px] text-gray">No sections to sort.</div>;
+    if (items.length === 0) return <div className="text-[14px] text-gray">No sessions to sort.</div>;
 
     return (
         <div>

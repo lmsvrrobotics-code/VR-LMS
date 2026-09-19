@@ -3,7 +3,7 @@
 // Every admin route that accepts an image posts multipart/form-data. Only multer
 // parses that content type (express.json/urlencoded ignore it), so upload.single()
 // MUST run before validateBody() — with the order reversed the validator saw an
-// empty req.body and rejected EVERY create/update with 400 "Validation failed",
+// empty req.body and rejected EVERY create/update with a 400 validation error,
 // which is exactly what broke Create Teacher.
 //
 // These drive the real middleware chain over a real HTTP socket with a real
@@ -73,7 +73,11 @@ test('REGRESSION: validateBody before upload.single 400s even on a valid payload
     try {
         const { status, json } = await postMultipart(port, VALID_TEACHER);
         assert.equal(status, 400);
-        assert.equal(json.error, 'Validation failed');
+        // `error` now carries the first real problem rather than the constant
+        // "Validation failed" (which told the user nothing about which box to
+        // fix). The point of this test is the 400 + the field list below, not
+        // the exact wording, so assert the shape.
+        assert.match(json.error, /required/i);
         // It complains the fields are missing — they were merely unparsed.
         const failed = json.details.map((d) => d.field).sort();
         assert.deepEqual(failed, ['email', 'name', 'password']);

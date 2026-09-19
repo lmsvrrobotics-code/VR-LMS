@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useDashboardTheme } from "@/hooks/useDashboardTheme";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import {
-  getMyCourses, getMyTeacherFeedbackByTeacher,
+  getCourseCatalogue, getMyTeacherFeedbackByTeacher,
   type MyFeedbackByTeacher as MyFeedbackByTeacherRow,
 } from "@/api/course/courseApi";
 import {
@@ -13,17 +12,19 @@ import {
 } from "@/api/studentAssignmentApi";
 import {
   getAssignmentState, getSubmission, summarizeAssignments, averageProgress, greeting,
-  displayName, firstName, initialsOf, getClassState, canJoinClass,
+  firstName, getClassState, canJoinClass,
   msUntilStart, shouldCountDown, formatCountdown, splitSchedule,
   type AssignmentState,
 } from "@/lib/assignmentStatus";
 import FeedbackFormsInbox from "@/pages/FeedbackFormsInbox";
+import StudentSidebar from "@/components/student/StudentSidebar";
+import FounderMeetingsView from "@/components/student/FounderMeetingsView";
 import { toast } from "react-toastify";
 import {
-  Menu, X, Power, LayoutDashboard, MonitorPlay, ClipboardList, MessageSquare,
+  Menu, LayoutDashboard, MonitorPlay, ClipboardList, MessageSquare,
   GraduationCap, ArrowRight, CheckCircle2, Clock, AlertTriangle, FileText,
   BadgeCheck, TrendingUp, CalendarClock, Target, Upload, Filter, Video, CalendarDays,
-  Timer, Paperclip, Link as LinkIcon,
+  Timer, Paperclip, Link as LinkIcon, Lock,
 } from "lucide-react";
 
 /**
@@ -59,6 +60,7 @@ const navItems = [
   { name: "Dashboard", icon: LayoutDashboard },
   { name: "My Courses", icon: MonitorPlay },
   { name: "My Assignments", icon: ClipboardList },
+  { name: "Founder Meetings", icon: CalendarClock },
   { name: "Feedback", icon: MessageSquare },
 ] as const;
 
@@ -73,7 +75,20 @@ interface MyCourse {
   short_description?: string;
   thumbnail?: string;
   banner?: string;
+  level?: string;
+  /**
+   * True when the student has NOT been granted this course. My Courses lists
+   * the whole published catalogue so students can see what exists; locked
+   * cards are shown but not openable. Access itself is enforced server-side —
+   * this flag is presentational only.
+   */
+  locked?: boolean;
   lesson_count?: number;
+  // Real completed/total class counts from /my-courses. Both are derived
+  // server-side from the same numbers that produce `progress`, so the card
+  // can say "3 of 8 classes" without a second request.
+  completed_lesson_count?: number;
+  has_certificate?: boolean;
   progress?: number;
 }
 
@@ -264,19 +279,35 @@ const StateBadge = ({ state }: { state: AssignmentState }) => {
 const primaryBtn =
   "inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-hero px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-105 disabled:opacity-60";
 
-/** Loads the student's enrolled courses once; shared by Dashboard + My Courses. */
+/**
+ * Loads the course list once; shared by Dashboard + My Courses.
+ *
+ * /my-courses returns the whole PUBLISHED CATALOGUE, with `locked` marking the
+ * ones the student has not been granted. Two lists come back from this hook
+ * because they answer different questions and conflating them produces wrong
+ * numbers:
+ *
+ *   `courses` — everything, for the My Courses grid (locked cards included).
+ *   `myCourses` — only what the student can actually open. Every COUNT,
+ *                 AVERAGE and "continue learning" list must use this one, or a
+ *                 student with one course out of ten reads "10 enrolled
+ *                 courses" and an average progress diluted to a tenth.
+ */
 function useMyCourses() {
   const [courses, setCourses] = useState<MyCourse[]>([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let alive = true;
-    getMyCourses()
+    // The CATALOGUE (locked entries included) — this shell is the one place
+    // that renders them. getMyCourses() would filter them out.
+    getCourseCatalogue()
       .then((rows) => { if (alive) setCourses((rows as MyCourse[]) || []); })
       .catch(() => { if (alive) setCourses([]); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, []);
-  return { courses, loading };
+  const myCourses = useMemo(() => courses.filter((c) => !c.locked), [courses]);
+  return { courses, myCourses, loading };
 }
 
 /** Loads the student's assignments; `reload` re-fetches after a submission. */
@@ -313,16 +344,79 @@ function useMyClasses() {
 
 // --- Course card ------------------------------------------------------------
 
+/** easy/medium/hard → filled bars, mirroring the class cards in CourseDetails. */
+const LEVEL_STEPS: Record<string, number> = {
+  beginner: 1, easy: 1,
+  intermediate: 2, medium: 2,
+  advanced: 3, hard: 3, expert: 3,
+};
+
+/**
+ * Three-segment difficulty meter. Same visual language as the class cards on
+ * the curriculum page, so a course and the classes inside it read as one system.
+ */
+const LevelMeter = ({ level }: { level?: string }) => {
+  const key = String(level || "").toLowerCase();
+  const steps = LEVEL_STEPS[key];
+  if (!steps) return null;
+  return (
+    <span className="inline-flex items-center gap-1.5" title={`Level: ${key}`}>
+      <span className="flex items-end gap-[3px]" aria-hidden="true">
+        {[1, 2, 3].map((i) => (
+          <span
+            key={i}
+            className={`w-[3px] rounded-sm transition-colors ${
+              i <= steps ? "bg-primary" : "bg-muted-foreground/25"
+            }`}
+            style={{ height: `${5 + i * 3}px` }}
+          />
+        ))}
+      </span>
+      <span className="text-xs font-medium capitalize text-muted-foreground">{key}</span>
+    </span>
+  );
+};
+
+/** Open ring with an overshooting check — the completion mark used site-wide. */
+const CompletedRing = ({ className = "" }: { className?: string }) => (
+  <svg viewBox="0 0 48 48" fill="none" aria-hidden="true" className={className}>
+    <circle
+      cx="24" cy="24" r="19" stroke="currentColor" strokeWidth="6"
+      strokeLinecap="round" strokeDasharray="99 120" transform="rotate(-12 24 24)"
+    />
+    <path
+      d="M14 24.5 L22 33 L37 12" stroke="currentColor" strokeWidth="7.5"
+      strokeLinecap="round" strokeLinejoin="round"
+    />
+  </svg>
+);
+
 const CourseCard = ({ c }: { c: MyCourse }) => {
+  const locked = !!c.locked;
   const pct = Math.max(0, Math.min(100, Math.round(Number(c.progress) || 0)));
   const done = pct >= 100;
-  const cta = done ? "Review course" : pct > 0 ? "Continue" : "Start learning";
+  const started = pct > 0;
+  const cta = done ? "Review course" : started ? "Continue" : "Start learning";
   const thumb = c.thumbnail || c.banner || "";
+  const total = Number(c.lesson_count) || 0;
+  const finished = Math.min(Number(c.completed_lesson_count) || 0, total);
+
+  // A locked course is listed so the student knows it exists, but it is not a
+  // link: rendering it as one would offer a route that the server refuses,
+  // which reads as a broken page rather than as "you don't have this yet".
+  const Wrapper = locked ? "div" : Link;
+  const wrapperProps = locked
+    ? { "aria-label": `${c.title} — locked` }
+    : { to: `/courses/${c.slug}`, "aria-label": `${cta}: ${c.title}` };
+
   return (
-    <Link
-      to={`/courses/programs/course-details/play/${c.slug}`}
-      className="group flex flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-      aria-label={`${cta}: ${c.title}`}
+    <Wrapper
+      {...(wrapperProps as never)}
+      className={`group relative flex flex-col overflow-hidden rounded-2xl border bg-card shadow-sm transition-all duration-300 ${
+        locked
+          ? "border-border/50 cursor-not-allowed"
+          : "border-border/70 hover:-translate-y-1 hover:border-primary/40 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+      }`}
     >
       <div className="relative aspect-[16/9] overflow-hidden bg-muted">
         {thumb ? (
@@ -330,23 +424,68 @@ const CourseCard = ({ c }: { c: MyCourse }) => {
             src={thumb}
             alt=""
             loading="lazy"
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            className={`h-full w-full object-cover transition-transform duration-500 ${
+              locked ? "opacity-45 grayscale" : "group-hover:scale-105"
+            }`}
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-hero">
-            <GraduationCap className="h-12 w-12 text-white/80" />
+          // No artwork yet: a soft branded panel with a faint motif, rather
+          // than a flat colour slab that reads as a loading failure.
+          <div className="relative flex h-full w-full items-center justify-center overflow-hidden bg-gradient-hero">
+            <GraduationCap
+              className="absolute -right-4 -top-3 h-28 w-28 rotate-12 text-white/10"
+              aria-hidden="true"
+            />
+            <GraduationCap className="relative h-12 w-12 text-white/85" aria-hidden="true" />
           </div>
         )}
+
+        {/* Scrim: keeps the badges legible over any thumbnail. */}
+        <div
+          className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent"
+          aria-hidden="true"
+        />
+
         {/* A finished course earns a visible marker. */}
-        {done && (
-          <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2.5 py-1 text-xs font-semibold text-white shadow-sm">
-            <BadgeCheck className="h-3.5 w-3.5" /> Completed
+        {locked ? (
+          <span className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-background/90 px-2.5 py-1 text-xs font-semibold text-muted-foreground shadow-sm backdrop-blur">
+            <Lock className="h-3.5 w-3.5" aria-hidden="true" /> Locked
+          </span>
+        ) : done ? (
+          <span className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-2.5 py-1 text-xs font-semibold text-white shadow-md">
+            <CompletedRing className="h-3.5 w-3.5" /> Completed
+          </span>
+        ) : started ? (
+          // Mid-course: surface the number on the art so progress is readable
+          // at a glance while scanning the grid.
+          <span className="absolute right-3 top-3 rounded-full bg-background/90 px-2.5 py-1 text-xs font-bold tabular-nums text-primary shadow-sm backdrop-blur">
+            {pct}%
+          </span>
+        ) : null}
+
+        {/* Class count, bottom-left over the scrim. */}
+        {total > 0 && (
+          <span className="absolute bottom-3 left-3 inline-flex items-center gap-1.5 text-xs font-semibold text-white drop-shadow">
+            <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+            {total} {total === 1 ? "class" : "classes"}
           </span>
         )}
       </div>
 
       <div className="flex flex-1 flex-col p-5">
-        <h3 className="line-clamp-2 font-semibold leading-snug transition-colors group-hover:text-primary">
+        {/* Meta line: difficulty + certificate, matching the class cards. */}
+        {(c.level || c.has_certificate) && (
+          <div className="mb-2 flex items-center gap-3">
+            <LevelMeter level={c.level} />
+            {c.has_certificate && (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
+                <BadgeCheck className="h-3.5 w-3.5" aria-hidden="true" /> Certificate
+              </span>
+            )}
+          </div>
+        )}
+
+        <h3 className={`line-clamp-2 font-semibold leading-snug transition-colors ${locked ? "" : "group-hover:text-primary"}`}>
           {c.title}
         </h3>
         {c.short_description && (
@@ -356,23 +495,38 @@ const CourseCard = ({ c }: { c: MyCourse }) => {
         )}
 
         <div className="mt-auto pt-5">
-          <div className="mb-1.5 flex items-center justify-between text-xs">
-            <span className="font-semibold tabular-nums">{pct}%</span>
-            {(c.lesson_count || 0) > 0 && (
-              <span className="inline-flex items-center gap-1 text-muted-foreground">
-                <FileText className="h-3.5 w-3.5" />
-                {c.lesson_count} {c.lesson_count === 1 ? "lesson" : "lessons"}
-              </span>
-            )}
-          </div>
-          <ProgressBar pct={pct} />
-          <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-4">
-            <span className="text-sm font-semibold text-primary">{cta}</span>
-            <ArrowRight className="h-4 w-4 text-primary transition-transform group-hover:translate-x-1" />
-          </div>
+          {locked ? (
+            /* No progress bar: a 0% bar on a course they have never been able
+               to open reads as "you have done nothing", not "you don't have
+               access". Say what would actually unlock it instead. */
+            <div className="flex items-center gap-2 border-t border-border/60 pt-4 text-sm text-muted-foreground">
+              <Lock className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>Ask your admin to enrol you</span>
+            </div>
+          ) : (
+            <>
+              <div className="mb-1.5 flex items-center justify-between text-xs">
+                <span className="font-semibold tabular-nums">
+                  {done ? "Complete" : `${pct}% complete`}
+                </span>
+                {total > 0 && (
+                  <span className="tabular-nums text-muted-foreground">
+                    {finished} of {total}
+                  </span>
+                )}
+              </div>
+              <ProgressBar pct={pct} />
+              <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-4">
+                <span className="text-sm font-semibold text-primary">{cta}</span>
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary transition-all duration-300 group-hover:bg-primary group-hover:text-white">
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </span>
+              </div>
+            </>
+          )}
         </div>
       </div>
-    </Link>
+    </Wrapper>
   );
 };
 
@@ -381,21 +535,38 @@ const CourseCardSkeleton = () => (
   <div className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
     <Skeleton className="aspect-[16/9] rounded-none" />
     <div className="space-y-3 p-5">
+      <Skeleton className="h-3 w-20" />
       <Skeleton className="h-5 w-3/4" />
       <Skeleton className="h-3 w-full" />
       <Skeleton className="h-2 w-full rounded-full" />
+      <Skeleton className="h-8 w-full" />
     </div>
   </div>
 );
 
-const MyCoursesView = () => {
-  const { courses, loading } = useMyCourses();
+/** Responsive card grid, shared by both My Courses sections. */
+const CourseGrid = ({ items }: { items: MyCourse[] }) => (
+  <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+    {items.map((c) => <CourseCard key={c.id} c={c} />)}
+  </div>
+);
 
-  const inProgress = courses.filter((c) => {
+const MyCoursesView = () => {
+  const { courses, myCourses: mine, loading } = useMyCourses();
+
+  // Two sections: what the student can actually work on, and the rest of the
+  // catalogue. Splitting them beats one mixed grid because the locked cards
+  // are reference material, not work — interleaved, they bury the two courses
+  // the student is actually taking among a dozen they cannot open.
+  const locked = courses.filter((c) => c.locked);
+
+  // Counts describe the student's OWN courses; locked entries are counted
+  // separately rather than inflating "3 courses" to the whole catalogue.
+  const inProgress = mine.filter((c) => {
     const p = Number(c.progress) || 0;
     return p > 0 && p < 100;
   }).length;
-  const completed = courses.filter((c) => (Number(c.progress) || 0) >= 100).length;
+  const completed = mine.filter((c) => (Number(c.progress) || 0) >= 100).length;
 
   return (
     <div className="space-y-6">
@@ -407,7 +578,8 @@ const MyCoursesView = () => {
             ? "Loading your courses…"
             : courses.length === 0
               ? "Courses you enrol in appear here."
-              : `${courses.length} ${courses.length === 1 ? "course" : "courses"} · ${inProgress} in progress · ${completed} completed`
+              : `${mine.length} ${mine.length === 1 ? "course" : "courses"} · ${inProgress} in progress · ${completed} completed`
+                + (locked.length ? ` · ${locked.length} locked` : "")
         }
         action={
           courses.length > 0 ? (
@@ -418,11 +590,13 @@ const MyCoursesView = () => {
         }
       />
 
-      {loading ? (
+      {loading && (
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => <CourseCardSkeleton key={i} />)}
         </div>
-      ) : courses.length === 0 ? (
+      )}
+
+      {!loading && courses.length === 0 && (
         <Card>
           <EmptyState
             icon={GraduationCap}
@@ -435,10 +609,60 @@ const MyCoursesView = () => {
             }
           />
         </Card>
-      ) : (
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-          {courses.map((c) => <CourseCard key={c.id} c={c} />)}
-        </div>
+      )}
+
+      {!loading && courses.length > 0 && (
+        <>
+          {/* Enrolled — always rendered when any course exists, so a student
+              with none still sees WHY this section is empty rather than
+              landing straight in a wall of locked cards. */}
+          <Card flush className="p-5 sm:p-6">
+            <CardTitle
+              icon={MonitorPlay}
+              action={
+                mine.length > 0 ? (
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {mine.length} {mine.length === 1 ? "course" : "courses"}
+                  </span>
+                ) : undefined
+              }
+            >
+              Enrolled
+            </CardTitle>
+            {mine.length > 0 ? (
+              <CourseGrid items={mine} />
+            ) : (
+              <EmptyState
+                icon={GraduationCap}
+                title="You're not enrolled in a course yet"
+                text="Ask your admin to add you to a batch. Courses you can take will appear here."
+              />
+            )}
+          </Card>
+
+          {/* Available — the rest of the catalogue. Omitted entirely when the
+              student already has access to everything, rather than showing an
+              empty section that implies something is missing. */}
+          {locked.length > 0 && (
+            <Card flush className="p-5 sm:p-6">
+              <CardTitle
+                icon={Lock}
+                action={
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {locked.length} {locked.length === 1 ? "course" : "courses"}
+                  </span>
+                }
+              >
+                Available to enrol
+              </CardTitle>
+              <p className="-mt-2 mb-4 text-sm text-muted-foreground">
+                These are part of the catalogue but not assigned to you yet. Ask
+                your admin to enrol you.
+              </p>
+              <CourseGrid items={locked} />
+            </Card>
+          )}
+        </>
       )}
     </div>
   );
@@ -917,7 +1141,10 @@ const ClassRow = ({ c }: { c: StudentClass }) => {
 // --- Dashboard (overview) ---------------------------------------------------
 
 const OverviewView = ({ name, onGoTo }: { name: string; onGoTo: (t: TabName) => void }) => {
-  const { courses, loading: coursesLoading } = useMyCourses();
+  // `myCourses` (granted only), NOT the full catalogue: every figure on this
+  // page describes the student's own work. Counting locked courses would
+  // report a catalogue size as "enrolled courses" and dilute the average.
+  const { myCourses: courses, loading: coursesLoading } = useMyCourses();
   const { items: assignments, loading: aLoading } = useMyAssignments();
   const { classes, loading: classesLoading } = useMyClasses();
 
@@ -1376,7 +1603,17 @@ const FeedbackView = () => {
 // --- Shell ------------------------------------------------------------------
 
 const StudentDashboardShell = () => {
-  const [active, setActive] = useState<TabName>("Dashboard");
+  // A page outside the shell (the course page's sidebar) can request a tab via
+  // router state; otherwise open on Dashboard.
+  const location = useLocation();
+  const requestedTab = (location.state as { tab?: TabName } | null)?.tab;
+  const [active, setActive] = useState<TabName>(requestedTab || "Dashboard");
+
+  // Honour a later navigation to the same route with a different tab, which
+  // does not remount the component.
+  useEffect(() => {
+    if (requestedTab) setActive(requestedTab);
+  }, [requestedTab]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, logoutUser } = useAuth();
   const { isDark } = useDashboardTheme();
@@ -1391,77 +1628,25 @@ const StudentDashboardShell = () => {
        shell). It repaints the hardcoded light utilities used by reused tab
        content — notably FeedbackFormsInbox's bg-white / text-gray-* / inputs —
        which the shadcn token flip alone does not cover. */
-    <div className={`flex bg-muted/40 ${isDark ? "dark dash-dark" : ""}`}>
+    <div className={`flex bg-muted/40 lg:pl-[76px] ${isDark ? "dark dash-dark" : ""}`}>
       {/* Backdrop for the mobile drawer. Sits below the site Navbar (z-50) so
           the navbar stays reachable while the drawer is open. */}
       {sidebarOpen && (
         <div className="lg:hidden fixed inset-0 z-30 bg-black/40" onClick={() => setSidebarOpen(false)} aria-hidden="true" />
       )}
 
-      {/* Sidebar — drawer on mobile, sticky on desktop.
+      {/* Sidebar — drawer on mobile, hover-expanding icon rail on desktop.
           The shell renders BELOW the sticky site Navbar (h-16 mobile / h-20
           desktop, z-50), so the sidebar is offset by that height instead of
           spanning the full viewport: `top-16 lg:top-20` with a matching
           height, and z-40 so it never covers the navbar. */}
-      <aside className={`w-64 shrink-0 bg-gradient-to-b from-[#fff6ee] to-white dark:from-[#16161f] dark:to-[#101019] border-r border-orange-100 dark:border-white/10 flex flex-col
-        fixed left-0 top-16 lg:top-20 h-[calc(100vh-4rem)] lg:h-[calc(100vh-5rem)] z-40
-        transform transition-transform duration-200
-        lg:sticky lg:translate-x-0
-        ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
-        <button type="button" onClick={() => setSidebarOpen(false)} aria-label="Close menu" className="lg:hidden absolute top-4 right-4 text-muted-foreground hover:text-primary">
-          <X className="w-6 h-6" />
-        </button>
-
-        {/* The site Navbar already shows the brand, so the sidebar header
-            greets the student by the name they registered with, alongside the
-            dashboard-scoped theme toggle. `title` exposes the full name when a
-            long one is truncated. */}
-        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-orange-100 dark:border-white/10">
-          <div className="flex items-center gap-3 min-w-0">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-hero text-sm font-bold text-white">
-              {initialsOf(user)}
-            </span>
-            <div className="min-w-0">
-              <p className="text-xs text-muted-foreground leading-tight">{greeting()},</p>
-              <p className="truncate font-semibold leading-tight" title={displayName(user)}>
-                {firstName(user)}
-              </p>
-            </div>
-          </div>
-          <ThemeToggle />
-        </div>
-
-        <nav className="flex-1 overflow-y-auto py-4 space-y-1">
-          {navItems.map((item) => {
-            const on = active === item.name;
-            return (
-              <button
-                key={item.name}
-                onClick={() => go(item.name)}
-                aria-current={on ? "page" : undefined}
-                className={`w-full flex items-center gap-3 px-6 py-3 text-sm font-medium transition-colors ${
-                  on
-                    ? "bg-primary/10 text-primary border-r-4 border-primary"
-                    : "text-muted-foreground hover:bg-orange-50 dark:hover:bg-white/5 hover:text-foreground"
-                }`}
-              >
-                <item.icon className="w-5 h-5 shrink-0" />
-                <span className="flex-1 text-left">{item.name}</span>
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* Logout actually ends the session — the teacher shell's Link to "/"
-            only navigated away and left the token in place. */}
-        <button
-          type="button"
-          onClick={() => { void logoutUser(); }}
-          className="flex items-center gap-3 px-6 py-4 text-sm font-semibold text-red-500 border-t border-orange-100 dark:border-white/10 hover:bg-red-50 dark:hover:bg-red-500/10"
-        >
-          <Power className="w-5 h-5" /> Logout
-        </button>
-      </aside>
+      <StudentSidebar
+        collapsible
+        active={active}
+        onNavigate={go}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
 
       {/* min-w-0 stops wide content (course grids, tables) from forcing the
           flex row wider than the viewport and scrolling the page sideways. */}
@@ -1485,6 +1670,8 @@ const StudentDashboardShell = () => {
           <MyCoursesView />
         ) : active === "My Assignments" ? (
           <MyAssignmentsView />
+        ) : active === "Founder Meetings" ? (
+          <FounderMeetingsView />
         ) : (
           <FeedbackView />
         )}

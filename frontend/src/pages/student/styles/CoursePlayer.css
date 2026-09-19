@@ -18,13 +18,19 @@
     height: 60px;
 }
 
-.header-left {
+/* Scoped to this page's root.
+   These were bare `.header-left` / `.back-btn` selectors. Both names are also
+   used by CourseDetails.css, and because this stylesheet loads later its
+   rules won every time — so the course page's back button silently rendered
+   with THIS grey #333 instead of its own styling, no matter what
+   CourseDetails.css said. */
+.course-player-container .header-left {
     display: flex;
     align-items: center;
     gap: 16px;
 }
 
-.back-btn {
+.course-player-container .back-btn {
     padding: 8px 12px;
     border: none;
     background: #f0f0f0;
@@ -36,18 +42,18 @@
     transition: all 0.2s;
 }
 
-.back-btn:hover {
+.course-player-container .back-btn:hover {
     background: #e0e0e0;
 }
 
-.header-left h2 {
+.course-player-container .header-left h2 {
     margin: 0;
     font-size: 20px;
     font-weight: 600;
     color: #1a1a1a;
 }
 
-.header-right {
+.course-player-container .header-right {
     display: flex;
     gap: 12px;
 }
@@ -137,7 +143,7 @@
     background: #2a2a2a;
 }
 
-.progress-bar {
+.course-player-container .progress-bar {
     width: 100%;
     height: 6px;
     background: #444;
@@ -147,7 +153,7 @@
     cursor: pointer;
 }
 
-.progress-fill {
+.course-player-container .progress-fill {
     height: 100%;
     background: #ff6a00;
     border-radius: 3px;
@@ -425,3 +431,40 @@
 .lessons-list::-webkit-scrollbar-thumb:hover {
     background: #999;
 }
+
+/* ───── Dark mode ─────
+ *
+ * This stylesheet hardcodes light-theme colours (#1a1a1a text on #fff panels),
+ * which the token system cannot reach. On the dark charcoal ground that text
+ * renders at roughly 1.1:1 contrast — effectively invisible.
+ *
+ * The page renders inside the `dash-dark` scope (see index.css), so these
+ * repaint the same surfaces using the shared ramp:
+ *   #131210 page · #1E1C1A card · #262321 raised · #E9E6E4 ink · #A9A29E muted
+ */
+
+.dash-dark .course-player-container { background: #131210; color: #E9E6E4; }
+
+.dash-dark .course-player-container .header-left h2,
+.dash-dark .sidebar-header h3,
+.dash-dark .lesson-content h4 { color: #E9E6E4; }
+
+.dash-dark .course-player-container .back-btn {
+    background: rgba(255, 255, 255, 0.08);
+    color: #E9E6E4;
+}
+.dash-dark .course-player-container .back-btn:hover { background: rgba(255, 255, 255, 0.14); }
+
+.dash-dark .player-header,
+.dash-dark .player-sidebar,
+.dash-dark .lesson-content {
+    background: #1E1C1A;
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+.dash-dark .fullscreen-btn:hover,
+.dash-dark .menu-btn:hover { color: #E9E6E4; }
+
+.dash-dark .cp-item { border-color: rgba(255, 255, 255, 0.08); }
+.dash-dark .cp-item:hover { background: rgba(255, 255, 255, 0.05); }
+.dash-dark .video-title { color: #E9E6E4; }

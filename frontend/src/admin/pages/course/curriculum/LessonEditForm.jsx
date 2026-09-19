@@ -3,6 +3,7 @@ import { toast } from 'react-toastify';
 import { getLesson, updateLesson } from '../../../api/curriculum';
 import { detectVideoDuration } from './videoDuration';
 import BunnyVideoUploader from './BunnyVideoUploader';
+import ClassMetaFields from './ClassMetaFields';
 
 const URL_TYPES = ['video-url', 'vimeo-url', 'html5', 'google_drive'];
 const DOC_PROVIDERS = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt'];
@@ -39,6 +40,12 @@ export default function LessonEditForm({ lessonId, sections, onDone }) {
     const [saving, setSaving] = useState(false);
     const [loading, setLoading] = useState(true);
     const [detectingDuration, setDetectingDuration] = useState(false);
+    // Class metadata: cover image, long-form description, difficulty level.
+    const [thumbnail, setThumbnail] = useState(null);
+    const [existingThumbnail, setExistingThumbnail] = useState(null);
+    const [removeThumbnail, setRemoveThumbnail] = useState(false);
+    const [description, setDescription] = useState('');
+    const [difficulty, setDifficulty] = useState('');
 
     const handleUrlChange = (value) => {
         setLessonSrc(value);
@@ -60,6 +67,9 @@ export default function LessonEditForm({ lessonId, sections, onDone }) {
                 setSectionId(l.section_id || '');
                 setSummary(l.summary || '');
                 setFree(!!l.is_free);
+                setExistingThumbnail(l.thumbnail || null);
+                setDescription(l.description || '');
+                setDifficulty(l.difficulty || '');
                 setLessonSrc(l.lesson_src || '');
                 setDuration(l.duration || '00:00:00');
                 if (l.lesson_type === 'iframe') setIframeSource(l.lesson_src || '');
@@ -77,14 +87,33 @@ export default function LessonEditForm({ lessonId, sections, onDone }) {
     const submit = async (e) => {
         e.preventDefault();
         if (!lesson) return;
+
+        // Meaningful, field-specific validation up front (mirrors the Add form).
+        const cleanTitle = title.trim();
+        if (!cleanTitle) { toast.error('Enter a lesson name.'); return; }
+        if (cleanTitle.length < 3) { toast.error('Lesson name must be at least 3 characters.'); return; }
+        if (!sectionId) { toast.error('Choose a session for this lesson.'); return; }
+
+        const durationTypes = URL_TYPES.includes(lesson.lesson_type) || lesson.lesson_type === 'system-video';
+        if (durationTypes && duration && duration !== '00:00:00') {
+            if (!/^(\d{1,2}):([0-5]\d):([0-5]\d)$/.test(duration.trim())) {
+                toast.error('Duration must be in HH:MM:SS format, e.g. 01:05:30.');
+                return;
+            }
+        }
+
         setSaving(true);
         try {
             const fd = new FormData();
             fd.append('id', lesson.id);
             fd.append('section_id', sectionId);
-            fd.append('title', title);
+            fd.append('title', cleanTitle);
             fd.append('summary', summary || '');
             fd.append('lesson_type', lesson.lesson_type);
+            fd.append('description', description || '');
+            fd.append('difficulty', difficulty || '');
+            if (thumbnail) fd.append('thumbnail', thumbnail);
+            if (removeThumbnail) fd.append('remove_thumbnail', '1');
 
             if (URL_TYPES.includes(lesson.lesson_type)) {
                 fd.append('lesson_src', lessonSrc);
@@ -107,9 +136,10 @@ export default function LessonEditForm({ lessonId, sections, onDone }) {
             }
 
             await updateLesson(fd);
+            toast.success('Lesson updated.');
             onDone();
         } catch (err) {
-            toast.error(err.response?.data?.error || 'Failed');
+            toast.error(err.response?.data?.error || 'Could not update the lesson. Please try again.');
         } finally {
             setSaving(false);
         }
@@ -127,12 +157,12 @@ export default function LessonEditForm({ lessonId, sections, onDone }) {
             </div>
 
             <div className="mb-3">
-                <label className="ol-form-label">Title</label>
+                <label className="ol-form-label">Lesson name</label>
                 <input className="ol-form-control" value={title} onChange={(e) => setTitle(e.target.value)} required autoFocus />
             </div>
 
             <div className="mb-3">
-                <label className="ol-form-label">Section</label>
+                <label className="ol-form-label">Session</label>
                 <select className="ol-form-control" value={sectionId} onChange={(e) => setSectionId(e.target.value)} required>
                     {sections.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
                 </select>
@@ -234,6 +264,17 @@ export default function LessonEditForm({ lessonId, sections, onDone }) {
                     </div>
                 </>
             )}
+
+            <ClassMetaFields
+                image={thumbnail}
+                onImageChange={(f) => { setThumbnail(f); if (f) setRemoveThumbnail(false); }}
+                existingImage={removeThumbnail ? null : existingThumbnail}
+                onRemoveImage={() => setRemoveThumbnail(true)}
+                description={description}
+                onDescriptionChange={setDescription}
+                difficulty={difficulty}
+                onDifficultyChange={setDifficulty}
+            />
 
             <div className="mb-3">
                 <label className="ol-form-label">Summary</label>

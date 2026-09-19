@@ -14,6 +14,7 @@ import Navbar from "@/components/layout/Navbar";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useDashboardTheme } from "@/hooks/useDashboardTheme";
 import { mergePickedFiles } from "@/lib/filePicker";
+import { labelProps, railStateClass } from "@/lib/sidebarMotion";
 // Shared with the student dashboard so both shells classify sessions, run the
 // pre-class countdown and greet the user with identical, unit-tested rules.
 import {
@@ -2728,11 +2729,16 @@ const TeacherOverview = ({
 const TeacherDashboard = () => {
   const [active, setActive] = useState("Dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Desktop rail: collapsed to icons at rest, expanded on hover. Ten nav items
+  // is a lot of permanent horizontal space for content-heavy tabs.
+  const [navHovered, setNavHovered] = useState(false);
   const { user } = useAuth();
   const { isDark } = useDashboardTheme();
 
   // Greet with the name the teacher registered with.
   const teacherFirstName = firstName(user as { name?: string | null; email?: string | null } | null);
+  // Labels show while hovered; the mobile drawer is always full-width.
+  const navExpanded = navHovered;
 
   return (
     /* Translucent surface (not the old opaque #f4f4f5) so the global VR
@@ -2744,11 +2750,14 @@ const TeacherDashboard = () => {
           Presentation only — the sidebar tabs below still drive every view. */}
       <Navbar />
 
-      <div className="flex flex-1 min-h-0">
+      {/* lg:pl-[76px] reserves the collapsed rail's slot — the sidebar is
+          position:fixed on desktop so that hovering overlays the page rather
+          than reflowing the tab content. */}
+      <div className="flex flex-1 min-h-0 lg:pl-[76px]">
       {/* Mobile top bar with menu button. Sits directly under the site navbar
           (sticky, below its 4rem mobile height) instead of fixed at top-0, so
           the two headers stack rather than overlap. */}
-      <div className="lg:hidden fixed top-16 inset-x-0 z-30 flex items-center gap-2 px-4 h-14 bg-white dark:bg-[#16161f] border-b border-orange-100 dark:border-white/10">
+      <div className="lg:hidden fixed top-16 inset-x-0 z-30 flex items-center gap-2 px-4 h-14 bg-white dark:bg-[#1E1C1A] border-b border-orange-100 dark:border-white/10">
         <button type="button" onClick={() => setSidebarOpen(true)} aria-label="Open menu" className="text-muted-foreground hover:text-primary">
           <Menu className="w-6 h-6" />
         </button>
@@ -2758,42 +2767,63 @@ const TeacherDashboard = () => {
       {sidebarOpen && (
         <div className="lg:hidden fixed inset-0 z-30 bg-black/40" onClick={() => setSidebarOpen(false)} aria-hidden="true" />
       )}
-      {/* Sidebar — drawer on mobile, static on desktop */}
+      {/* Sidebar — drawer on mobile, hover-expanding rail on desktop */}
       {/* Offsets account for the site navbar above: the mobile drawer starts
           below its 4rem bar, the desktop rail sticks below its 5rem bar and is
           shortened to match so it never scrolls past the viewport. */}
-      <aside className={`w-64 shrink-0 bg-gradient-to-b from-[#fff6ee] to-white dark:from-[#16161f] dark:to-[#101019] border-r border-orange-100 dark:border-white/10 flex flex-col h-[calc(100vh-4rem)] lg:h-[calc(100vh-5rem)]
-        fixed top-16 bottom-0 left-0 z-40 transform transition-transform duration-200
-        lg:static lg:translate-x-0 lg:sticky lg:top-20
-        ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
+      <aside
+        onMouseEnter={() => setNavHovered(true)}
+        onMouseLeave={() => setNavHovered(false)}
+        /* Stays `fixed` on desktop so expanding overlays the page instead of
+           pushing the tab content sideways on every hover. The wrapper
+           reserves the collapsed 76px slot. */
+        /* Width/padding/label easing lives in .sidebar-rail & friends
+           (index.css), shared with the student sidebar so both rails open with
+           the same motion and both honour prefers-reduced-motion. */
+        className={`sidebar-rail shrink-0 bg-gradient-to-b from-[#fff6ee] to-white dark:from-[#1E1C1A] dark:to-[#131210] border-r border-orange-100 dark:border-white/10 flex flex-col h-[calc(100vh-4rem)] lg:h-[calc(100vh-5rem)]
+        fixed top-16 bottom-0 left-0 z-40 transform overflow-hidden
+        lg:top-20
+        ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0
+        ${railStateClass(navExpanded)}`}>
         <button type="button" onClick={() => setSidebarOpen(false)} aria-label="Close menu" className="lg:hidden absolute top-4 right-4 text-muted-foreground hover:text-primary">
           <X className="w-6 h-6" />
         </button>
-        <div className="flex items-center justify-between gap-2 px-6 h-20 border-b border-orange-100 dark:border-white/10">
+        <div className={`flex items-center justify-between gap-2 h-20 border-b border-orange-100 dark:border-white/10 sidebar-pad ${navExpanded ? "px-6" : "px-[22px]"}`}>
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-9 h-9 rounded-full bg-gradient-hero shrink-0" />
-            <span className="font-heading text-xl font-extrabold truncate">
+            {/* Kept mounted and faded rather than unmounted: conditional
+                rendering popped the text in at full opacity while the panel was
+                still widening. */}
+            <span {...labelProps(navExpanded, "font-heading text-xl font-extrabold truncate whitespace-nowrap")}>
               <span className="text-gradient">VR</span> Robotics
             </span>
           </div>
-          <ThemeToggle />
+          <div {...labelProps(navExpanded, "shrink-0")}>
+            <ThemeToggle />
+          </div>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-4 space-y-1">
+        {/* sidebar-scroll: the collapsed rail hides this scrollbar (index.css).
+            Ten nav items genuinely overflow shorter viewports, so scrolling
+            must stay available once expanded. */}
+        <nav className="flex-1 overflow-y-auto sidebar-scroll py-4 space-y-1">
           {navItems.map((item) => {
             const on = active === item.name;
             return (
               <button
                 key={item.name}
                 onClick={() => { setActive(item.name); setSidebarOpen(false); }}
-                className={`w-full flex items-center gap-3 px-6 py-3 text-sm font-medium transition-colors ${
+                title={navExpanded ? undefined : item.name}
+                className={`w-full flex items-center gap-3 py-3 text-sm font-medium transition-colors sidebar-pad ${navExpanded ? "px-6" : "px-[26px]"} ${
                   on
                     ? "bg-primary/10 text-primary border-r-4 border-primary"
                     : "text-muted-foreground hover:bg-orange-50 hover:text-foreground"
                 }`}
               >
                 <item.icon className="w-5 h-5 shrink-0" />
-                <span className="flex-1 text-left">{item.name}</span>
+                <span {...labelProps(navExpanded, "flex-1 text-left whitespace-nowrap")}>
+                  {item.name}
+                </span>
               </button>
             );
           })}
@@ -2801,9 +2831,11 @@ const TeacherDashboard = () => {
 
         <Link
           to="/"
-          className="flex items-center gap-3 px-6 py-4 text-sm font-semibold text-red-500 border-t border-orange-100 dark:border-white/10 hover:bg-red-50 dark:hover:bg-red-500/10"
+          title={navExpanded ? undefined : "Logout"}
+          className={`flex items-center gap-3 py-4 text-sm font-semibold text-red-500 border-t border-orange-100 dark:border-white/10 hover:bg-red-50 dark:hover:bg-red-500/10 sidebar-pad ${navExpanded ? "px-6" : "px-[26px]"}`}
         >
-          <Power className="w-5 h-5" /> Logout
+          <Power className="w-5 h-5 shrink-0" />
+          <span {...labelProps(navExpanded, "whitespace-nowrap")}>Logout</span>
         </Link>
       </aside>
 

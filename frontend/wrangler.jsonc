@@ -2,8 +2,32 @@
   "name": "vr-lms",
   "account_id": "5c8420a7d85dace148fabed90cfb055d",
   "compatibility_date": "2025-01-01",
+
+  // Worker script. It serves the SPA from ./dist AND reverse-proxies /api/* to
+  // the Bastion gateway, so the whole app is one same-origin site. See
+  // worker.js for why (no CORS surface in the browser path).
+  "main": "./worker.js",
+
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    // Named binding so worker.js can fall through to static assets after it
+    // has had a chance to handle /api/*. Without this the assets handler would
+    // run first and the proxy would never see the request.
+    "binding": "ASSETS"
+  },
+
+  // Custom domain routes. `custom_domain: true` makes Cloudflare create and
+  // manage the DNS record + certificate for each hostname. www is served only
+  // so worker.js can 301 it to the apex.
+  "routes": [
+    { "pattern": "vrroboticsacademy.com", "custom_domain": true },
+    { "pattern": "www.vrroboticsacademy.com", "custom_domain": true }
+  ],
+
+  "vars": {
+    // Upstream gateway for the /api/* proxy. Override per-environment rather
+    // than editing worker.js.
+    "BASTION_ORIGIN": "https://gallant-spirit-production-7e6b.up.railway.app"
   }
 }

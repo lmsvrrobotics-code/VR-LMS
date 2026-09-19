@@ -254,7 +254,7 @@ function SendDialog({ form, teacherId, onClose, onSent }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
-      <div className="w-full max-w-md rounded-2xl bg-white dark:bg-[#16161f] p-6 shadow-xl">
+      <div className="w-full max-w-md rounded-2xl bg-white dark:bg-[#1E1C1A] p-6 shadow-xl">
         <div className="flex items-start justify-between gap-3 mb-1">
           <h3 className="text-lg font-bold m-0">Send feedback form</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close">

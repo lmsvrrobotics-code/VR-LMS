@@ -8,22 +8,30 @@ const { enqueue } = require('../jobs/emailQueue');
 const { studentWelcome } = require('../helpers/emailTemplates');
 const publicId = require('../lib/uniqueId');
 
-// Basic email shape check — capture is public so validate before storing.
-const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v || '').trim());
+// Shared with signup and the contact form so all three public entry points
+// apply one email rule and one wording. The local regex this replaced accepted
+// "a@b..c" and "a@-.x" — addresses that store fine and then bounce.
+const { validateEmail, validateName, validatePhone } = require('../lib/fieldValidation');
 
 // PUBLIC capture from the portal signup. Creates a lead (NO login). Idempotent
 // per email while still "open": if an unconverted lead already exists for this
 // email we return it instead of stacking duplicates, but we refresh details.
 const capture = async (body = {}) => {
     const name = String(body.name || '').trim();
-    const email = String(body.email || '').trim().toLowerCase();
-    if (!name) throw new HttpError(422, 'Name is required');
-    if (!isEmail(email)) throw new HttpError(422, 'A valid email is required');
+    const nameCheck = validateName(name, { field: 'name', label: 'Full name' });
+    if (!nameCheck.ok) throw new HttpError(422, nameCheck.message, { field: 'name' });
+    const emailCheck = validateEmail(body.email);
+    if (!emailCheck.ok) throw new HttpError(422, emailCheck.message, { field: 'email' });
+    const email = emailCheck.value;
+    // A lead with an unreachable phone is a lead nobody can follow up, but it
+    // is optional — only validate what was actually supplied.
+    const phoneCheck = validatePhone(body.phone, { field: 'phone', label: 'Mobile number', required: false });
+    if (!phoneCheck.ok) throw new HttpError(422, phoneCheck.message, { field: 'phone' });
 
     const fields = {
         name,
         email,
-        phone: body.phone ? String(body.phone).trim() : null,
+        phone: phoneCheck.value || null,
         course_interest: body.course_interest ? String(body.course_interest).trim() : null,
         source: body.source ? String(body.source).trim() : 'signup',
         clg_id: body.clg_id ? String(body.clg_id) : null,

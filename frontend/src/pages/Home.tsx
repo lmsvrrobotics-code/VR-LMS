@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import FounderMeetingSection from "@/components/home/FounderMeetingSection";
 import {
   Card,
   CardContent,
@@ -471,6 +472,12 @@ const Home = () => {
         </div>
 
       </section>
+
+      {/* ───────────── Weekly Meeting with Founder ─────────────
+          Admin-driven: renders whatever is marked Featured in
+          Admin → Founder Meetings, and renders NOTHING when nothing is
+          featured, so the page closes up rather than showing an empty band. */}
+      <FounderMeetingSection />
 
       {/* ───────────── What Kids Learn — 18-Module Learning Path ───────────── */}
       <section id="curriculum" className="section-padding bg-gradient-subtle">

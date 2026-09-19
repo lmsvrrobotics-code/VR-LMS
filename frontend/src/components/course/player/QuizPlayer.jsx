@@ -22,6 +22,34 @@ const fmtClock = (secs) => {
     return `${pad(h)}:${pad(m)}:${pad(r)}`;
 };
 
+// An UNSUBMITTED quiz attempt is per-student scratch work, not a result, so it
+// lives in localStorage rather than the server: answers picked so far and the
+// remaining time. A submitted attempt is authoritative and comes from the API
+// (lesson.quiz_state) — this only rescues the case where a student closes the
+// tab mid-quiz and comes back.
+const draftKey = (quizId) => `vrq:draft:${quizId}`;
+
+const readDraft = (quizId) => {
+    try {
+        const raw = localStorage.getItem(draftKey(quizId));
+        if (!raw) return null;
+        const d = JSON.parse(raw);
+        // Drop a stale draft rather than restoring a quiz from days ago.
+        if (!d || Date.now() - (d.savedAt || 0) > 6 * 60 * 60 * 1000) return null;
+        return d;
+    } catch { return null; }
+};
+
+const writeDraft = (quizId, draft) => {
+    try {
+        localStorage.setItem(draftKey(quizId), JSON.stringify({ ...draft, savedAt: Date.now() }));
+    } catch { /* private mode / quota — the quiz still works, just no resume */ }
+};
+
+const clearDraft = (quizId) => {
+    try { localStorage.removeItem(draftKey(quizId)); } catch { /* ignore */ }
+};
+
 export default function QuizPlayer({ lesson, onCompleted }) {
     // Primary source: questions the admin authored, served by the player API
     // (PublicCourseService normalises them to { q, type, options, answer }).
@@ -38,7 +66,10 @@ export default function QuizPlayer({ lesson, onCompleted }) {
     // page restores the last score and remaining-retry state.
     const priorState = lesson.quiz_state || { attempts_used: 0, last_score: null, last_total: null };
 
-    const [answers, setAnswers] = useState({});
+    // Any unsubmitted attempt left behind last time.
+    const draft = useMemo(() => readDraft(lesson.id), [lesson.id]);
+
+    const [answers, setAnswers] = useState(() => draft?.answers || {});
     const [submitted, setSubmitted] = useState(false);
     // attempt = which attempt the student is currently on (1-based). Start
     // after however many they've already used.
@@ -50,11 +81,14 @@ export default function QuizPlayer({ lesson, onCompleted }) {
 
     // Cover/intro screen gate: students see the admin-set metadata + a Start
     // Quiz button first, only entering the questions view after they click.
-    const [started, setStarted] = useState(false);
+    // Resume straight into the questions when a draft exists — the student
+    // already passed the intro screen before they left.
+    const [started, setStarted] = useState(() => !!draft);
     // Countdown driven by the admin-configured duration. Starts when the
     // student clicks Start Quiz; auto-submits when it hits zero.
     const totalSeconds = useMemo(() => parseDurationSeconds(lesson.duration), [lesson.duration]);
-    const [timeLeft, setTimeLeft] = useState(totalSeconds);
+    const [timeLeft, setTimeLeft] = useState(() =>
+        draft?.timeLeft != null ? draft.timeLeft : totalSeconds);
     // Keep a ref to handleSubmit so the timer effect can call the latest
     // closure without re-binding on every state change.
     const submitRef = useRef(() => {});
@@ -89,6 +123,14 @@ export default function QuizPlayer({ lesson, onCompleted }) {
         ? questions.reduce((s, q, i) => s + (isCorrect(q, answers[i]) ? 1 : 0), 0)
         : 0;
 
+    // Persist the in-progress attempt so closing the tab mid-quiz does not
+    // lose picked answers or reset the clock. Only while actually taking it —
+    // never once submitted, and never on the intro screen.
+    useEffect(() => {
+        if (!started || submitted) return;
+        writeDraft(lesson.id, { answers, timeLeft });
+    }, [lesson.id, started, submitted, answers, timeLeft]);
+
     // Pass threshold: 50% of total questions (rounded up — e.g. 3 questions
     // needs 2 correct).
     const passMark = Math.ceil(questions.length * 0.5);
@@ -104,6 +146,8 @@ export default function QuizPlayer({ lesson, onCompleted }) {
     const handleSubmit = async () => {
         if (submitted || saving) return;
         setSubmitted(true);
+        // The attempt is no longer in progress; the server result supersedes it.
+        clearDraft(lesson.id);
         const s = questions.reduce((acc, q, i) => acc + (isCorrect(q, answers[i]) ? 1 : 0), 0);
         setSaving(true);
         try {
@@ -119,6 +163,8 @@ export default function QuizPlayer({ lesson, onCompleted }) {
     };
 
     const reset = () => {
+        // Starting a retry discards whatever the previous attempt had saved.
+        clearDraft(lesson.id);
         setAnswers({});
         setSubmitted(false);
         setShowPrior(false);

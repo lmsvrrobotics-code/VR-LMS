@@ -7,15 +7,14 @@ exports.sections_by_course = asyncHandler(async (req, res) => {
     res.json(await curriculumService.listByCourse(req.params.course_id));
 });
 
+// Sessions accept an optional cover image, so body + files both flow through.
 exports.section_store = asyncHandler(async (req, res) => {
-    const { course_id, title, user_id } = req.body;
-    const result = await curriculumService.createSection({ course_id, title, user_id });
+    const result = await curriculumService.createSection({ body: req.body, files: req.files });
     res.status(201).json(result);
 });
 
 exports.section_update = asyncHandler(async (req, res) => {
-    const { section_id, up_title } = req.body;
-    res.json(await curriculumService.updateSection({ section_id, up_title }));
+    res.json(await curriculumService.updateSection({ body: req.body, files: req.files }));
 });
 
 exports.section_delete = asyncHandler(async (req, res) => {

@@ -584,6 +584,90 @@ function validate(data, schema) {
 }
 
 /**
+ * Turn a joi detail into something a person can act on.
+ *
+ * joi says `"student_email" must be a valid email` — a quoted machine field
+ * name and no hint of what a valid one looks like. This renames the field to
+ * the words the form uses and rewrites the common rules as instructions.
+ */
+const FIELD_LABELS = {
+  email: 'Email address',
+  student_email: 'Student email address',
+  password: 'Password',
+  name: 'Name',
+  title: 'Title',
+  phone: 'Mobile number',
+  message: 'Message',
+  slug: 'Slug',
+  start_date: 'Start date',
+  end_date: 'End date',
+};
+
+const humanField = (path) => {
+  const key = Array.isArray(path) ? path.join('.') : String(path || '');
+  if (FIELD_LABELS[key]) return FIELD_LABELS[key];
+  // last_opened_at -> "Last opened at"
+  const words = key.split('.').pop().replace(/_/g, ' ').trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : 'This field';
+};
+
+const humanMessage = (detail) => {
+  const label = humanField(detail.path);
+  const limit = detail.context && detail.context.limit;
+  switch (detail.type) {
+    case 'string.email':
+      return `${label} doesn't look like a valid email — for example name@example.com.`;
+    case 'any.required':
+    case 'string.empty':
+      return `${label} is required.`;
+    case 'string.min':
+      return `${label} must be at least ${limit} characters.`;
+    case 'string.max':
+      return `${label} must be ${limit} characters or fewer.`;
+    case 'string.uri':
+      return `${label} must be a valid link starting with http:// or https://.`;
+    case 'string.pattern.base':
+      return `${label} contains characters that aren't allowed.`;
+    case 'any.only':
+      return `${label} must be one of: ${(detail.context && detail.context.valids || []).join(', ')}.`;
+    case 'number.base':
+      return `${label} must be a number.`;
+    case 'number.min':
+      return `${label} must be ${limit} or more.`;
+    case 'number.max':
+      return `${label} must be ${limit} or less.`;
+    case 'number.integer':
+      return `${label} must be a whole number.`;
+    case 'date.base':
+    case 'date.format':
+      return `${label} must be a valid date.`;
+    default:
+      // Fall back to joi's text, minus the quotes around the field name.
+      return detail.message.replace(/"/g, '');
+  }
+};
+
+/**
+ * Shape a joi error into the response body.
+ *
+ * `error` carries the FIRST real problem, because that is the key the frontend
+ * reads (see apiErrorMessage). It used to be the constant "Validation failed",
+ * which told the user nothing about which box to fix. `details` keeps the full
+ * per-field list for forms that highlight inputs individually.
+ */
+const validationResponse = (error) => {
+  const details = error.details.map((d) => ({
+    field: d.path.join('.'),
+    message: humanMessage(d),
+  }));
+  return {
+    error: details.length ? details[0].message : 'Please check the form and try again.',
+    field: details.length ? details[0].field : undefined,
+    details,
+  };
+};
+
+/**
  * Middleware factory to validate request body
  * Usage: router.post('/courses', validateBody(schemas.createCourse), controller.create);
  */
@@ -591,14 +675,7 @@ function validateBody(schema) {
   return (req, res, next) => {
     const { error, value } = validate(req.body, schema);
     if (error) {
-      const details = error.details.map(d => ({
-        field: d.path.join('.'),
-        message: d.message,
-      }));
-      return res.status(400).json({
-        error: 'Validation failed',
-        details,
-      });
+      return res.status(400).json(validationResponse(error));
     }
     req.validatedBody = value;
     next();
@@ -613,14 +690,7 @@ function validateQuery(schema) {
   return (req, res, next) => {
     const { error, value } = validate(req.query, schema);
     if (error) {
-      const details = error.details.map(d => ({
-        field: d.path.join('.'),
-        message: d.message,
-      }));
-      return res.status(400).json({
-        error: 'Query validation failed',
-        details,
-      });
+      return res.status(400).json(validationResponse(error));
     }
     req.validatedQuery = value;
     next();
@@ -635,14 +705,7 @@ function validateParams(schema) {
   return (req, res, next) => {
     const { error, value } = validate(req.params, schema);
     if (error) {
-      const details = error.details.map(d => ({
-        field: d.path.join('.'),
-        message: d.message,
-      }));
-      return res.status(400).json({
-        error: 'Parameter validation failed',
-        details,
-      });
+      return res.status(400).json(validationResponse(error));
     }
     req.validatedParams = value;
     next();
@@ -652,6 +715,8 @@ function validateParams(schema) {
 module.exports = {
   schemas,
   validate,
+  humanMessage,
+  validationResponse,
   validateBody,
   validateQuery,
   validateParams,

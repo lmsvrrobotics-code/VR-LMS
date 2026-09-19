@@ -52,12 +52,12 @@ export default function LessonSort({ section, onDone, onClose }) {
         }
     };
 
-    if (items.length === 0) return <div className="text-[14px] text-gray">No lessons to sort.</div>;
+    if (items.length === 0) return <div className="text-[14px] text-gray">No classes to sort.</div>;
 
     return (
         <div>
             <div className="bg-lightgreen/60 border border-softgreen/70 rounded-ol-8 p-3 mb-3">
-                <p className="text-[14px] text-dark m-0"><span className="text-gray">Section:</span> <strong>{section.title}</strong></p>
+                <p className="text-[14px] text-dark m-0"><span className="text-gray">Session:</span> <strong>{section.title}</strong></p>
             </div>
             <ul className="flex flex-col gap-3 mb-5 list-none p-0">
                 {items.map((l, i) => {

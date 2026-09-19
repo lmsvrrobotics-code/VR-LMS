@@ -9,16 +9,22 @@ const lessonFiles = upload.fields([
     { name: 'attachment', maxCount: 1 },
     { name: 'scorm_file', maxCount: 1 },
     { name: 'system_video_file', maxCount: 1 },
+    // Class cover image — stored on lessons.thumbnail, distinct from
+    // `attachment` (which for an image-type lesson IS the lesson content).
+    { name: 'thumbnail', maxCount: 1 },
 ]);
 
 // All curriculum endpoints are usable by both admins and teachers. The
 // service layer should additionally scope writes to courses the teacher
 // owns / is assigned to — same model the zoom-live-class module uses.
 
-// Sections
+// Sections (presented as "Sessions" in the admin UI) — the cover image makes
+// these multipart, so they run through the same multer instance as lessons.
+const sessionFiles = upload.fields([{ name: 'image', maxCount: 1 }]);
+
 router.get('/course/:course_id/curriculum', adminOrTeacher, ctrl.sections_by_course);
-router.post('/section', adminOrTeacher, ctrl.section_store);
-router.post('/section/update', adminOrTeacher, ctrl.section_update);
+router.post('/section', adminOrTeacher, sessionFiles, ctrl.section_store);
+router.post('/section/update', adminOrTeacher, sessionFiles, ctrl.section_update);
 router.get('/section/delete/:id', adminOrTeacher, ctrl.section_delete);
 router.post('/section/sort', adminOrTeacher, ctrl.section_sort);
 

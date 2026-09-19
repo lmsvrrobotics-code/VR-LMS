@@ -20,6 +20,8 @@ module.exports = (sequelize) => {
         is_free: { type: DataTypes.INTEGER },
         sort: { type: DataTypes.INTEGER },
         description: { type: DataTypes.TEXT('long') },
+        // 'easy' | 'medium' | 'hard' | null — see migration 23.
+        difficulty: { type: DataTypes.STRING(10) },
         summary: { type: DataTypes.TEXT('long') },
         status: { type: DataTypes.INTEGER },
     }, { tableName: 'lessons', timestamps: true, createdAt: 'created_at', updatedAt: 'updated_at' });

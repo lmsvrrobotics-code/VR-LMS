@@ -7,7 +7,7 @@ const sizeMap = {
 
 export default function Modal({ title, onClose, children, size = 'md' }) {
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
             <div className={`w-full ${sizeMap[size] || sizeMap.md}`}>
                 <div className="ol-card shadow-xl overflow-hidden">
                     <div className="flex items-center justify-between px-5 py-4 border-b border-border">

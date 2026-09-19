@@ -2,7 +2,9 @@
     max-width: 1400px;
     margin: 0 auto;
     padding: 24px;
-    background: #f8f9fa;
+    /* Transparent so the global VR Robotics logo watermark (body::before in
+       index.css) shows through the whole page. */
+    background: transparent;
     min-height: 100vh;
 }
 
@@ -12,10 +14,12 @@
     align-items: center;
     gap: 24px;
     margin-bottom: 32px;
-    background: white;
-    padding: 24px;
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    /* Translucent surfaces throughout so the watermark reads behind them. */
+    background: #ffffff;
+    padding: 24px 28px;
+    border-radius: 14px;
+    border: 1px solid #e8edf4;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 20px -12px rgba(16, 24, 40, 0.18);
 }
 
 .header-left {
@@ -25,22 +29,46 @@
     flex: 1;
 }
 
+/* Labelled "Back" at every width — the button sits on its own row above the
+   grid, so it has the space, and a bare arrow was the thing this replaced.
+   The destination lives in aria-label/title instead of the visible text. */
 .back-btn {
-    width: 40px;
+    min-width: 40px;
     height: 40px;
+    padding: 0 12px;
     border: none;
     background: #f0f0f0;
     border-radius: 8px;
     cursor: pointer;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 18px;
-    transition: background 0.2s;
+    gap: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    /* Brand orange, matching .header-eyebrow and the rest of the page's
+       accents. `currentColor` on the chevron means the arrow follows. */
+    color: #ff6a00;
+    white-space: nowrap;
+    transition: background 0.2s, color 0.2s;
+}
+
+.back-btn-label {
+    line-height: 1;
 }
 
 .back-btn:hover {
-    background: #e0e0e0;
+    background: #ffe8d6;
+    color: #e05e00;
+}
+
+/* Course name shown above the session title when drilled into a session, so
+   the heading can be the session without losing which course it belongs to. */
+.header-eyebrow {
+    margin: 0 0 2px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #ff6a00;
 }
 
 .header-info h1 {
@@ -48,12 +76,6 @@
     font-weight: 600;
     margin: 0;
     color: #1a1a1a;
-}
-
-.batch-name {
-    font-size: 13px;
-    color: #666;
-    margin: 4px 0 0 0;
 }
 
 .header-right {
@@ -77,33 +99,10 @@
     transform: translateY(-2px);
 }
 
-.btn-full {
-    width: 100%;
-    margin-top: 16px;
-}
-
-.details-content {
-    display: grid;
-    grid-template-columns: 1fr 380px;
-    gap: 32px;
-}
-
 @media (max-width: 1024px) {
     .details-content {
         grid-template-columns: 1fr;
     }
-}
-
-/* Left Section */
-.left-section {
-    background: white;
-    border-radius: 8px;
-    padding: 24px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.progress-section {
-    margin-bottom: 32px;
 }
 
 .progress-label {
@@ -138,211 +137,9 @@
     transition: width 0.3s ease;
 }
 
-/* Tabs */
-.tabs-navigation {
-    display: flex;
-    gap: 0;
-    border-bottom: 2px solid #f0f0f0;
-    margin-bottom: 24px;
-}
-
-.tab-btn {
-    padding: 12px 20px;
-    background: none;
-    border: none;
-    border-bottom: 3px solid transparent;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 600;
-    color: #666;
-    transition: all 0.2s;
-}
-
 .tab-btn.active {
     color: #ff6a00;
     border-bottom-color: #ff6a00;
-}
-
-.tab-btn:hover {
-    color: #333;
-}
-
-/* Tab Content */
-.tab-content {
-    min-height: 300px;
-}
-
-.overview-section h3,
-.curriculum-section h3 {
-    font-size: 18px;
-    font-weight: 600;
-    margin: 0 0 16px 0;
-    color: #1a1a1a;
-}
-
-.overview-section > p {
-    color: #666;
-    line-height: 1.6;
-    margin-bottom: 24px;
-}
-
-.course-info-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 16px;
-}
-
-.info-card {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 16px;
-    background: #f8f9fa;
-    border-radius: 8px;
-    border: 1px solid #e0e0e0;
-}
-
-.info-icon {
-    width: 40px;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #fff3e0;
-    border-radius: 8px;
-    color: #ff6a00;
-    font-size: 18px;
-}
-
-.info-content {
-    display: flex;
-    flex-direction: column;
-}
-
-.info-label {
-    font-size: 12px;
-    color: #999;
-    font-weight: 500;
-}
-
-.info-value {
-    font-size: 16px;
-    font-weight: 600;
-    color: #1a1a1a;
-}
-
-/* Curriculum Section */
-.lessons-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.lesson-item {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 16px;
-    background: #f8f9fa;
-    border-radius: 8px;
-    border: 1px solid #e0e0e0;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.lesson-item:hover {
-    background: #f0f0f0;
-    border-color: #ff6a00;
-}
-
-.lesson-icon {
-    width: 40px;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #fff3e0;
-    border-radius: 8px;
-    color: #ff6a00;
-    font-size: 18px;
-}
-
-.lesson-content {
-    flex: 1;
-}
-
-.lesson-content h4 {
-    font-size: 14px;
-    font-weight: 600;
-    margin: 0 0 4px 0;
-    color: #1a1a1a;
-}
-
-.lesson-content p {
-    font-size: 12px;
-    color: #999;
-    margin: 0;
-}
-
-.lesson-duration {
-    font-size: 12px;
-    color: #666;
-    white-space: nowrap;
-}
-
-/* Right Section - Stats */
-.right-section {
-    position: sticky;
-    top: 24px;
-    height: fit-content;
-}
-
-.stats-card {
-    background: white;
-    border-radius: 8px;
-    padding: 24px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.stat-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 16px 0;
-    border-bottom: 1px solid #f0f0f0;
-}
-
-.stat-item:last-child {
-    border-bottom: none;
-}
-
-.stat-icon {
-    width: 40px;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #f8f9fa;
-    border-radius: 8px;
-    color: #ff6a00;
-    font-size: 18px;
-}
-
-.stat-content {
-    display: flex;
-    flex-direction: column;
-}
-
-.stat-label {
-    font-size: 12px;
-    color: #999;
-    font-weight: 500;
-}
-
-.stat-value {
-    font-size: 16px;
-    font-weight: 600;
-    color: #1a1a1a;
 }
 
 /* Loading & Empty States */
@@ -370,6 +167,13 @@
     color: #ccc;
 }
 
+.empty-state-hint {
+    margin-top: -8px;
+    font-size: 14px;
+    color: #888;
+    max-width: 420px;
+}
+
 .empty-state p {
     color: #666;
     font-size: 16px;
@@ -384,3 +188,922 @@
     cursor: pointer;
     font-weight: 600;
 }
+
+/* ===========================================================================
+   Curriculum card grid — sessions, then the classes inside a session.
+   Two cards per row on desktop, collapsing to one on narrow screens. Both
+   levels share the card chrome so drilling from a session into its classes
+   feels like the same surface.
+   =========================================================================== */
+
+.card-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+    align-items: stretch;
+}
+
+@media (max-width: 900px) {
+    .card-grid { grid-template-columns: 1fr; }
+}
+
+.curriculum-card {
+    display: grid;
+    /* Thumbnail column + content column; the footer row spans both so
+       "Last opened" sits flush to the card's right edge. */
+    grid-template-columns: auto 1fr;
+    /* Content row takes the slack, footer row stays its natural height — so
+       .card-body can push the meta line to the bottom of a tall card. */
+    grid-template-rows: 1fr auto;
+    column-gap: 24px;
+    padding: 30px 30px 26px;
+    /* Solid white with a soft lift. The watermark is busy, so a translucent
+       card washed the text out — the page background reads around the cards
+       instead of through them. Still NO hover treatment. */
+    background: #ffffff;
+    border: 1px solid #e8edf4;
+    border-radius: 16px;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 20px -12px rgba(16, 24, 40, 0.16);
+    text-align: left;
+    cursor: pointer;
+    /* Every card in a row matches the tallest, so the footers line up. A
+       floor keeps a sparse card (title only, no description) from collapsing
+       to a short strip next to a fuller one. Sized to clear the left column
+       (96px thumbnail + level meter) plus the card's own padding. */
+    height: 100%;
+    min-height: 215px;
+}
+
+/* Locked classes stay visible (so students see what is coming) but read as
+   unavailable. */
+.curriculum-card.is-locked {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+/* Thumbnail sits in a bordered frame with the artwork inset, so logos and
+   diagrams read as illustrations rather than bleeding to the edges. */
+.card-media {
+    width: 104px;
+    height: 104px;
+    flex-shrink: 0;
+    border: 1px solid #e9eef5;
+    border-radius: 12px;
+    overflow: hidden;
+    /* Inset so artwork reads as a framed illustration rather than bleeding to
+       the tile edge. Tinted so a session with no cover art still looks like a
+       deliberate placeholder instead of an empty box. */
+    padding: 6px;
+    background: #f8fafc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ff8c42;
+    font-size: 30px;
+}
+
+.card-media img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 7px;
+}
+
+.card-body {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    /* Fills the cell so `margin-top: auto` on .card-meta pins the count to the
+       bottom, keeping the meta rows aligned across a row of cards. */
+    height: 100%;
+}
+
+.card-title {
+    margin: 0 0 14px;
+    font-size: 20px;
+    font-weight: 700;
+    color: #2b3f63;
+    line-height: 1.25;
+}
+
+.card-desc {
+    margin: 0 0 18px;
+    font-size: 15px;
+    color: #7d6b57;
+    line-height: 1.5;
+    /* Two lines max so uneven descriptions keep the grid rows aligned. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.card-meta {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-top: auto;
+    font-size: 15px;
+    font-weight: 700;
+    color: #2f8f6b;
+}
+
+.card-meta .meta-muted {
+    color: #8a93a3;
+    font-weight: 500;
+}
+
+/* Inline SVG icons — sized here so every icon in a meta row lines up with
+   its label regardless of which glyph it is. */
+.card-icon {
+    width: 17px;
+    height: 17px;
+    flex-shrink: 0;
+    margin-right: 8px;
+}
+
+.card-meta span {
+    display: inline-flex;
+    align-items: center;
+}
+
+/* Fallback artwork inside an empty thumbnail frame. */
+.media-glyph {
+    width: 38px;
+    height: 38px;
+}
+
+/* Bulb glyph on the count, matching the reference. Uses a real icon when the
+   Flaticon font is present and falls back to the emoji otherwise. */
+.card-meta .meta-count {
+    display: inline-flex;
+    align-items: center;
+    color: #2f8f6b;
+}
+
+/* Footer row — spans both columns and right-aligns, sitting below the
+   thumbnail so it clears the full card width. */
+.card-foot {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid #f1f4f9;
+    font-size: 13px;
+    color: #98a2b3;
+    /* Reserved even when empty: a never-opened card keeps the same divider and
+       height as one with a timestamp, so cards in a row stay aligned. Sized to
+       one line of 13px text PLUS the 14px padding-top, because box-sizing is
+       border-box globally (Tailwind preflight). */
+    min-height: 33px;
+}
+
+.card-foot .card-icon {
+    width: 15px;
+    height: 15px;
+    margin-right: 7px;
+}
+
+.quiz-badge {
+    display: inline-block;
+    margin-right: 8px;
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: #eef4ff;
+    color: #2b5fd9;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    vertical-align: middle;
+}
+
+/* Left column: thumbnail with the difficulty meter beneath it. */
+.card-aside {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+/* Difficulty meter — three segments filled to the level (easy 1, medium 2,
+   hard 3), with the label under them. Reads at a glance without needing the
+   colour alone to carry the meaning, since the fill count says it too. */
+.level-meter {
+    width: 104px;
+}
+
+.level-bars {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+}
+
+.level-bars > span {
+    height: 7px;
+    border-radius: 3px;
+    /* Unfilled segments stay visible so the scale is always legible. */
+    background: #dbe3ef;
+}
+
+.level-label {
+    display: block;
+    margin-top: 7px;
+    font-size: 12.5px;
+    color: #5b6577;
+    white-space: nowrap;
+}
+
+/* One accent per level, applied to the filled segments. */
+.level-easy   .level-bars > span.is-on { background: #34a853; }
+.level-medium .level-bars > span.is-on { background: #f5a524; }
+.level-hard   .level-bars > span.is-on { background: #e5484d; }
+
+/* ===========================================================================
+   Full-screen curriculum layout — no tabs, no stats sidebar. The header
+   carries the course context, and the session/class grid owns the page.
+   =========================================================================== */
+
+/* Course meta on one line under the title, replacing the old Overview tiles. */
+.course-subline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 16px;
+    margin: 6px 0 0;
+    font-size: 14px;
+    color: #5b6577;
+}
+
+/* Dot separators between the meta items (not before the first). */
+.course-subline span + span::before {
+    content: "•";
+    margin-right: 16px;
+    color: #c3cad6;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+/* Compact progress meter in the header, replacing the full-width bar that
+   used to sit above the tabs. */
+.header-progress {
+    min-width: 190px;
+}
+
+.header-progress .progress-label {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #5b6577;
+}
+
+.header-progress .progress-bar {
+    height: 8px;
+    background: #e9edf3;
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.header-progress .progress-fill {
+    height: 100%;
+    background: #ff6a00;
+    border-radius: 999px;
+    transition: width 0.3s;
+}
+
+/* The curriculum now spans the full container width. */
+/* No slab behind the grid — the cards sit directly on the watermarked page. */
+.curriculum-full {
+    background: transparent;
+    padding: 0;
+
+}
+
+.curriculum-empty {
+    margin: 0;
+    padding: 32px 0;
+    text-align: center;
+    color: #8a93a3;
+}
+
+/* With the sidebar gone there is room for three cards per row on wide
+   screens; the base rule in the grid block keeps two, and one on mobile. */
+@media (min-width: 1280px) {
+    .curriculum-full .card-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 720px) {
+    .details-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .header-right {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+
+    .header-progress { min-width: 0; }
+}
+
+/* ===========================================================================
+   Loading states — a three-dot loader for the initial fetch and the
+   session/class level switch, plus a spinner on the card being opened
+   into the player.
+   =========================================================================== */
+
+/* Three-dot loader. The dots bounce in sequence, each offset by a third of
+   the cycle, so the motion reads as a travelling wave rather than three
+   independent blinks. */
+@keyframes curriculum-dot {
+    0%, 80%, 100% { transform: translateY(0); opacity: 0.35; }
+    40%           { transform: translateY(-9px); opacity: 1; }
+}
+
+.curriculum-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    min-height: 220px;
+    padding: 40px 0;
+}
+
+.dots {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 9px;
+    /* Room for the bounce so the dots are never clipped at the top. */
+    height: 22px;
+}
+
+.dots > span {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: #ff6a00;
+    animation: curriculum-dot 1.05s ease-in-out infinite both;
+}
+
+.dots > span:nth-child(1) { animation-delay: -0.32s; }
+.dots > span:nth-child(2) { animation-delay: -0.16s; }
+.dots > span:nth-child(3) { animation-delay: 0s; }
+
+.is-page-loading .curriculum-loading {
+    min-height: 60vh;
+}
+
+.loading-label {
+    margin: 0;
+    font-size: 14px;
+    color: #8a93a3;
+}
+
+/* Spinner shown over the thumbnail of the card being opened. */
+@keyframes curriculum-spin {
+    to { transform: rotate(360deg); }
+}
+
+.media-spinner {
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    border: 3px solid rgba(255, 106, 0, 0.25);
+    border-top-color: #ff6a00;
+    border-radius: 50%;
+    animation: curriculum-spin 0.65s linear infinite;
+}
+
+/* The spinner is absolutely positioned against the thumbnail frame. */
+.card-media { position: relative; }
+
+.curriculum-card.is-opening {
+    opacity: 0.7;
+    cursor: progress;
+}
+
+.curriculum-card.is-opening img {
+    filter: blur(1px);
+}
+
+/* Cards rise into place from below. One motion for both directions — the
+   level change is carried by the staggered wave and the loader's label
+   rather than by a left/right offset. */
+@keyframes curriculum-rise {
+    from { opacity: 0; transform: translate3d(0, 34px, 0); }
+    to   { opacity: 1; transform: none; }
+}
+
+.card-grid > .curriculum-card {
+    animation: curriculum-rise 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Stagger: each card starts a beat after the one before, so the grid resolves
+   as a wave in the direction of travel instead of one flat block. Capped at
+   eight so a long list never feels slow to settle. */
+.card-grid > .curriculum-card:nth-child(1) { animation-delay: 0ms; }
+.card-grid > .curriculum-card:nth-child(2) { animation-delay: 45ms; }
+.card-grid > .curriculum-card:nth-child(3) { animation-delay: 90ms; }
+.card-grid > .curriculum-card:nth-child(4) { animation-delay: 135ms; }
+.card-grid > .curriculum-card:nth-child(5) { animation-delay: 180ms; }
+.card-grid > .curriculum-card:nth-child(6) { animation-delay: 225ms; }
+.card-grid > .curriculum-card:nth-child(7) { animation-delay: 270ms; }
+.card-grid > .curriculum-card:nth-child(n+8) { animation-delay: 315ms; }
+
+/* The loader rises with the cards so the whole level arrives as
+   one upward movement. */
+.curriculum-loading {
+    animation: curriculum-rise 0.3s ease-out both;
+}
+
+/* Pressing a card nudges it in the direction it is about to travel, so the
+   click itself feels connected to the movement that follows. */
+.curriculum-card:not(.is-locked):active {
+    transform: translate3d(0, 2px, 0) scale(0.995);
+    transition: transform 0.08s ease-out;
+}
+
+/* Respect a reduced-motion preference: keep the states, drop the movement. */
+@media (prefers-reduced-motion: reduce) {
+    .dots > span,
+    .media-spinner,
+    .card-grid > .curriculum-card,
+    .curriculum-loading {
+        animation-duration: 0.01ms !important;
+        animation-delay: 0ms !important;
+        animation-iteration-count: 1;
+    }
+
+    .curriculum-card:active { transform: none; }
+}
+
+/* ===========================================================================
+   Class player modal — plays a class over the curriculum instead of routing
+   away to the full player page.
+   =========================================================================== */
+
+@keyframes lesson-modal-in {
+    from { opacity: 0; transform: translate3d(0, 24px, 0) scale(0.985); }
+    to   { opacity: 1; transform: none; }
+}
+
+@keyframes lesson-backdrop-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.lesson-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(15, 21, 33, 0.72);
+    backdrop-filter: blur(3px);
+    animation: lesson-backdrop-in 0.18s ease-out both;
+}
+
+.lesson-modal {
+    width: min(1040px, 100%);
+    max-height: calc(100vh - 48px);
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.55);
+    animation: lesson-modal-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
+    outline: none;
+}
+
+.lesson-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 22px;
+    border-bottom: 1px solid #eef2f7;
+    flex-shrink: 0;
+}
+
+.lesson-modal-titles {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.lesson-modal-head h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: #253858;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.lesson-modal-done {
+    flex-shrink: 0;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: #e6f6ed;
+    color: #1e7d47;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.lesson-modal-close {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 9px;
+    background: #f2f5f9;
+    color: #5b6577;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.lesson-modal-close:hover {
+    background: #ff6a00;
+    color: #fff;
+}
+
+/* Scrolls when a text/document class runs long; the video case just fits. */
+.lesson-modal-body {
+    padding: 20px 22px 24px;
+    overflow-y: auto;
+}
+
+@media (max-width: 720px) {
+    .lesson-modal-backdrop { padding: 0; }
+
+    .lesson-modal {
+        width: 100%;
+        max-height: 100vh;
+        height: 100%;
+        border-radius: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lesson-modal,
+    .lesson-modal-backdrop {
+        animation-duration: 0.01ms;
+    }
+}
+
+/* ===========================================================================
+   Student shell — the dashboard's navigation sidebar alongside the course
+   page, so a student keeps their way back to Dashboard / My Courses.
+   =========================================================================== */
+
+.student-shell {
+    display: flex;
+    align-items: flex-start;
+}
+
+/* The collapsible rail is position:fixed at all widths so hovering overlays
+   the page rather than reflowing it. That takes it out of flow, so the shell
+   reserves its 76px slot here instead. */
+@media (min-width: 1024px) {
+    .student-shell {
+        padding-left: 76px;
+    }
+}
+
+/* The sidebar is a sticky flex item at desktop widths, so the page content
+   takes the remaining width. min-width:0 stops the wide card grid from
+   forcing the flex row past the viewport.
+
+   The collapsed rail keeps its 76px slot when hovered — the expanded panel
+   overlays on top rather than widening the flex item, so the card grid does
+   not reflow every time the pointer crosses the navigation. */
+.student-shell > .course-details-container {
+    flex: 1;
+    min-width: 0;
+    max-width: none;
+    margin: 0;
+}
+
+/* Drawer trigger, shown only where the sidebar is off-canvas. */
+.student-nav-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    margin-bottom: 16px;
+    border: 1px solid #e8edf4;
+    border-radius: 10px;
+    background: #fff;
+    color: #5b6577;
+    cursor: pointer;
+}
+
+/* ===========================================================================
+   Card actions — kebab menu and the completion tick.
+   =========================================================================== */
+
+/* The card is the positioning context for both. */
+.curriculum-card { position: relative; }
+
+/* Completion tick, top-right. */
+/* The icon draws its own ring, so the container is just placement — no filled
+   disc behind it. */
+.card-complete-mark {
+    position: absolute;
+    top: 13px;
+    right: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #3ac11e;
+    z-index: 2;
+    /* The check overshoots the ring; let it draw outside the box. */
+    overflow: visible;
+}
+
+.card-complete-mark svg {
+    width: 28px;
+    height: 28px;
+    overflow: visible;
+}
+
+/* A completed card gets a soft green edge so the state reads from the whole
+   card, not just the badge. */
+.curriculum-card.is-complete {
+    border-color: #bfe6cd;
+}
+
+/* Kebab sits bottom-right, clear of the tick above it. */
+.card-menu {
+    position: absolute;
+    right: 12px;
+    bottom: 52px;
+    z-index: 3;
+}
+
+.card-menu-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #8a93a3;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.card-menu-trigger:hover {
+    background: #f2f5f9;
+    color: #40495a;
+}
+
+.card-menu-trigger .card-icon {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+}
+
+.card-menu-pop {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 6px);
+    min-width: 178px;
+    padding: 6px;
+    background: #fff;
+    border: 1px solid #e8edf4;
+    border-radius: 10px;
+    box-shadow: 0 12px 28px -8px rgba(16, 24, 40, 0.25);
+}
+
+.card-menu-item {
+    width: 100%;
+    padding: 9px 12px;
+    border: none;
+    border-radius: 7px;
+    background: none;
+    text-align: left;
+    font-size: 13.5px;
+    color: #303a4d;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.card-menu-item:hover:not(:disabled) { background: #f4f7fb; }
+
+.card-menu-item:disabled {
+    color: #a9b1bf;
+    cursor: default;
+}
+
+/* ===========================================================================
+   Curriculum search + filters.
+   =========================================================================== */
+
+.curriculum-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    /* The back row below supplies the gap to the grid; 20px here would stack
+       with it into an unbalanced 36px. */
+    margin-bottom: 12px;
+}
+
+/* Back control, between the filter row and the card grid. Its own row rather
+   than an item inside .curriculum-toolbar, so it never gets pulled onto the
+   same wrapped line as a filter select on a narrow screen. */
+.curriculum-back {
+    display: flex;
+    margin-bottom: 16px;
+}
+
+.toolbar-search {
+    position: relative;
+    flex: 1;
+    min-width: 220px;
+}
+
+.toolbar-search .search-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 17px;
+    height: 17px;
+    color: #98a2b3;
+    pointer-events: none;
+}
+
+.toolbar-search input {
+    width: 100%;
+    height: 42px;
+    padding: 0 14px 0 40px;
+    border: 1px solid #e8edf4;
+    border-radius: 10px;
+    background: #fff;
+    font-size: 14px;
+    color: #253858;
+    outline: none;
+}
+
+.toolbar-search input::placeholder { color: #a9b1bf; }
+
+.toolbar-search input:focus {
+    border-color: #ff9a5c;
+    box-shadow: 0 0 0 3px rgba(255, 106, 0, 0.12);
+}
+
+.toolbar-select {
+    height: 42px;
+    padding: 0 34px 0 14px;
+    border: 1px solid #e8edf4;
+    border-radius: 10px;
+    background: #fff;
+    font-size: 14px;
+    color: #253858;
+    cursor: pointer;
+    outline: none;
+    /* Native arrow is inconsistent across platforms — draw our own. */
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2398a2b3' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+}
+
+.toolbar-select:focus {
+    border-color: #ff9a5c;
+    box-shadow: 0 0 0 3px rgba(255, 106, 0, 0.12);
+}
+
+.toolbar-clear {
+    height: 42px;
+    padding: 0 16px;
+    border: 1px solid #e8edf4;
+    border-radius: 10px;
+    background: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    color: #5b6577;
+    cursor: pointer;
+}
+
+.toolbar-clear:hover {
+    border-color: #ff6a00;
+    color: #ff6a00;
+}
+
+@media (max-width: 720px) {
+    .toolbar-search { min-width: 100%; }
+    .toolbar-select { flex: 1; }
+}
+
+/* ───── Dark mode for the navigation controls ─────
+ *
+ * This page renders inside the `dash-dark` scope (see index.css), but its own
+ * stylesheet hardcodes light greys. The back button is the control a student
+ * needs to find first when lost, so it gets explicit dark values rather than a
+ * near-invisible #f0f0f0 on a dark ground.
+ */
+.dash-dark .back-btn {
+    background: rgba(255, 106, 0, 0.14);
+    /* Lighter orange on a dark ground — #ff6a00 does not carry enough
+       contrast against #1E1C1A. */
+    color: #ff8a3d;
+}
+
+.dash-dark .back-btn:hover {
+    background: rgba(255, 106, 0, 0.22);
+    color: #ffa057;
+}
+
+.dash-dark .empty-state-hint {
+    color: #9aa3b2;
+}
+
+.dash-dark .header-eyebrow {
+    color: #ff8a3d;
+}
+
+/* ───── Dark mode ─────
+ *
+ * This stylesheet hardcodes light-theme colours (#1a1a1a text on #fff panels),
+ * which the token system cannot reach. On the dark charcoal ground that text
+ * renders at roughly 1.1:1 contrast — effectively invisible.
+ *
+ * The page renders inside the `dash-dark` scope (see index.css), so these
+ * repaint the same surfaces using the shared ramp:
+ *   #131210 page · #1E1C1A card · #262321 raised · #E9E6E4 ink · #A9A29E muted
+ */
+
+.dash-dark .course-details-container { color: #E9E6E4; }
+
+.dash-dark .header-info h1,
+.dash-dark .card-title,
+.dash-dark .session-title { color: #E9E6E4; }
+
+.dash-dark .progress-label,
+.dash-dark .course-subline,
+.dash-dark .card-desc,
+.dash-dark .curriculum-empty,
+.dash-dark .meta-muted { color: #A9A29E; }
+
+/* Panels and cards lift off the page rather than sitting flat on it. */
+.dash-dark .details-header,
+.dash-dark .curriculum-card,
+.dash-dark .toolbar-search,
+.dash-dark .toolbar-select {
+    background: #1E1C1A;
+    border-color: rgba(255, 255, 255, 0.12);
+    color: #E9E6E4;
+}
+
+.dash-dark .curriculum-card:hover { border-color: rgba(255, 106, 0, 0.4); }
+
+.dash-dark .card-media { background: #262321; }
+
+.dash-dark .progress-bar { background: rgba(255, 255, 255, 0.1); }
+
+.dash-dark .toolbar-search input,
+.dash-dark .toolbar-select {
+    background: transparent;
+    color: #E9E6E4;
+}
+
+.dash-dark .toolbar-search input::placeholder { color: #8A8380; }
+
+/* The native select popup is drawn by the OS, so its options need an explicit
+   dark background or they render as white-on-white. */
+.dash-dark .toolbar-select option {
+    background: #262321;
+    color: #E9E6E4;
+}
+
+.dash-dark .toolbar-clear { color: #A9A29E; }
+.dash-dark .toolbar-clear:hover { color: #E9E6E4; }

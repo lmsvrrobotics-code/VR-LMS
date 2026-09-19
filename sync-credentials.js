@@ -75,6 +75,13 @@ const ROUTING = {
 
     SENTRY_DSN:                 ALL_BACKEND_PLUS_BASTION,
     SENTRY_TRACES_SAMPLE_RATE:  ALL_BACKEND_PLUS_BASTION,
+
+    // Browser origins allowed to make credentialed calls. admin-service reads
+    // ADMIN_ALLOWED_ORIGINS (falling back to CORS_ORIGINS); Bastion reads
+    // CORS_ORIGINS. Both must list the live frontend origin or the gateway's
+    // preflight blocks every proxied call — see lib/corsPolicy.js.
+    ADMIN_ALLOWED_ORIGINS:      ['backend/admin-service'],
+    CORS_ORIGINS:               ALL_BACKEND_PLUS_BASTION,
 };
 
 // Frontend gets only public, VITE_-prefixed keys.

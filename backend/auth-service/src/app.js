@@ -115,6 +115,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import sequelize from './db/index.js';
+import { parseAllowedOrigins, corsOrigin } from './lib/corsPolicy.js';
 import Role from './db/models/Role.js';
 import authRoutes from './routes/auth.routes.js';
 import roleRoutes from './routes/roles.routes.js';
@@ -144,26 +145,20 @@ app.set('trust proxy', 1);
 // Accept either env name: CORS_ORIGINS (canonical) or ALLOWED_ORIGINS (what the
 // shipped .env historically used). Reading both avoids a silent prod CORS lockout
 // where browser logins fail but curl/Postman (no Origin) still work.
-const corsAllow = (process.env.CORS_ORIGINS || process.env.ALLOWED_ORIGINS || '')
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean);
-const corsOrigin = (origin, cb) => {
-  if (!origin) return cb(null, true); // same-origin / curl / mobile
-  // Blanket localhost trust is a dev-only convenience. Deployed, it lets any
-  // page served from loopback on the host (or a co-located container) make
-  // credentialed cross-origin calls to auth. Explicit allow-list in production.
-  if (
-    process.env.NODE_ENV !== 'production' &&
-    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
-  ) {
-    return cb(null, true);
-  }
-  if (corsAllow.includes(origin)) return cb(null, true);
-  return cb(new Error('Not allowed by CORS'));
-};
+const corsAllow = parseAllowedOrigins(process.env);
+
+// Fail loudly rather than silently CORS-blocking every browser request. An
+// empty allowlist in production rejects every credentialed browser call while
+// curl keeps working, which is a slow failure to diagnose during a deploy.
+if (process.env.NODE_ENV === 'production' && corsAllow.length === 0) {
+  console.error(
+    '[auth-service] NODE_ENV=production but CORS_ORIGINS/ALLOWED_ORIGINS is empty — ' +
+      'every browser origin will be rejected. Set it to your frontend URL(s).',
+  );
+}
+
 app.use(cors({
-  origin: corsOrigin,
+  origin: corsOrigin(corsAllow, process.env.NODE_ENV === 'production'),
   credentials: true,
 }));
 

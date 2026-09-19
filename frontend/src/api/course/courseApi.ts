@@ -26,9 +26,31 @@ api.interceptors.request.use((config) => {
 export const listCourses = (params?: Record<string, unknown>) =>
   api.get("/courses", { params }).then((r) => r.data);
 
-// Canonical "My Courses" (lms_admin): paid ∪ enrolled ∪ delegated, with progress.
-export const getMyCourses = () =>
+/**
+ * The whole published catalogue, each entry flagged `locked` when the student
+ * has not been granted it. Only the My Courses grid wants this — it lists
+ * locked courses so students can see what exists and ask to be enrolled.
+ *
+ * For anything that COUNTS courses, gates a feature on having one, or lists
+ * "your" courses, use getMyCourses() below instead.
+ */
+export const getCourseCatalogue = () =>
   api.get("/my-courses").then((r) => (r.data?.courses ?? []) as unknown[]);
+
+/**
+ * Courses the student can actually open — an admin enrolment or a delegation
+ * (batch roster / teaching assignment).
+ *
+ * The endpoint began returning the full catalogue so My Courses could show
+ * locked cards. This wrapper keeps the original meaning, because every other
+ * caller (leaderboard gating, feedback course pickers, "enrolled courses"
+ * counts, average progress) breaks quietly if handed courses the student does
+ * not have: a student with one course out of ten would read "10 enrolled".
+ */
+export const getMyCourses = () =>
+  getCourseCatalogue().then((rows) =>
+    (rows as { locked?: boolean }[]).filter((c) => !c.locked),
+  );
 
 // Student → teacher/class feedback. submit + read the student's own past ones.
 export const submitTeacherFeedback = (payload: {

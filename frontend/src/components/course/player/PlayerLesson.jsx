@@ -52,7 +52,7 @@ const googleIdFrom = (url) => {
     return eqMatch ? eqMatch[1] : '';
 };
 
-export default function PlayerLesson({ lesson, course, locked, lockedMessage, onLessonEnded, onTimeUpdate }) {
+export default function PlayerLesson({ lesson, course, locked, lockedMessage, onLessonEnded, onTimeUpdate, resumeAt = 0 }) {
     if (locked) {
         return (
             <div className="bg-black/30 rounded-xl p-12 text-center text-white/80 my-8">
@@ -72,12 +72,12 @@ export default function PlayerLesson({ lesson, course, locked, lockedMessage, on
 
     return (
         <div className="rounded-xl overflow-hidden bg-black mb-4">
-            <LessonRenderer lesson={lesson} course={course} onLessonEnded={onLessonEnded} onTimeUpdate={onTimeUpdate} />
+            <LessonRenderer lesson={lesson} course={course} onLessonEnded={onLessonEnded} onTimeUpdate={onTimeUpdate} resumeAt={resumeAt} />
         </div>
     );
 }
 
-function LessonRenderer({ lesson, course, onLessonEnded, onTimeUpdate }) {
+function LessonRenderer({ lesson, course, onLessonEnded, onTimeUpdate, resumeAt = 0 }) {
     const t = lesson.lesson_type;
 
     if (t === 'text') {
@@ -113,6 +113,7 @@ function LessonRenderer({ lesson, course, onLessonEnded, onTimeUpdate }) {
                 src={videoUrl}
                 onEnded={onLessonEnded}
                 onTimeUpdate={onTimeUpdate}
+                resumeAt={resumeAt}
             />
         );
     }
@@ -201,7 +202,15 @@ function LessonRenderer({ lesson, course, onLessonEnded, onTimeUpdate }) {
 // playback for Safari (which plays HLS directly) and for plain .mp4 URLs /
 // legacy local paths. Keeps the same <video> element so onEnded / onTimeUpdate
 // continue to drive lesson-completion + progress tracking.
-function HlsVideo({ src, onEnded, onTimeUpdate }) {
+// `resumeAt` seeks the video to the student's stored high-water mark on load,
+// so leaving a lesson part-way and returning picks up where they were. It is
+// applied once per source (a fresh seek on every render would fight the user
+// scrubbing the timeline).
+function HlsVideo({ src, onEnded, onTimeUpdate, resumeAt = 0 }) {
+    // Guards the one-shot resume seek; reset whenever the source changes so a
+    // different lesson gets its own seek.
+    const seekedRef = useRef(false);
+    useEffect(() => { seekedRef.current = false; }, [src]);
     const ref = useRef(null);
 
     useEffect(() => {
@@ -236,6 +245,14 @@ function HlsVideo({ src, onEnded, onTimeUpdate }) {
             controls
             onContextMenu={(e) => e.preventDefault()}
             onEnded={onEnded}
+            onLoadedMetadata={(e) => {
+                // Seek once, and never past the end (a stored mark can exceed
+                // duration if the lesson's media was replaced since).
+                if (seekedRef.current || !resumeAt) return;
+                const el = e.currentTarget;
+                if (resumeAt < (el.duration || 0) - 1) el.currentTime = resumeAt;
+                seekedRef.current = true;
+            }}
             onTimeUpdate={(e) => onTimeUpdate?.(e.currentTarget.currentTime)}
             className="w-full max-h-[80vh] bg-black"
         />

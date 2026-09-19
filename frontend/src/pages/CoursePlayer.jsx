@@ -221,6 +221,7 @@ export default function CoursePlayer() {
                                     lockedMessage={lockedMessage}
                                     onLessonEnded={onMarkComplete}
                                     onTimeUpdate={handleTimeUpdate}
+                                    resumeAt={data?.resume_at || 0}
                                 />
                                 <button
                                     type="button"

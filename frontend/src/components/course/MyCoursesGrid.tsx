@@ -38,7 +38,8 @@ export default function MyCoursesGrid() {
           return (
             <Link
               key={c.id}
-              to={`/courses/programs/course-details/play/${c.slug}`}
+              // Course page first (sessions + classes), not the player.
+              to={`/courses/${c.slug}`}
               className="group rounded-2xl border border-gray-200 bg-white p-6 hover:shadow-md hover:border-emerald-200 transition-all flex flex-col gap-4"
             >
               <p className="font-bold text-xl text-gray-900 line-clamp-2">{c.title}</p>

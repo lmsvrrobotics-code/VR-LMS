@@ -1,9 +1,12 @@
 const { ContactMessage } = require('../models');
 const { HttpError } = require('../middlewares/error');
+const { validateEmail, validateName } = require('../lib/fieldValidation');
 
 // "Send us a Message" — public capture + admin inbox reads.
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+//
+// Validation lives in lib/fieldValidation so this form, signup and the lead
+// capture all apply the SAME email rule and produce the same wording. The
+// local regex this replaced accepted "a@b..c" and "a@-.x".
 
 // Public submit from the Contact page (no auth). Validates the essentials and
 // stores the message as 'new' for the admin to triage.
@@ -14,14 +17,16 @@ const capture = async (body = {}) => {
     const subject = String(body.subject ?? '').trim();
     const message = String(body.message ?? '').trim();
 
-    if (!first_name) throw new HttpError(422, 'Please enter your name.');
-    if (!EMAIL_RE.test(email)) throw new HttpError(422, 'Please enter a valid email address.');
-    if (!message) throw new HttpError(422, 'Please enter a message.');
+    const nameCheck = validateName(first_name, { field: 'firstName', label: 'First name' });
+    if (!nameCheck.ok) throw new HttpError(422, nameCheck.message, { field: 'firstName' });
+    const emailCheck = validateEmail(email);
+    if (!emailCheck.ok) throw new HttpError(422, emailCheck.message, { field: 'email' });
+    if (!message) throw new HttpError(422, 'Please enter a message.', { field: 'message' });
 
     await ContactMessage.create({
         first_name,
         last_name: last_name || null,
-        email,
+        email: emailCheck.value,
         subject: subject || null,
         message,
         status: 'new',

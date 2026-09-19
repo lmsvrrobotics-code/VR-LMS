@@ -9,11 +9,16 @@ const courseRepo = require('../repositories/CourseRepository');
 const { upload, removeFile } = require('../helpers/fileUploader');
 const bunny = require('./BunnyStream');
 const { HttpError } = require('../middlewares/error');
+const { normalizeText, normalizeDifficulty, sessionPatch } = require('../lib/curriculumFields');
 
 // Per-course R2 key prefix — every asset for a course (thumbnail/banner/preview
 // from CourseService + lesson attachments + lesson videos via Bunny collection)
 // lives under one folder, mirroring the Udemy/Teachable layout.
 const courseFolder = (course_id) => `uploads/courses/${course_id}/lessons`;
+
+// Session cover images live beside the lesson assets, under the same course
+// folder, so deleting a course still sweeps up everything it owns.
+const sessionFolder = (course_id) => `uploads/courses/${course_id}/sessions`;
 
 // Look up the course's Bunny Stream collection (one collection = one folder
 // per course in Bunny). Created lazily on first video upload so courses with
@@ -105,28 +110,62 @@ const listByCourse = async (course_id) => {
     return { sections: grouped };
 };
 
-const createSection = async ({ course_id, title, user_id }) => {
-    if (!title) throw new HttpError(422, 'Title is required');
-    const last = await sectionRepo.findLastSort(course_id);
+// A session (section in the DB) carries a title, an optional cover image and
+// an optional description. The image arrives as multipart under `image`; the
+// other two are plain text fields.
+const createSection = async ({ body, files }) => {
+    const b = body || {};
+    const patch = sessionPatch(b);
+    if (!patch.title) throw new HttpError(422, 'Title is required');
+    if (!b.course_id) throw new HttpError(422, 'course_id is required');
+
+    const last = await sectionRepo.findLastSort(b.course_id);
+    const f = pickFile(files, 'image');
+    if (f) {
+        const dest = `${sessionFolder(b.course_id)}/${uniqueName(f.originalname)}`;
+        patch.image = await upload(f, dest, 640, 360);
+    }
+
     const section = await sectionRepo.create({
-        course_id,
-        title,
-        user_id: user_id || null,
+        ...patch,
+        course_id: b.course_id,
+        user_id: b.user_id || null,
         sort: (last ? last.sort : 0) + 1,
     });
-    return { message: 'Section added successfully', section };
+    return { message: 'Session added successfully', section };
 };
 
-const updateSection = async ({ section_id, up_title }) => {
-    const s = await sectionRepo.findById(section_id);
-    if (!s) throw new HttpError(404, 'Section not found');
-    await s.update({ title: up_title });
+const updateSection = async ({ body, files }) => {
+    const b = body || {};
+    const s = await sectionRepo.findById(b.section_id);
+    if (!s) throw new HttpError(404, 'Session not found');
+
+    // `up_title` is the legacy key the old admin form posted; keep accepting it
+    // so an un-refreshed browser tab does not start blanking session titles.
+    const patch = sessionPatch(
+        { ...b, title: b.title !== undefined ? b.title : b.up_title },
+        { partial: true },
+    );
+
+    const f = pickFile(files, 'image');
+    if (f) {
+        const dest = `${sessionFolder(s.course_id)}/${uniqueName(f.originalname)}`;
+        patch.image = await upload(f, dest, 640, 360);
+        if (s.image) await removeFile(s.image);
+    } else if (normalizeText(b.remove_image)) {
+        // Explicit "clear the cover" from the edit form.
+        if (s.image) await removeFile(s.image);
+        patch.image = null;
+    }
+
+    await s.update(patch);
     return { message: 'update successfully', section: s };
 };
 
 const deleteSection = async (id) => {
     const s = await sectionRepo.findById(id);
-    if (!s) throw new HttpError(404, 'Section not found');
+    if (!s) throw new HttpError(404, 'Session not found');
+    if (s.image) await removeFile(s.image);
     await s.destroy();
     return { message: 'Delete successfully' };
 };
@@ -142,6 +181,9 @@ const sortSections = async (rawIds) => {
 // ===== Lessons =====
 
 const buildLessonData = async (b, files) => {
+    const difficulty = normalizeDifficulty(b.difficulty);
+    if (!difficulty.ok) throw new HttpError(422, difficulty.error);
+
     const data = {
         title: b.title,
         user_id: b.user_id || null,
@@ -150,7 +192,20 @@ const buildLessonData = async (b, files) => {
         is_free: b.free_lesson ? 1 : 0,
         lesson_type: b.lesson_type,
         summary: b.summary || null,
+        // Class authoring fields (migration 23). `description` is the long-form
+        // blurb; `summary` stays the short one-liner it always was.
+        description: normalizeText(b.description),
+        difficulty: difficulty.value,
     };
+
+    // Class cover image. Separate from `attachment`: for an image-type lesson
+    // the attachment is the lesson content itself, while the thumbnail is the
+    // card art shown in the curriculum list.
+    const thumb = pickFile(files, 'thumbnail');
+    if (thumb) {
+        const dest = `${courseFolder(b.course_id)}/${uniqueName(thumb.originalname)}`;
+        data.thumbnail = await upload(thumb, dest, 640, 360);
+    }
 
     switch (b.lesson_type) {
         case 'text':
@@ -254,11 +309,29 @@ const updateLesson = async ({ body, files }) => {
     const lesson = await lessonRepo.findById(b.id);
     if (!lesson) throw new HttpError(404, 'Lesson not found');
 
+    const difficulty = normalizeDifficulty(b.difficulty);
+    if (!difficulty.ok) throw new HttpError(422, difficulty.error);
+
     const data = {
         title: b.title,
         section_id: b.section_id,
         summary: b.summary,
+        description: normalizeText(b.description),
+        difficulty: difficulty.value,
     };
+
+    // Class cover image. On update the course id comes from the stored row —
+    // the edit form does not resend course_id — and the previous file is
+    // swept only after the replacement uploads successfully.
+    const thumb = pickFile(files, 'thumbnail');
+    if (thumb) {
+        const dest = `${courseFolder(lesson.course_id)}/${uniqueName(thumb.originalname)}`;
+        data.thumbnail = await upload(thumb, dest, 640, 360);
+        if (lesson.thumbnail) await removeFile(lesson.thumbnail);
+    } else if (normalizeText(b.remove_thumbnail)) {
+        if (lesson.thumbnail) await removeFile(lesson.thumbnail);
+        data.thumbnail = null;
+    }
 
     switch (b.lesson_type) {
         case 'text':
@@ -362,6 +435,9 @@ const deleteLesson = async (id) => {
     if (lesson.lesson_src && lesson.lesson_type === 'system-video') {
         removeFile(lesson.lesson_src);
     }
+    // The class cover image is independent of lesson_type, so it is swept for
+    // every kind of lesson rather than inside the branches above.
+    if (lesson.thumbnail) await removeFile(lesson.thumbnail);
 
     if (lesson.lesson_type === 'quiz') {
         await questionRepo.destroyByQuiz(lesson.id);

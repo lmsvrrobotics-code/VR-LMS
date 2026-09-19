@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
 import { storeQuiz, updateQuiz, getQuiz } from '../../../api/quiz';
+import { DIFFICULTY_LEVELS } from './ClassMetaFields';
 
 const splitDuration = (str) => {
     const p = String(str || '0:0:0').split(':');
@@ -17,6 +18,7 @@ export default function QuizForm({ course, sections, quizId, onDone }) {
     const [minute, setMinute] = useState(10);
     const [second, setSecond] = useState(0);
     const [description, setDescription] = useState('');
+    const [difficulty, setDifficulty] = useState('');
     const [saving, setSaving] = useState(false);
     const [loading, setLoading] = useState(!!quizId);
 
@@ -32,6 +34,7 @@ export default function QuizForm({ course, sections, quizId, onDone }) {
                 setPassMark(q.pass_mark || 5);
                 setRetake(q.retake || 1);
                 setDescription(q.description || '');
+                setDifficulty(q.difficulty || '');
                 const d = splitDuration(q.duration);
                 setHour(d.hour); setMinute(d.minute); setSecond(d.second);
             } catch (e) {
@@ -55,6 +58,7 @@ export default function QuizForm({ course, sections, quizId, onDone }) {
                 retake,
                 hour, minute, second,
                 description,
+                difficulty,
             };
             if (quizId) await updateQuiz(quizId, body);
             else await storeQuiz(body);
@@ -71,11 +75,11 @@ export default function QuizForm({ course, sections, quizId, onDone }) {
     return (
         <form onSubmit={submit}>
             <div className="mb-3">
-                <label className="ol-form-label">Title</label>
+                <label className="ol-form-label">Quiz name</label>
                 <input className="ol-form-control" value={title} onChange={(e) => setTitle(e.target.value)} required autoFocus />
             </div>
             <div className="mb-3">
-                <label className="ol-form-label">Section</label>
+                <label className="ol-form-label">Session</label>
                 <select className="ol-form-control" value={sectionId} onChange={(e) => setSectionId(e.target.value)} required>
                     {sections.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
                 </select>
@@ -103,6 +107,14 @@ export default function QuizForm({ course, sections, quizId, onDone }) {
             <div className="mb-3">
                 <label className="ol-form-label">Description</label>
                 <textarea className="ol-form-control" rows="3" value={description} onChange={(e) => setDescription(e.target.value)} />
+            </div>
+            <div className="mb-3">
+                <label className="ol-form-label">Difficulty level</label>
+                <select className="ol-form-control" value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
+                    {DIFFICULTY_LEVELS.map((d) => (
+                        <option key={d.value} value={d.value}>{d.label}</option>
+                    ))}
+                </select>
             </div>
             <div className="text-center">
                 <button className="ol-btn-primary w-full" disabled={saving}>{saving ? 'Saving…' : (quizId ? 'Update quiz' : 'Add quiz')}</button>

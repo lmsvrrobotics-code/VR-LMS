@@ -15,6 +15,12 @@ const schema = joi.object({
   R2_ACCESS_KEY_ID: joi.string().required(),
   R2_SECRET_ACCESS_KEY: joi.string().required(),
   R2_BUCKET_NAME: joi.string().required(),
+  // Public base URL for stored assets. Required because R2Storage.publicUrlFor()
+  // returns null when it is unset, so a missing/typo'd value does not fail —
+  // it silently writes broken asset references into the DB, and the damage is
+  // only visible later as missing images. Fail at boot instead. uri() also
+  // catches a bare hostname pasted without the scheme.
+  R2_PUBLIC_URL: joi.string().uri().required(),
   BUNNY_STREAM_LIBRARY_ID: joi.string().required(),
   BUNNY_STREAM_API_KEY: joi.string().required(),
 }).unknown(true);
@@ -52,9 +58,12 @@ function validateEnvironment() {
   return value;
 }
 
-// Validate on require
-validateEnvironment();
+// Validate on require. Skipped under the test runner: validateEnvironment()
+// exits the process on failure, which would kill the test run before a single
+// assertion reported. Tests exercise `schema` directly instead.
+if (process.env.NODE_ENV !== 'test') {
+  validateEnvironment();
+  console.log('✅ Environment validation passed');
+}
 
-console.log('✅ Environment validation passed');
-
-module.exports = { validateEnvironment };
+module.exports = { validateEnvironment, schema };

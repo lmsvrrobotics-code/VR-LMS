@@ -3,6 +3,31 @@ import * as tus from 'tus-js-client';
 import { createVideoUpload, getVideoStatus } from '../../../api/curriculum';
 import { detectFileDuration } from './videoDuration';
 
+// Turn a raw upload failure into something an admin can act on. Bunny (and our
+// backend proxy to it) otherwise surface opaque strings like "Request failed
+// with status code 401", which say nothing about the cause or the fix.
+function friendlyUploadError(source) {
+    // `source` may be an axios error (ticket step) or a tus error (upload step).
+    const status =
+        source?.response?.status ??
+        source?.originalResponse?.getStatus?.() ??
+        (typeof source?.message === 'string' && /status code (\d{3})/.exec(source.message)?.[1]);
+    const code = Number(status);
+    const serverMsg = source?.response?.data?.error;
+    if (serverMsg) return serverMsg; // backend already gave a meaningful message
+
+    if (code === 401 || code === 403) {
+        return 'The video service rejected the upload (its credentials are invalid). Please contact an administrator.';
+    }
+    if (code === 404) return 'The video service could not be found. Please contact an administrator.';
+    if (code === 413) return 'This video is too large to upload. Try a smaller file.';
+    if (code >= 500) return 'The video service is temporarily unavailable. Please try again in a moment.';
+    if (/network|failed to fetch|ECONN|ENOTFOUND/i.test(source?.message || '')) {
+        return 'Could not reach the video service. Check your connection and try again.';
+    }
+    return 'The upload failed. Please try again, or contact an administrator if it keeps happening.';
+}
+
 // YouTube-style direct upload to Bunny Stream.
 //   1. ask our backend for a presigned TUS ticket (guid + signature)
 //   2. stream the file straight to Bunny (browser -> CDN, never our server)
@@ -46,7 +71,7 @@ export default function BunnyVideoUploader({ title, currentSrc, onUploaded, onDu
             ticket = await createVideoUpload(title || file.name);
         } catch (e) {
             setPhase('error');
-            setErrorMsg(e.response?.data?.error || 'Could not start the upload (Bunny not configured?)');
+            setErrorMsg(friendlyUploadError(e));
             return;
         }
 
@@ -64,7 +89,7 @@ export default function BunnyVideoUploader({ title, currentSrc, onUploaded, onDu
             metadata: { filetype: file.type, title: title || file.name },
             onError: (err) => {
                 setPhase('error');
-                setErrorMsg(err?.message || 'Upload failed');
+                setErrorMsg(friendlyUploadError(err));
             },
             onProgress: (sent, total) => {
                 setPct(total ? Math.round((sent / total) * 100) : 0);

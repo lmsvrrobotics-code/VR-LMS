@@ -24,6 +24,7 @@ const forumRoutes = require('./forum/forum.routes');
 const couponRoutes = require('./routes/coupon.routes');
 const galleryRoutes = require('./routes/gallery.routes');
 const demoVideoRoutes = require('./routes/demoVideo.routes');
+const founderMeetingRoutes = require('./routes/founderMeeting.routes');
 const locationRoutes = require('./routes/location.routes');
 const bookRoutes = require('./routes/book.routes');
 const kitRoutes = require('./routes/kit.routes');
@@ -68,22 +69,17 @@ app.use(securityHeaders);
 // dev. FAIL CLOSED: if unset in prod, only localhost is allowed (cross-origin
 // browser calls are blocked) — this forces the deployer to set the origin
 // rather than silently shipping a wide-open credentialed API.
-const adminCorsAllow = (process.env.ADMIN_ALLOWED_ORIGINS || process.env.CORS_ORIGINS || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
+const { parseAllowedOrigins, corsOrigin, ALLOWED_HEADERS } = require('./lib/corsPolicy');
+
+const adminCorsAllow = parseAllowedOrigins();
 if (!adminCorsAllow.length && env.env === 'production') {
     console.warn('\n⚠️  [SECURITY] ADMIN_ALLOWED_ORIGINS/CORS_ORIGINS is unset in production. '
         + 'Only localhost is allowed — set ADMIN_ALLOWED_ORIGINS=https://<frontend> or browser calls will be CORS-blocked.\n');
 }
 app.use(cors({
-    origin: (origin, cb) => {
-        if (!origin) return cb(null, true); // same-origin / curl / mobile apps
-        if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return cb(null, true);
-        if (adminCorsAllow.includes(origin)) return cb(null, true);
-        return cb(new Error('Not allowed by CORS'));
-    },
+    origin: corsOrigin(adminCorsAllow),
     credentials: true,
+    allowedHeaders: ALLOWED_HEADERS,
 }));
 
 // Rate limiting on public endpoints — prevents lead-form spam, enumeration of
@@ -321,6 +317,22 @@ app.get('/api/public/demo-videos', async (_req, res, next) => {
     } catch (e) { next(e); }
 });
 
+// Public "Weekly Meeting with Founder" — the single featured, published
+// meeting rendered on the home page under the hero. Returns { meeting: null }
+// when nothing is featured, so the page omits the section entirely.
+//
+// NOT cached through `cache.wrap`: the payload carries a live/upcoming/past
+// state computed from the current time, and a stale cached "upcoming" would
+// keep a Join button alive after the call ended. The row is a single indexed
+// lookup, so the read is cheap.
+const founderMeetingService = require('./services/FounderMeetingService');
+app.get('/api/public/founder-meeting', async (_req, res, next) => {
+    try {
+        res.set('Cache-Control', 'no-store');
+        res.json(await founderMeetingService.featuredPublic());
+    } catch (e) { next(e); }
+});
+
 // Public locations list — drives the public Locations page learning-center
 // cards. Only visible items. Admins manage these under Locations → Add/Manage.
 const locationService = require('./services/LocationService');
@@ -473,6 +485,38 @@ const attachVerifiedId = [optionalAuth, (req, _res, next) => {
     req.verifiedUserId = uid || null;
     next();
 }];
+
+// Public registration for the featured founder meeting. Rate-limited like the
+// other anonymous write endpoints (contact, leads, signup) so the registrant
+// list cannot be flooded.
+//
+// MUST sit below the attachVerifiedId definition above — it is a `const`, so
+// referencing it earlier crashes the server at startup with a temporal dead
+// zone error. attachVerifiedId is OPTIONAL auth: a logged-in student is
+// recorded against their id, an anonymous visitor still registers fine.
+app.post('/api/public/founder-meeting/:id/register', writeLimiter, ...attachVerifiedId, async (req, res, next) => {
+    try {
+        res.json(await founderMeetingService.register({
+            meetingId: req.params.id,
+            body: req.body,
+            userId: req.verifiedUserId || null,
+        }));
+    } catch (e) { next(e); }
+});
+
+// The signed-in student's founder meetings: the ones they registered for
+// (history included) plus upcoming ones they can still join. Optional auth —
+// matches by verified id first, account email as a fallback for signups made
+// while logged out. Never cached; it is per-student.
+app.get('/api/public/founder-meeting/mine', ...attachVerifiedId, async (req, res, next) => {
+    try {
+        res.set('Cache-Control', 'no-store');
+        res.json(await founderMeetingService.listForStudent({
+            userId: req.verifiedUserId || null,
+            email: req.authUser?.email || null,
+        }));
+    } catch (e) { next(e); }
+});
 
 // Student → teacher/class feedback (inverse of the teacher's student records).
 // The student submits; student_id comes from the verified token (x-user-id is
@@ -1219,6 +1263,7 @@ app.use('/api/admin', adminOnly, liveClassRoutes);
 app.use('/api/admin', adminOnly, couponRoutes);
 app.use('/api/admin', adminOnly, galleryRoutes);
 app.use('/api/admin', adminOnly, demoVideoRoutes);
+app.use('/api/admin', adminOnly, founderMeetingRoutes);
 app.use('/api/admin', adminOnly, locationRoutes);
 app.use('/api/admin', adminOnly, bookRoutes);
 app.use('/api/admin', adminOnly, kitRoutes);

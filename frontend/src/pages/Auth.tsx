@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { GraduationCap, Users, Eye, EyeOff, Loader2 } from "lucide-react";
 import { getLandingRoute, isAdminRole, UNKNOWN_ROLE_HOME } from "@/lib/roleRouting";
+import { authErrorMessage, authErrorField } from "@/lib/authErrorMessage";
+import { validateEmail, validatePhone } from "@/lib/fieldValidation";
 
 /**
  * VR Robotics Academy — basic authentication UI (Login + Sign Up).
@@ -38,10 +40,31 @@ const Auth = () => {
   const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Which input to outline, when the failure is attributable to one.
+  const [badField, setBadField] = useState<"email" | "password" | null>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setBadField(null);
+
+    // Catch an obviously malformed address before spending a round trip on it —
+    // otherwise a typo comes back as a 401 that reads like a wrong password.
+    const emailErr = validateEmail(email);
+    if (emailErr) {
+      setError(emailErr);
+      setBadField("email");
+      emailRef.current?.focus();
+      return;
+    }
+    if (!password) {
+      setError("Please enter your password.");
+      setBadField("password");
+      passwordRef.current?.focus();
+      return;
+    }
     // Password-length rule applies to NEW accounts only — existing accounts
     // (e.g. admins) may have shorter legacy passwords and must still log in.
     if (mode === "signup") {
@@ -53,8 +76,12 @@ const Auth = () => {
         setError("Passwords do not match.");
         return;
       }
-      if (!/^d{10,15}$/.test(phone.trim())) {
-        setError("Enter a valid phone number (10-15 digits).");
+      // This read /^d{10,15}$/ — a literal "d", not \d — so every real phone
+      // number was rejected and the string "dddddddddd" was accepted.
+      const phoneErr = validatePhone(phone);
+      if (phoneErr) {
+        setError(phoneErr);
+        setBadField(null);
         return;
       }
     }
@@ -100,11 +127,17 @@ const Auth = () => {
         }
       }
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-        (err as Error)?.message ||
-        (mode === "signup" ? "Sign up failed." : "Login failed.");
-      setError(msg);
+      // This used to fall through to (err as Error).message, which for axios is
+      // the literal "Request failed with status code 401" — an HTTP status
+      // shown to someone who simply mistyped their password.
+      setError(authErrorMessage(err, mode));
+      const field = authErrorField(err);
+      // A 401 is deliberately not attributed to one field (the server does not
+      // say which half was wrong), so only mark an input when we actually know.
+      setBadField(field);
+      if (field === "email") emailRef.current?.focus();
+      else if (field === "password") passwordRef.current?.focus();
+      else if (mode === "login") passwordRef.current?.select();
     } finally {
       setBusy(false);
     }
@@ -173,7 +206,11 @@ const Auth = () => {
           </p>
 
           {error && (
-            <div className="mb-4 rounded-lg bg-red-50 border border-red-200 text-red-600 text-sm px-3 py-2">
+            <div
+              role="alert"
+              aria-live="assertive"
+              className="mb-4 rounded-lg bg-red-50 border border-red-200 text-red-600 text-sm px-3 py-2"
+            >
               {error}
             </div>
           )}
@@ -225,7 +262,24 @@ const Auth = () => {
 
             <div>
               <Label htmlFor="email">Email</Label>
-              <Input id="email" name="email" autoComplete="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="you@example.com" />
+              <Input
+                id="email"
+                name="email"
+                ref={emailRef}
+                autoComplete="email"
+                type="email"
+                inputMode="email"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  // Clear the failure as soon as they start correcting it.
+                  if (error) { setError(null); setBadField(null); }
+                }}
+                required
+                placeholder="you@example.com"
+                aria-invalid={badField === "email"}
+                className={badField === "email" ? "border-red-500 focus-visible:ring-red-500" : undefined}
+              />
             </div>
 
             <div>
@@ -234,12 +288,20 @@ const Auth = () => {
                 <Input
                   id="password"
                   name="password"
+                  ref={passwordRef}
                   autoComplete={mode === "signup" ? "new-password" : "current-password"}
                   type={showPwd ? "text" : "password"}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (error) { setError(null); setBadField(null); }
+                  }}
                   required
-                  placeholder="At least 8 characters"
+                  // On login the password already exists — stating a length
+                  // rule there implies the account must satisfy it.
+                  placeholder={mode === "signup" ? "At least 8 characters" : "Your password"}
+                  aria-invalid={badField === "password"}
+                  className={badField === "password" ? "border-red-500 focus-visible:ring-red-500" : undefined}
                 />
                 <button
                   type="button"

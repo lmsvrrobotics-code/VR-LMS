@@ -56,6 +56,28 @@ if (isProduction && bastionAllowedOrigins.length === 0) {
   );
 }
 
+// Request headers the browser may send cross-origin. A header missing here is
+// rejected at preflight with "Request header field <x> is not allowed by
+// Access-Control-Allow-Headers", which fails the request before it ever reaches
+// a route — the response body and status are never seen by the caller.
+//
+//   Cache-Control — the student dashboard clients send `no-cache` on polled
+//                   endpoints (my-assignments, my-classes) to defeat stale
+//                   reads; see frontend/src/api/studentAssignmentApi.ts.
+//   x-user-id     — legacy student identity header still sent by the /api/public
+//                   clients. NOT a trust boundary: admin-service overwrites it
+//                   from the verified JWT before any controller reads it (see
+//                   admin-service/src/server.js), so allowing it through
+//                   preflight grants no authority. CORS is a browser-only
+//                   convention and never a security control regardless — curl
+//                   ignores it entirely.
+export const bastionAllowedHeaders = [
+  'Content-Type',
+  'Authorization',
+  'Cache-Control',
+  'x-user-id',
+];
+
 // Matches localhost and any RFC-1918 private-LAN origin (10.x, 192.168.x,
 // 172.16–31.x) on any port. Lets the app be opened from another device on the
 // office Wi-Fi (e.g. http://10.195.180.50:8081) without re-listing every IP —

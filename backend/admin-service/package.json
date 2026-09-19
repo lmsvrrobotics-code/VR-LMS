@@ -13,7 +13,9 @@
     "test:watch": "nodemon --exec 'npm test'",
     "test:teaching-e2e": "node tests/teaching_flow.e2e.mjs",
     "lint": "eslint src/**/*.js --fix",
-    "security:audit": "npm audit --production"
+    "security:audit": "npm audit --production",
+    "seed:founder-poster": "node scripts/seedFounderPoster.js",
+    "check:bunny": "node scripts/checkBunny.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.700.0",

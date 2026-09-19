@@ -55,6 +55,8 @@ const Location = require('./Location')(sequelize);
 const TeacherFeedback = require('./TeacherFeedback')(sequelize);
 // Marketing/demo videos shown to students (CEO intro + sample teasers).
 const DemoVideo = require('./DemoVideo')(sequelize);
+const FounderMeeting = require('./FounderMeeting')(sequelize);
+const FounderMeetingRegistration = require('./FounderMeetingRegistration')(sequelize);
 // Teacher-authored dynamic feedback forms + their one-time student responses.
 const FeedbackForm = require('./FeedbackForm')(sequelize);
 const FeedbackResponse = require('./FeedbackResponse')(sequelize);
@@ -66,7 +68,7 @@ const AssignmentSubmission = require('./AssignmentSubmission')(sequelize);
 // Notifications for students and teachers
 const Notification = require('./Notification')(sequelize);
 
-const models = { Category, Course, SeoField, User, Lesson, Section, Question, QuizSubmission, Setting, LiveClass, Coupon, Certificate, PreAssessmentResult, UserProgress, LessonCompletion, LessonWatchProgress, Language, Forum, ForumReport, Program, Batch, BatchCourse, BatchMember, BatchTeacher, BatchClass, BatchLessonRelease, EmailJob, Gallery, Book, Kit, BookOrder, KitOrder, Slot, SlotEnrollment, Demo, ClassSession, Project, Testimonial, Resource, ResourceCategory, TeacherFreeSchedule, StudentRecord, StudentLearning, Lead, Payment, AppSetting, Location, TeacherFeedback, DemoVideo, FeedbackForm, FeedbackResponse, ContactMessage, Assignment, AssignmentSubmission, Notification };
+const models = { Category, Course, SeoField, User, Lesson, Section, Question, QuizSubmission, Setting, LiveClass, Coupon, Certificate, PreAssessmentResult, UserProgress, LessonCompletion, LessonWatchProgress, Language, Forum, ForumReport, Program, Batch, BatchCourse, BatchMember, BatchTeacher, BatchClass, BatchLessonRelease, EmailJob, Gallery, Book, Kit, BookOrder, KitOrder, Slot, SlotEnrollment, Demo, ClassSession, Project, Testimonial, Resource, ResourceCategory, TeacherFreeSchedule, StudentRecord, StudentLearning, Lead, Payment, AppSetting, Location, TeacherFeedback, DemoVideo, FounderMeeting, FounderMeetingRegistration, FeedbackForm, FeedbackResponse, ContactMessage, Assignment, AssignmentSubmission, Notification };
 Object.values(models).forEach((m) => m.associate && m.associate(models));
 
 module.exports = { sequelize, ...models };

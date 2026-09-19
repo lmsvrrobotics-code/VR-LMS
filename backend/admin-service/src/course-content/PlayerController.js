@@ -22,10 +22,18 @@ const toSeconds = (raw) => {
 
 // Resolves the student making the request. Returns 0 (falsy) if missing — callers
 // must check and reject rather than silently bucketing into a default user.
+// The verified id first: requireStudent / attachVerifiedId write it to
+// req.verifiedUserId and also overwrite the spoofable x-user-id header with it.
+// user_id columns are VARCHAR and often NON-numeric ("VR20260701-01"), so the
+// old Number() coercion turned those into 0 and 401'd every such student out of
+// their own progress. Keep the trimmed string.
 const getUserId = (req) => {
-    const raw = req.headers['x-user-id'] || req.query.user_id || req.body?.user_id;
-    const n = Number(raw);
-    return Number.isFinite(n) && n > 0 ? n : 0;
+    const raw = req.verifiedUserId
+        || req.authUser?.userId
+        || req.headers['x-user-id']
+        || req.query?.user_id
+        || req.body?.user_id;
+    return String(raw ?? '').trim();
 };
 
 exports.player = async (req, res) => {
@@ -86,7 +94,15 @@ exports.progress = async (req, res) => {
         const totalSeconds = lesson ? toSeconds(lesson.duration) : 0;
 
         let isCompleted = 0;
-        if (course && course.enable_drip_content) {
+        // A quiz is completed by SUBMITTING it, never by elapsed time — its
+        // `duration` is the time limit, not content length, so the dwell/percent
+        // rules below would mark it done just for being opened. The player
+        // stamps 0 seconds on open (to record "last opened"), which makes this
+        // guard load-bearing rather than theoretical.
+        const isQuiz = lesson && lesson.lesson_type === 'quiz';
+        if (isQuiz) {
+            isCompleted = 0;
+        } else if (course && course.enable_drip_content) {
             let drip = {};
             try {
                 drip = typeof course.drip_content_settings === 'string'

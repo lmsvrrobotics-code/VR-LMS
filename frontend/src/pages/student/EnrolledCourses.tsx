@@ -56,7 +56,9 @@ const EnrolledCourseCard = ({ c }: { c: MyCourse }) => {
 
   return (
     <Link
-      to={`/courses/programs/course-details/play/${c.slug}`}
+      // Opens the course page (Overview + the session/class curriculum), not
+      // the player. Students pick a class from there.
+      to={`/courses/${c.slug}`}
       className="card-ngo-static border-0 group overflow-hidden flex flex-col h-full rounded-2xl"
       aria-label={`${cta}: ${c.title}`}
     >

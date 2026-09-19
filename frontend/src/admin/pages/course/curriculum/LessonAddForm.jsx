@@ -3,6 +3,7 @@ import { toast } from 'react-toastify';
 import { storeLesson } from '../../../api/curriculum';
 import { detectVideoDuration } from './videoDuration';
 import BunnyVideoUploader from './BunnyVideoUploader';
+import ClassMetaFields from './ClassMetaFields';
 
 // Maps picker value -> backend lesson_type / lesson_provider / label
 const TYPE_MAP = {
@@ -40,6 +41,10 @@ export default function LessonAddForm({ course, sections, lessonType, onDone }) 
     const [scormProvider, setScormProvider] = useState(SCORM_PROVIDERS[0]);
     const [saving, setSaving] = useState(false);
     const [detectingDuration, setDetectingDuration] = useState(false);
+    // Class metadata: cover image, long-form description, difficulty level.
+    const [thumbnail, setThumbnail] = useState(null);
+    const [description, setDescription] = useState('');
+    const [difficulty, setDifficulty] = useState('');
 
     // Best-effort duration detection. If we can determine it, prefill the field;
     // otherwise leave whatever the user typed alone.
@@ -56,23 +61,46 @@ export default function LessonAddForm({ course, sections, lessonType, onDone }) 
     const submit = async (e) => {
         e.preventDefault();
         if (!map) return;
+
+        // Explicit, meaningful validation BEFORE any work (and before a video
+        // upload has already run) — each message names the specific field and
+        // what's expected, instead of relying on the browser's generic prompt
+        // or a bare "Failed" toast.
+        const cleanTitle = title.trim();
+        if (!cleanTitle) { toast.error('Enter a lesson name.'); return; }
+        if (cleanTitle.length < 3) { toast.error('Lesson name must be at least 3 characters.'); return; }
+        if (!sectionId) { toast.error('Choose a session for this lesson.'); return; }
+
+        // Duration applies to timed lesson types; HH:MM:SS with valid ranges.
+        const durationTypes = isUrlType(lessonType) || lessonType === 'video';
+        if (durationTypes && duration && duration !== '00:00:00') {
+            const m = /^(\d{1,2}):([0-5]\d):([0-5]\d)$/.exec(duration.trim());
+            if (!m) { toast.error('Duration must be in HH:MM:SS format, e.g. 01:05:30.'); return; }
+        }
+
         setSaving(true);
         try {
             const fd = new FormData();
             fd.append('course_id', course.id);
             fd.append('section_id', sectionId);
-            fd.append('title', title);
+            fd.append('title', cleanTitle);
             fd.append('summary', summary || '');
             fd.append('free_lesson', free ? 1 : 0);
             fd.append('lesson_type', map.lesson_type);
             fd.append('lesson_provider', map.lesson_provider);
+            fd.append('description', description || '');
+            fd.append('difficulty', difficulty || '');
+            if (thumbnail) fd.append('thumbnail', thumbnail);
 
             if (isUrlType(lessonType)) {
-                fd.append('lesson_src', lessonSrc);
+                if (!lessonSrc || !lessonSrc.trim()) { toast.error('Enter the video URL.'); setSaving(false); return; }
+                fd.append('lesson_src', lessonSrc.trim());
                 fd.append('duration', duration || '00:00:00');
             } else if (lessonType === 'iframe') {
+                if (!iframeSource || !iframeSource.trim()) { toast.error('Paste the embed / iframe code.'); setSaving(false); return; }
                 fd.append('iframe_source', iframeSource);
             } else if (lessonType === 'text') {
+                if (!textDescription || !textDescription.trim()) { toast.error('Add the lesson text content.'); setSaving(false); return; }
                 fd.append('text_description', textDescription);
             } else if (lessonType === 'video') {
                 if (!lessonSrc) { toast.error('Please upload a video and wait for it to finish'); setSaving(false); return; }
@@ -92,9 +120,10 @@ export default function LessonAddForm({ course, sections, lessonType, onDone }) 
             }
 
             await storeLesson(fd);
+            toast.success('Lesson saved.');
             onDone();
         } catch (err) {
-            toast.error(err.response?.data?.error || 'Failed');
+            toast.error(err.response?.data?.error || 'Could not save the lesson. Please try again.');
         } finally {
             setSaving(false);
         }
@@ -109,12 +138,12 @@ export default function LessonAddForm({ course, sections, lessonType, onDone }) 
             </div>
 
             <div className="mb-3">
-                <label className="ol-form-label">Title</label>
+                <label className="ol-form-label">Lesson name</label>
                 <input className="ol-form-control" value={title} onChange={(e) => setTitle(e.target.value)} required autoFocus />
             </div>
 
             <div className="mb-3">
-                <label className="ol-form-label">Section</label>
+                <label className="ol-form-label">Session</label>
                 <select className="ol-form-control" value={sectionId} onChange={(e) => setSectionId(e.target.value)} required>
                     {sections.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
                 </select>
@@ -209,6 +238,15 @@ export default function LessonAddForm({ course, sections, lessonType, onDone }) 
                     </div>
                 </>
             )}
+
+            <ClassMetaFields
+                image={thumbnail}
+                onImageChange={setThumbnail}
+                description={description}
+                onDescriptionChange={setDescription}
+                difficulty={difficulty}
+                onDifficultyChange={setDifficulty}
+            />
 
             <div className="mb-3">
                 <label className="ol-form-label">Summary</label>

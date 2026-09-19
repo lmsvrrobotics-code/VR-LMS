@@ -58,11 +58,70 @@ const loginSchema = z.object({
 // Turn a ZodError into one clean, human sentence. Without this, err.message
 // is the raw JSON dump of every issue ("[ { \"origin\": \"string\", ... } ]")
 // and we were returning that straight to the browser.
-function validationMessage(err) {
+//
+// It previously produced "email: Invalid email" — the machine field name and
+// zod's own terse text. The user reads this verbatim in the form, so name the
+// field the way the form labels it and say what a valid value looks like.
+const FIELD_LABELS = {
+  email: 'Email address',
+  password: 'Password',
+  name: 'Full name',
+  phone: 'Mobile number',
+  dob: 'Date of birth',
+  gender: 'Gender',
+  role: 'Role',
+  confirmPassword: 'Confirm password',
+  currentPassword: 'Current password',
+  newPassword: 'New password',
+};
+
+function fieldLabel(path) {
+  const key = Array.isArray(path) ? path.join('.') : String(path || '');
+  if (FIELD_LABELS[key]) return FIELD_LABELS[key];
+  // graduationYear -> "Graduation year": split on the case change, then
+  // lowercase the tail so it reads as a sentence, not a Title Case header.
+  const words = key.split('.').pop()
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/_/g, ' ')
+    .trim()
+    .toLowerCase();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : 'This field';
+}
+
+// Exported for unit tests: this text goes straight into the login/signup form,
+// so its wording is behaviour worth pinning down.
+export function validationMessage(err) {
   const issue = err?.issues?.[0];
-  if (!issue) return 'Invalid input';
-  const field = issue.path?.join('.') || 'input';
-  return `${field}: ${issue.message}`;
+  if (!issue) return 'Please check the details you entered and try again.';
+  const label = fieldLabel(issue.path);
+  const code = issue.code;
+
+  if (code === 'invalid_string' && issue.validation === 'email') {
+    return `${label} doesn't look like a valid email — for example name@example.com.`;
+  }
+  if (code === 'invalid_format' && issue.format === 'email') {
+    return `${label} doesn't look like a valid email — for example name@example.com.`;
+  }
+  // zod v4 dropped issue.received; a missing key surfaces as invalid_type with
+  // "expected string" and a message that leaks zod's internals, so treat any
+  // type mismatch on an absent value as "required".
+  if (code === 'invalid_type') {
+    return `${label} is required.`;
+  }
+  if (code === 'too_small') {
+    // A zero-length string is missing, not "too short".
+    if (issue.minimum === 1 || issue.minimum === 0) return `${label} is required.`;
+    return `${label} must be at least ${issue.minimum} characters.`;
+  }
+  if (code === 'too_big') {
+    return `${label} must be ${issue.maximum} characters or fewer.`;
+  }
+  if (code === 'invalid_enum_value' || code === 'invalid_value') {
+    const opts = issue.options || issue.values || [];
+    return opts.length ? `${label} must be one of: ${opts.join(', ')}.` : `${label} is not valid.`;
+  }
+  // Unknown rule: still better than a bare field name.
+  return `${label}: ${issue.message}`;
 }
 
 // ======================

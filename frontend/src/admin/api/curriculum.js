@@ -2,13 +2,15 @@ import api from './client';
 
 export const listCurriculum = (courseId) => api.get(`/course/${courseId}/curriculum`).then((r) => r.data);
 
-export const storeSection = (data) => api.post('/section', data).then((r) => r.data);
-export const updateSection = (data) => api.post('/section/update', data).then((r) => r.data);
-export const deleteSection = (id) => api.get(`/section/delete/${id}`).then((r) => r.data);
-export const sortSections = (ids) => api.post('/section/sort', { itemJSON: ids }).then((r) => r.data);
-
 const isFormData = (d) => typeof FormData !== 'undefined' && d instanceof FormData;
 const lessonConfig = (d) => isFormData(d) ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined;
+
+// Sessions (sections in the API/DB) carry a cover image, so these post
+// FormData. The endpoint names stay `/section` — only the UI wording changed.
+export const storeSection = (data) => api.post('/section', data, lessonConfig(data)).then((r) => r.data);
+export const updateSection = (data) => api.post('/section/update', data, lessonConfig(data)).then((r) => r.data);
+export const deleteSection = (id) => api.get(`/section/delete/${id}`).then((r) => r.data);
+export const sortSections = (ids) => api.post('/section/sort', { itemJSON: ids }).then((r) => r.data);
 
 export const storeLesson = (data) => api.post('/lesson', data, lessonConfig(data)).then((r) => r.data);
 export const updateLesson = (data) => api.post('/lesson/edit', data, lessonConfig(data)).then((r) => r.data);

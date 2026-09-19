@@ -91,6 +91,7 @@ const MENU = [
             { label: 'Projects', to: '/admin/projects' },
             { label: 'Gallery', to: '/admin/gallery' },
             { label: 'Demo Videos', to: '/admin/demo-videos' },
+            { label: 'Founder Meetings', to: '/admin/founder-meetings' },
             { label: 'Locations', to: '/admin/locations' },
             { label: 'Testimonials', to: '/admin/testimonials' },
         ],

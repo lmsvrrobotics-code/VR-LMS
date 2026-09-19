@@ -4,7 +4,7 @@ import { FaPen, FaTrash, FaChevronDown, FaChevronRight, FaSort } from 'react-ico
 import Modal from '../../../components/Modal';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import { listCurriculum, storeSection, updateSection, deleteSection, deleteLesson } from '../../../api/curriculum';
-import SectionForm from '../curriculum/SectionForm';
+import SessionForm from '../curriculum/SessionForm';
 import LessonTypePicker from '../curriculum/LessonTypePicker';
 import LessonAddForm from '../curriculum/LessonAddForm';
 import LessonEditForm from '../curriculum/LessonEditForm';
@@ -18,6 +18,7 @@ export default function CurriculumTab({ course }) {
     const [expanded, setExpanded] = useState(new Set());
     const [modal, setModal] = useState(null);
     const [confirm, setConfirm] = useState(null);
+    const [savingSession, setSavingSession] = useState(false);
 
     const load = async () => {
         const r = await listCurriculum(course.id);
@@ -36,23 +37,42 @@ export default function CurriculumTab({ course }) {
     const closeModal = () => setModal(null);
     const afterChange = () => { closeModal(); load(); };
 
-    const handleAddSection = async (data) => {
-        try {
-            await storeSection({ course_id: course.id, title: data.title });
-            toast.success('Section added successfully');
-            afterChange();
-        } catch (e) { toast.error(e.response?.data?.error || 'Failed'); }
+    // A session posts multipart because of its cover image. The API keys stay
+    // `section*` — only the UI wording changed.
+    const sessionFormData = (data) => {
+        const fd = new FormData();
+        fd.append('title', data.title);
+        fd.append('description', data.description || '');
+        if (data.image) fd.append('image', data.image);
+        return fd;
     };
 
-    const handleUpdateSection = async (data) => {
+    const handleAddSession = async (data) => {
+        setSavingSession(true);
         try {
-            await updateSection({ section_id: modal.section.id, up_title: data.title });
+            const fd = sessionFormData(data);
+            fd.append('course_id', course.id);
+            await storeSection(fd);
+            toast.success('Session added successfully');
+            afterChange();
+        } catch (e) { toast.error(e.response?.data?.error || 'Failed'); }
+        finally { setSavingSession(false); }
+    };
+
+    const handleUpdateSession = async (data) => {
+        setSavingSession(true);
+        try {
+            const fd = sessionFormData(data);
+            fd.append('section_id', modal.session.id);
+            if (data.removeImage) fd.append('remove_image', '1');
+            await updateSection(fd);
             toast.success('Updated successfully');
             afterChange();
         } catch (e) { toast.error(e.response?.data?.error || 'Failed'); }
+        finally { setSavingSession(false); }
     };
 
-    const handleDeleteSection = async (id) => {
+    const handleDeleteSession = async (id) => {
         try { await deleteSection(id); toast.success('Delete successfully'); setConfirm(null); load(); }
         catch (e) { toast.error(e.response?.data?.error || 'Failed'); }
     };
@@ -65,12 +85,13 @@ export default function CurriculumTab({ course }) {
     return (
         <div className="w-full">
             <div className="flex items-center mb-3 flex-wrap gap-2">
-                <button className="ol-btn-light ol-btn-sm" onClick={() => setModal({ type: 'add-section' })}>Add section</button>
+                <button className="ol-btn-light ol-btn-sm" onClick={() => setModal({ type: 'add-session' })}>Add session</button>
                 {sections.length > 0 && (
                     <>
-                        <button className="ol-btn-light ol-btn-sm" onClick={() => setModal({ type: 'lesson-type-picker' })}>Add lesson</button>
-                        <button className="ol-btn-light ol-btn-sm" onClick={() => setModal({ type: 'add-quiz' })}>Add quiz</button>
-                        <button className="ol-btn-light ol-btn-sm" onClick={() => setModal({ type: 'sort-sections' })}>Sort Section</button>
+                        {/* One entry point for both class kinds — the picker's
+                            first step routes to content vs quiz. */}
+                        <button className="ol-btn-light ol-btn-sm" onClick={() => setModal({ type: 'lesson-type-picker' })}>Add class</button>
+                        <button className="ol-btn-light ol-btn-sm" onClick={() => setModal({ type: 'sort-sections' })}>Sort Sessions</button>
                     </>
                 )}
             </div>
@@ -81,10 +102,10 @@ export default function CurriculumTab({ course }) {
                         <button
                             type="button"
                             className="w-full md:w-2/3 mt-4 border-2 border-dashed border-border rounded-ol-12 p-10 text-center hover:border-skin hover:text-skin transition-colors"
-                            onClick={() => setModal({ type: 'add-section' })}
+                            onClick={() => setModal({ type: 'add-session' })}
                         >
                             <p className="text-[24px] text-gray mb-2">+</p>
-                            <h3 className="text-[15px] font-medium text-dark">Add a new Section</h3>
+                            <h3 className="text-[15px] font-medium text-dark">Add a new Session</h3>
                         </button>
                     </li>
                 ) : sections.map((s, i) => (
@@ -95,8 +116,20 @@ export default function CurriculumTab({ course }) {
                     // and toggle the open/closed state.
                     <li key={s.id} className="ol-card border border-ebordermuted group/section">
                         <div className="flex items-center justify-between px-4 py-3">
-                            <button type="button" className="flex items-center gap-2 flex-grow text-left" onClick={() => toggle(s.id)}>
-                                <h4 className="text-[15px] font-semibold text-dark m-0">{i + 1}. {s.title}</h4>
+                            <button type="button" className="flex items-center gap-3 flex-grow text-left min-w-0" onClick={() => toggle(s.id)}>
+                                {s.image && (
+                                    <img
+                                        src={s.image}
+                                        alt=""
+                                        className="h-10 w-16 shrink-0 object-cover rounded-ol-8 border border-ebordermuted"
+                                    />
+                                )}
+                                <span className="min-w-0">
+                                    <h4 className="text-[15px] font-semibold text-dark m-0 truncate">{i + 1}. {s.title}</h4>
+                                    {s.description && (
+                                        <span className="block text-[12px] text-gray truncate">{s.description}</span>
+                                    )}
+                                </span>
                             </button>
                             <div className="flex items-center gap-2">
                                 {s.lessons.length > 0 && (
@@ -106,22 +139,22 @@ export default function CurriculumTab({ course }) {
                                         onClick={(e) => { e.stopPropagation(); setModal({ type: 'sort-lessons', section: s }); }}
                                     >
                                         <FaSort className="text-[11px] text-gray-400" />
-                                        <span>Sort Lessons</span>
+                                        <span>Sort Classes</span>
                                     </button>
                                 )}
                                 <button
                                     type="button"
-                                    title="Edit section"
-                                    aria-label={`Edit ${s.title}`}
+                                    title="Edit session"
+                                    aria-label={`Edit session ${s.title}`}
                                     className="text-gray-400 hover:text-gray-600 px-2 opacity-0 group-hover/section:opacity-100 focus-visible:opacity-100 transition-opacity"
-                                    onClick={(e) => { e.stopPropagation(); setModal({ type: 'edit-section', section: s }); }}
+                                    onClick={(e) => { e.stopPropagation(); setModal({ type: 'edit-session', session: s }); }}
                                 ><FaPen className="text-[13px]" /></button>
                                 <button
                                     type="button"
-                                    title="Delete section"
-                                    aria-label={`Delete ${s.title}`}
+                                    title="Delete session"
+                                    aria-label={`Delete session ${s.title}`}
                                     className="text-gray-400 hover:text-gray-600 px-2 opacity-0 group-hover/section:opacity-100 focus-visible:opacity-100 transition-opacity"
-                                    onClick={(e) => { e.stopPropagation(); setConfirm({ kind: 'section', id: s.id, label: s.title }); }}
+                                    onClick={(e) => { e.stopPropagation(); setConfirm({ kind: 'session', id: s.id, label: s.title }); }}
                                 ><FaTrash className="text-[13px]" /></button>
                                 {/* Chevron stays visible at rest — it's also a
                                     state indicator (down = open, right = closed). */}
@@ -142,7 +175,7 @@ export default function CurriculumTab({ course }) {
                         {expanded.has(s.id) && (
                             <ul className="border-t border-ebordermuted">
                                 {s.lessons.length === 0 ? (
-                                    <li className="px-4 py-3 text-[14px] text-gray">No lessons are available.</li>
+                                    <li className="px-4 py-3 text-[14px] text-gray">No classes are available.</li>
                                 ) : s.lessons.map((l) => (
                                     // `group/lesson` scopes hover to THIS row only.
                                     // Edit / Delete (and the quiz "Questions" pill)
@@ -172,7 +205,7 @@ export default function CurriculumTab({ course }) {
                                             ) : (
                                                 <button
                                                     type="button"
-                                                    title="Edit lesson"
+                                                    title="Edit class"
                                                     aria-label={`Edit ${l.title}`}
                                                     className="text-gray-400 hover:text-gray-600 px-2 opacity-0 group-hover/lesson:opacity-100 focus-visible:opacity-100 transition-opacity"
                                                     onClick={() => setModal({ type: 'edit-lesson', lesson: l })}
@@ -180,7 +213,7 @@ export default function CurriculumTab({ course }) {
                                             )}
                                             <button
                                                 type="button"
-                                                title="Delete lesson"
+                                                title="Delete class"
                                                 aria-label={`Delete ${l.title}`}
                                                 className="text-gray-400 hover:text-gray-600 px-2 opacity-0 group-hover/lesson:opacity-100 focus-visible:opacity-100 transition-opacity"
                                                 onClick={() => setConfirm({ kind: 'lesson', id: l.id, label: l.title })}
@@ -194,40 +227,41 @@ export default function CurriculumTab({ course }) {
                 ))}
             </ul>
 
-            {modal?.type === 'add-section' && (
-                <Modal title="Add new section" onClose={closeModal}>
-                    <SectionForm onSubmit={handleAddSection} submitLabel="Submit" />
+            {modal?.type === 'add-session' && (
+                <Modal title="Add new session" onClose={closeModal} size="lg">
+                    <SessionForm onSubmit={handleAddSession} submitLabel="Submit" saving={savingSession} />
                 </Modal>
             )}
-            {modal?.type === 'edit-section' && (
-                <Modal title="Edit section" onClose={closeModal}>
-                    <SectionForm section={modal.section} onSubmit={handleUpdateSection} submitLabel="Update" />
+            {modal?.type === 'edit-session' && (
+                <Modal title="Edit session" onClose={closeModal} size="lg">
+                    <SessionForm session={modal.session} onSubmit={handleUpdateSession} submitLabel="Update" saving={savingSession} />
                 </Modal>
             )}
             {modal?.type === 'lesson-type-picker' && (
-                <Modal title="Add new lesson" onClose={closeModal}>
+                <Modal title="Add new class" onClose={closeModal}>
                     <LessonTypePicker
                         course={course}
                         onNext={(lesson_type) => setModal({ type: 'add-lesson', lesson_type })}
+                        onNextQuiz={() => setModal({ type: 'add-quiz' })}
                     />
                 </Modal>
             )}
             {modal?.type === 'add-lesson' && (
-                <Modal title="Add new lesson" onClose={closeModal} size="lg">
+                <Modal title="Add new class" onClose={closeModal} size="lg">
                     <LessonAddForm
                         course={course}
                         sections={sections}
                         lessonType={modal.lesson_type}
-                        onDone={() => { toast.success('lesson added successfully'); afterChange(); }}
+                        onDone={() => { toast.success('Class added successfully'); afterChange(); }}
                     />
                 </Modal>
             )}
             {modal?.type === 'edit-lesson' && (
-                <Modal title="Edit lesson" onClose={closeModal} size="lg">
+                <Modal title="Edit class" onClose={closeModal} size="lg">
                     <LessonEditForm
                         lessonId={modal.lesson.id}
                         sections={sections}
-                        onDone={() => { toast.success('lesson update successfully'); afterChange(); }}
+                        onDone={() => { toast.success('Class updated successfully'); afterChange(); }}
                     />
                 </Modal>
             )}
@@ -247,19 +281,19 @@ export default function CurriculumTab({ course }) {
                 </Modal>
             )}
             {modal?.type === 'sort-sections' && (
-                <Modal title="Sort sections" onClose={closeModal}>
+                <Modal title="Sort sessions" onClose={closeModal}>
                     <SectionSort
                         sections={sections}
-                        onDone={() => { toast.success('Sections sorted successfully'); afterChange(); }}
+                        onDone={() => { toast.success('Sessions sorted successfully'); afterChange(); }}
                         onClose={closeModal}
                     />
                 </Modal>
             )}
             {modal?.type === 'sort-lessons' && (
-                <Modal title="Sort lessons" onClose={closeModal}>
+                <Modal title="Sort classes" onClose={closeModal}>
                     <LessonSort
                         section={modal.section}
-                        onDone={() => { toast.success('Lessons sorted successfully'); afterChange(); }}
+                        onDone={() => { toast.success('Classes sorted successfully'); afterChange(); }}
                         onClose={closeModal}
                     />
                 </Modal>
@@ -270,7 +304,7 @@ export default function CurriculumTab({ course }) {
                     title={`Delete ${confirm.kind}`}
                     message={`Are you sure you want to delete ${confirm.label}?`}
                     onCancel={() => setConfirm(null)}
-                    onConfirm={() => confirm.kind === 'section' ? handleDeleteSection(confirm.id) : handleDeleteLesson(confirm.id)}
+                    onConfirm={() => confirm.kind === 'session' ? handleDeleteSession(confirm.id) : handleDeleteLesson(confirm.id)}
                 />
             )}
         </div>

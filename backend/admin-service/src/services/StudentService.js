@@ -4,6 +4,9 @@ const authDb = require('../config/authDatabase');
 const assessmentDb = require('../config/assessmentDatabase');
 const { upload, removeFile, niceFileName } = require('../helpers/fileUploader');
 const { HttpError } = require('../middlewares/error');
+const {
+    validateEmail, validateName, validatePassword, validatePhone, validateAll,
+} = require('../lib/fieldValidation');
 const supabaseAdmin = require('../lib/supabaseAdmin');
 const env = require('../config/env');
 const { enqueue } = require('../jobs/emailQueue');
@@ -374,14 +377,25 @@ const findStudentByEmail = async (email) => {
 // `opts.skipUniqueId` — create the account WITHOUT a public VRS id. Used by the
 // public self-signup route; the id is assigned later by LeadService.convert.
 const create = async (body, file, opts = {}) => {
-    if (!body.name || !body.email || !body.password) {
-        throw new HttpError(422, 'Name, email, and password are required');
+    // Format, not just presence. This used to test `!body.email` only, so
+    // "abc" created a real account with an address that can never receive a
+    // welcome mail or a password reset — the user is locked out and nobody
+    // finds out until they try to recover it.
+    const checked = validateAll([
+        [body.name, validateName, { field: 'name', label: 'Full name' }],
+        [body.email, validateEmail, { field: 'email', label: 'Email address' }],
+        [body.password, validatePassword, { field: 'password', label: 'Password' }],
+        [body.phone, validatePhone, { field: 'phone', label: 'Mobile number', required: false }],
+    ]);
+    if (!checked.ok) {
+        throw new HttpError(422, checked.message, { field: checked.field });
     }
-    if (String(body.password).length < 8) {
-        throw new HttpError(422, 'Password must be at least 8 characters');
-    }
+    // Persist the canonical forms (lowercased email, bare 10-digit phone) so
+    // the same person cannot end up as two rows typed two ways.
+    body = { ...body, email: checked.values.email, phone: checked.values.phone || body.phone };
+
     if (await isAuthEmailTaken(body.email)) {
-        throw new HttpError(422, 'Email already in use');
+        throw new HttpError(422, 'That email is already registered. Try signing in instead.', { field: 'email' });
     }
 
     const roleId = await resolveStudentRoleId();

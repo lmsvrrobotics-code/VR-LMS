@@ -19,6 +19,7 @@ import {
   PreAssessmentProgram,
   submitPreAssessmentRegistration,
 } from "@/api/preAssessmentRegistrationApi";
+import { validateEmail, validatePhone } from "@/lib/fieldValidation";
 
 const GENDER_OPTIONS: PreAssessmentGender[] = ["Male", "Female", "Other"];
 
@@ -26,8 +27,11 @@ const ACCEPTED_MIME = ["application/pdf", "image/jpeg", "image/jpg", "image/png"
 const ACCEPTED_EXT = [".pdf", ".jpg", ".jpeg", ".png"];
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB — matches the backend cap.
 
-const EMAIL_REGEX = /^[^s@]+@[^s@]+\.[^s@]+$/;
-const PHONE_REGEX = /^[0-9+-s()]{7,20}$/;
+// These were locally-defined regexes that had lost their backslashes:
+// /^[^s@]+@[^s@]+\.[^s@]+$/ means "any char except the LETTER s or @", so
+// "a b@c d.e" passed as an email; /^[0-9+-s()]{7,20}$/ likewise contained an
+// unintended +-s range. Both now defer to the shared validators, which are the
+// same rules the backend applies.
 
 type FormState = {
   fullName: string;
@@ -136,14 +140,11 @@ export function PreAssessmentOnboardingModal({
     if (!name) next.fullName = "Full name is required";
     else if (name.length < 2) next.fullName = "Please enter your full name";
 
-    const email = state.email.trim();
-    if (!email) next.email = "Email is required";
-    else if (!EMAIL_REGEX.test(email)) next.email = "Enter a valid email address";
+    const emailErr = validateEmail(state.email, { label: "Email address" });
+    if (emailErr) next.email = emailErr;
 
-    const phone = state.phoneNumber.trim();
-    if (!phone) next.phoneNumber = "Phone number is required";
-    else if (!PHONE_REGEX.test(phone))
-      next.phoneNumber = "Enter a valid phone number (7-20 digits)";
+    const phoneErr = validatePhone(state.phoneNumber, { label: "Phone number" });
+    if (phoneErr) next.phoneNumber = phoneErr;
 
     if (!state.gender) next.gender = "Select your gender";
     if (!state.selectedProgramId || !state.selectedProgram)

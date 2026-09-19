@@ -3,6 +3,7 @@ const questionRepo = require('../repositories/QuestionRepository');
 const submissionRepo = require('../repositories/QuizSubmissionRepository');
 const userRepo = require('../repositories/UserRepository');
 const { HttpError } = require('../middlewares/error');
+const { normalizeDifficulty } = require('../lib/curriculumFields');
 
 const validateDuration = (h, m, s) => {
     h = Number(h || 0); m = Number(m || 0); s = Number(s || 0);
@@ -27,6 +28,11 @@ const createQuiz = async (b) => {
     const dup = await lessonRepo.findOne({ course_id: b.course_id, title: b.title });
     if (dup) throw new HttpError(422, 'Title has been taken.');
 
+    // Quizzes are lessons rows, so they carry the same difficulty column the
+    // content classes use — validated by the same rule.
+    const diff = normalizeDifficulty(b.difficulty);
+    if (!diff.ok) throw new HttpError(422, diff.error);
+
     const last = await lessonRepo.findLastSortInCourse(b.course_id);
     const quiz = await lessonRepo.create({
         title: b.title,
@@ -36,6 +42,7 @@ const createQuiz = async (b) => {
         pass_mark: b.pass_mark,
         retake: b.retake,
         description: b.description || null,
+        difficulty: diff.value,
         lesson_type: 'quiz',
         status: 1,
         sort: (last ? last.sort : 0) + 1,
@@ -58,6 +65,9 @@ const updateQuiz = async (id, b) => {
     const dup = await lessonRepo.findOne({ course_id: quiz.course_id, title: b.title });
     if (dup && dup.id !== quiz.id) throw new HttpError(422, 'Title has been taken.');
 
+    const diff = normalizeDifficulty(b.difficulty);
+    if (!diff.ok) throw new HttpError(422, diff.error);
+
     await quiz.update({
         title: b.title,
         section_id: b.section,
@@ -65,6 +75,7 @@ const updateQuiz = async (id, b) => {
         pass_mark: b.pass_mark,
         retake: b.retake,
         description: b.description || null,
+        difficulty: diff.value,
         lesson_type: 'quiz',
         status: 1,
         duration: `${b.hour || 0}:${b.minute || 0}:${b.second || 0}`,

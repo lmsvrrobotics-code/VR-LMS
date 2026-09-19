@@ -41,6 +41,39 @@ function libraryUrl(path = '') {
     return `https://video.bunnycdn.com/library/${env.bunnyStream.libraryId}${path}`;
 }
 
+const { HttpError } = require('../middlewares/error');
+
+// Translate a raw Bunny/axios failure into a meaningful, user-facing message.
+// Without this, an invalid API key surfaces to the admin UI as the opaque
+// "Request failed with status code 401" — which tells them nothing about what
+// to do. Each case names the actual problem and who can fix it.
+function bunnyError(e, action = 'process the video') {
+    const EXPOSE = { expose: true }; // messages here are written for the user
+    const status = e?.response?.status;
+    if (status === 401 || status === 403) {
+        return new HttpError(502,
+            'Video service rejected the request (invalid Bunny Stream credentials). ' +
+            'An administrator needs to update BUNNY_STREAM_API_KEY / LIBRARY_ID.', EXPOSE);
+    }
+    if (status === 404) {
+        return new HttpError(502, 'Video service could not find this library or video. Check BUNNY_STREAM_LIBRARY_ID.', EXPOSE);
+    }
+    if (status === 413) {
+        return new HttpError(413, 'That video is too large for the video service to accept.');
+    }
+    if (e?.code === 'ECONNABORTED' || /timeout/i.test(e?.message || '')) {
+        return new HttpError(504, 'The video service timed out. Please try again.', EXPOSE);
+    }
+    if (e?.code && /ENOTFOUND|ECONNREFUSED|EAI_AGAIN|ECONNRESET/.test(e.code)) {
+        return new HttpError(503, 'Could not reach the video service. Please try again shortly.', EXPOSE);
+    }
+    // Config guards thrown before the request (missing key/library id).
+    if (/not configured/i.test(e?.message || '')) {
+        return new HttpError(503, 'Video uploads are not configured yet. Please contact an administrator.', EXPOSE);
+    }
+    return new HttpError(502, `Could not ${action}. Please try again or contact an administrator.`, EXPOSE);
+}
+
 // Step 1 — register a new video and get its GUID. Optional `collectionId`
 // drops the video into a Bunny Stream collection (folder) so every video
 // belonging to one of our courses stays grouped, mirroring the per-course
@@ -48,15 +81,20 @@ function libraryUrl(path = '') {
 async function createVideo(title, { collectionId } = {}) {
     const body = { title: String(title || 'Untitled Lesson') };
     if (collectionId) body.collectionId = collectionId;
-    const res = await axios.post(
-        libraryUrl('/videos'),
-        body,
-        {
-            headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-            timeout: TIMEOUT_MS,
-        }
-    );
-    return res.data; // { guid, libraryId, title, ... }
+    try {
+        const res = await axios.post(
+            libraryUrl('/videos'),
+            body,
+            {
+                headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+                timeout: TIMEOUT_MS,
+            }
+        );
+        return res.data; // { guid, libraryId, title, ... }
+    } catch (e) {
+        console.warn('[bunny-stream] createVideo failed:', e.response?.status, e.message);
+        throw bunnyError(e, 'start the video upload');
+    }
 }
 
 // Create a Bunny Stream collection (folder) at the library level. We use
@@ -94,6 +132,9 @@ async function uploadVideo(guid, file) {
                 timeout: 30 * 60_000, // 30min cap on a single upload
             }
         );
+    } catch (e) {
+        console.warn('[bunny-stream] uploadVideo failed:', e.response?.status, e.message);
+        throw bunnyError(e, 'upload the video');
     } finally {
         if (file.path && fs.existsSync(file.path)) {
             try { fs.unlinkSync(file.path); } catch (_) { /* ignore */ }
@@ -233,7 +274,7 @@ function signPlaybackUrl(rawUrl, { ttlSeconds = 6 * 3600 } = {}) {
 // to the browser, and it expires (default 2h).
 async function createDirectUpload(title, opts = {}) {
     if (!env.bunnyStream.apiKey || !env.bunnyStream.libraryId) {
-        throw new Error('Bunny Stream is not configured (BUNNY_STREAM_API_KEY / LIBRARY_ID)');
+        throw new HttpError(503, 'Video uploads are not configured yet. Please contact an administrator.', { expose: true });
     }
     const created = await createVideo(title, opts);
     const guid = created.guid;

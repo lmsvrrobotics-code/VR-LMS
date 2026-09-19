@@ -3,7 +3,7 @@ const sectionRepo = require('../repositories/SectionRepository');
 const lessonRepo = require('../repositories/LessonRepository');
 const questionRepo = require('../repositories/QuestionRepository');
 const quizSubmissionRepo = require('../repositories/QuizSubmissionRepository');
-const { User, Course, BatchMember, Lesson, LessonCompletion, UserProgress } = require('../models');
+const { User, Course, BatchMember, Lesson, LessonCompletion, UserProgress, LessonWatchProgress } = require('../models');
 const watchStore = require('./watchStore');
 const teachingSvc = require('../services/TeachingAssignmentService');
 const { computeGating } = require('../services/teachingLogic');
@@ -174,12 +174,20 @@ const sanitizeCourse = (course, sections = [], lessons = [], creator = null) => 
         id: s.id,
         title: s.title,
         sort: s.sort,
+        // Session card art + blurb (migration 23). The student curriculum
+        // renders these as a card grid, so both are surfaced publicly.
+        image: s.image || '',
+        description: s.description || '',
         lessons: (lessonsBySection[s.id] || []).map((l) => ({
             id: l.id,
             title: l.title,
             duration: l.duration || '00:00:00',
             lesson_type: l.lesson_type,
             is_free: l.is_free || 0,
+            // Class card art, blurb and difficulty — same reason as above.
+            thumbnail: l.thumbnail || '',
+            description: l.description || '',
+            difficulty: l.difficulty || '',
         })),
     }));
 
@@ -372,7 +380,13 @@ const list = async (query = {}) => {
 };
 
 const detailsBySlug = async (slug, clgId = null, verifiedUserId = null) => {
-    const course = await Course.findOne({ where: { slug } });
+    // Accept either a slug or a numeric course id. The public marketing pages
+    // link by slug, while the enrolled-student route (/courses/:courseId) has
+    // only the id — both land here rather than needing a parallel endpoint.
+    const key = String(slug ?? '').trim();
+    const course = /^\d+$/.test(key)
+        ? await Course.findByPk(Number(key))
+        : await Course.findOne({ where: { slug: key } });
     if (!course) return null;
 
     // College gate: when the caller has a college set, the course's clg_ids
@@ -408,17 +422,50 @@ const detailsBySlug = async (slug, clgId = null, verifiedUserId = null) => {
     // anonymous viewer or a not-yet-started course — drives the progress bar on
     // the course-details page.
     let progress = 0;
+    // Which classes this student has finished — the curriculum cards show a
+    // tick per class, so the ids are needed, not just the percentage.
+    let completedLessonIds = [];
     if (verifiedUserId) {
         try {
             const hist = await watchStore.getHistoryDb(course.id, verifiedUserId);
-            const done = hist?.completed_lesson?.length || 0;
+            completedLessonIds = hist?.completed_lesson || [];
             const total = sanitized.lesson_count || 0;
-            progress = total ? Math.round((done / total) * 100) : 0;
+            progress = total ? Math.round((completedLessonIds.length / total) * 100) : 0;
         } catch (e) {
             console.warn('[details] progress read failed:', e.message);
         }
     }
     sanitized.progress = progress;
+    sanitized.completed_lesson_ids = completedLessonIds;
+
+    // "Last opened" per class, and per session as the most recent of its
+    // classes. lesson_watch_progress has one row per (user, lesson) whose
+    // updated_at moves every time playback is reported, which is exactly the
+    // last-opened signal the curriculum cards show. Best-effort: a failure
+    // here just means the cards omit the footer.
+    if (verifiedUserId) {
+        try {
+            const watched = await LessonWatchProgress.findAll({
+                where: { user_id: String(verifiedUserId), course_id: course.id },
+                attributes: ['lesson_id', 'updated_at'],
+                raw: true,
+            });
+            const lastByLesson = new Map(
+                watched.map((w) => [Number(w.lesson_id), w.updated_at]),
+            );
+            for (const sec of sanitized.sections) {
+                let newest = null;
+                for (const l of sec.lessons) {
+                    const at = lastByLesson.get(Number(l.id)) || null;
+                    l.last_opened_at = at;
+                    if (at && (!newest || new Date(at) > new Date(newest))) newest = at;
+                }
+                sec.last_opened_at = newest;
+            }
+        } catch (e) {
+            console.warn('[details] last-opened read failed:', e.message);
+        }
+    }
 
     // Class rank + earned score. The "class" = everyone TAKING this course
     // (roster ∪ enrolled ∪ admin-assigned), so a student gets a live position the moment
@@ -467,6 +514,31 @@ const detailsBySlug = async (slug, clgId = null, verifiedUserId = null) => {
     };
 };
 
+// Does this student have an explicit grant on this course — an admin-created
+// enrolment, or a delegation (teaching assignment / batch roster)?
+//
+// This is the SAME rule My Courses uses to decide `locked`, kept in one place
+// so the card and the player can never disagree about what is accessible.
+const hasCourseGrant = async (courseId, userIdRaw) => {
+    const uid = String(userIdRaw ?? '').trim();
+    const cid = Number(courseId);
+    if (!uid || !cid) return false;
+    try {
+        const enrolled = await UserProgress.findOne({
+            where: { user_id: uid, course_id: cid, enrolled: true },
+            attributes: ['course_id'],
+            raw: true,
+        });
+        if (enrolled) return true;
+        const delegated = await teachingSvc.coursesForStudent(uid);
+        return (delegated || []).some((c) => Number(c) === cid);
+    } catch (e) {
+        // Fail closed — an error here must not grant access.
+        console.warn('[hasCourseGrant] failed:', e.message);
+        return false;
+    }
+};
+
 // Canonical "My Courses" for a student in the lms_admin universe: the union of
 // courses they PAID for, are ENROLLED in (program), or are DELEGATED (teacher
 // roster / school-batch). Each card carries a progress %. This replaces the
@@ -481,23 +553,32 @@ const myCourses = async (userIdRaw) => {
 };
 
 const myCoursesUncached = async (uid) => {
-    // "My courses" now only includes courses the admin has granted access to:
-    // - Enrolled (program membership)
-    // - Delegated (teaching assignment or roster member)
-    // Payment-based access has been removed.
-    const [enrolledRows, delegatedIds] = await Promise.all([
+    // My Courses shows the WHOLE published catalogue, not only what the student
+    // has access to. Courses the admin granted (enrolled, or delegated via a
+    // batch/teaching assignment) are unlocked; everything else is listed but
+    // locked, so a student can see what exists and ask to be enrolled instead
+    // of staring at an empty page.
+    //
+    // Access is still decided ONLY by the two grants below — `locked` is
+    // presentational. Nothing here opens content: the player and the
+    // curriculum enforce their own gating server-side.
+    const [enrolledRows, delegatedIds, courseRows] = await Promise.all([
         UserProgress.findAll({ where: { user_id: uid, enrolled: true }, attributes: ['course_id'], raw: true }),
         teachingSvc.coursesForStudent(uid),
+        // Only published courses. A draft or unapproved course must not leak
+        // into a student view even as a locked card.
+        Course.findAll({ where: { status: 'active', is_approved: true } }),
     ]);
 
-    const ids = new Set();
-    for (const r of enrolledRows) if (r.course_id) ids.add(Number(r.course_id));
-    for (const c of delegatedIds) ids.add(Number(c));
-    if (!ids.size) return { courses: [] };
-    const idList = [...ids];
+    // The set the student may actually open.
+    const unlockedIds = new Set();
+    for (const r of enrolledRows) if (r.course_id) unlockedIds.add(Number(r.course_id));
+    for (const c of delegatedIds) unlockedIds.add(Number(c));
 
-    const [courseRows, completed, lessonTotals] = await Promise.all([
-        Course.findAll({ where: { id: { [Op.in]: idList } } }),
+    if (!courseRows.length) return { courses: [] };
+    const idList = courseRows.map((c) => Number(c.id));
+
+    const [completed, lessonTotals] = await Promise.all([
         watchStore.completedCountsByCourse(uid),
         Lesson.findAll({
             where: { course_id: { [Op.in]: idList } },
@@ -514,8 +595,29 @@ const myCoursesUncached = async (uid) => {
         const card = sanitizeCourse(c);
         const total = totalBy[c.id] || 0;
         const done = doneBy[c.id] || 0;
-        card.progress = total ? Math.round((done / total) * 100) : 0;
+        // A marketing/sample course is open to every registered student by
+        // design, so it is never shown locked.
+        const unlocked = unlockedIds.has(Number(c.id)) || !!c.is_marketing;
+        card.locked = !unlocked;
+        // Progress is only meaningful for a course the student can open.
+        card.progress = unlocked && total ? Math.round((done / total) * 100) : 0;
+        // sanitizeCourse is called WITHOUT lessons here (we only need the card,
+        // not the curriculum), so its lesson_count is 0. We already have the
+        // real per-course total from the GROUP BY above — surface it, plus the
+        // completed count, so the My Courses card can show "3 of 8 classes"
+        // instead of nothing.
+        card.lesson_count = total;
+        card.completed_lesson_count = unlocked ? Math.min(done, total) : 0;
         return card;
+    });
+
+    // Unlocked first — the student's actual work outranks the catalogue.
+    // Within each group keep a stable, meaningful order: in-progress before
+    // untouched, then by title so the list does not shuffle between loads.
+    courses.sort((a, b) => {
+        if (a.locked !== b.locked) return a.locked ? 1 : -1;
+        if (a.progress !== b.progress) return b.progress - a.progress;
+        return String(a.title || '').localeCompare(String(b.title || ''));
     });
     return { courses };
 };
@@ -590,7 +692,11 @@ const playerData = async (slug, lessonIdRaw, userIdRaw, { verifiedUserId = null,
         }
         : null;
 
-    const userId = Number(userIdRaw) > 0 ? Number(userIdRaw) : 0;
+    // User ids are VARCHAR in every progress table and are not always numeric
+    // (auth ids look like "VR20260701-01"). Coercing with Number() turned those
+    // into 0, which silently skipped the whole progress/history read. Keep the
+    // trimmed string, and treat empty as "no user".
+    const userId = String(userIdRaw ?? '').trim() || 0;
 
     // For quiz lessons, load the admin-authored questions and expose them so
     // the player shows exactly what the admin added. QuizPlayer reads
@@ -709,8 +815,37 @@ const playerData = async (slug, lessonIdRaw, userIdRaw, { verifiedUserId = null,
                 if (Array.isArray(lesson.questions)) lesson.questions = [];
             }
         }
+        // A course with NO batch bound to it returns enforced:false — there is
+        // no teacher to release lessons, so the release gate does not apply.
+        // That was safe while My Courses only listed granted courses, but it
+        // now lists the whole catalogue, so an ungated course would be openable
+        // by URL. Fall back to the same grant check My Courses uses: an
+        // explicit enrolment or delegation. Without one, lock everything.
+        if (!gate.enforced) {
+            const granted = await hasCourseGrant(course.id, verifiedUserId);
+            if (!granted) {
+                delegated = true;
+                lockedLessonIds.length = 0;
+                for (const l of flatLessons) lockedLessonIds.push(l.id);
+                if (lesson) {
+                    lesson.locked = true;
+                    lesson.lesson_src = '';
+                    lesson.attachment = '';
+                    if (Array.isArray(lesson.questions)) lesson.questions = [];
+                }
+            }
+        }
     } catch (e) {
+        // Fail CLOSED: a gating error must not hand over an ungated course.
         console.warn('[playerData] release-gating failed:', e.message);
+        lockedLessonIds.length = 0;
+        for (const l of flatLessons) lockedLessonIds.push(l.id);
+        if (lesson) {
+            lesson.locked = true;
+            lesson.lesson_src = '';
+            lesson.attachment = '';
+            if (Array.isArray(lesson.questions)) lesson.questions = [];
+        }
     }
 
     // --- Admin-Controlled Access (removed payment) ----------------------------
@@ -739,7 +874,16 @@ const playerData = async (slug, lessonIdRaw, userIdRaw, { verifiedUserId = null,
             student_id: userId,
             watching_lesson_id: stored?.watching_lesson_id || lesson?.id || null,
             completed_lesson: completedIds,
+            // { [lesson_id]: seconds } — how far into each lesson this student
+            // has already watched.
+            watched_seconds: stored?.watched_seconds || {},
         },
+        // Where to resume THIS lesson, in seconds. The player seeks here on
+        // load so leaving mid-video and coming back picks up where you were.
+        // Zero for a fresh or already-completed lesson.
+        resume_at: (lesson && !completedIds.includes(lesson.id))
+            ? Number(stored?.watched_seconds?.[lesson.id] || 0)
+            : 0,
         locked_lesson_ids: lockedLessonIds,
         progress,
         completed_lesson_count: completedIds.length,

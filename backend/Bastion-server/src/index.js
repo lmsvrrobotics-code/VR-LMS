@@ -11,7 +11,7 @@ import cors from 'cors';
 
 import rateLimiter from './middlewares/rateLimiter.js';
 import routes from './routes/index.js';
-import { isAllowedOrigin } from './utils/cors.js';
+import { isAllowedOrigin, bastionAllowedHeaders } from './utils/cors.js';
 import { attachErrorHandler } from './observability.js';
 
 const app = express();
@@ -26,7 +26,7 @@ app.use(cors({
   origin: (origin, cb) => cb(null, isAllowedOrigin(origin)),
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: bastionAllowedHeaders,
 }));
 // Skip JSON parsing for multipart bodies — those requests need to stream
 // untouched to the upstream service (e.g. assessment-service file uploads).
