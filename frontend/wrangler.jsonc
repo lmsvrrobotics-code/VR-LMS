@@ -28,6 +28,6 @@
   "vars": {
     // Upstream gateway for the /api/* proxy. Override per-environment rather
     // than editing worker.js.
-    "BASTION_ORIGIN": "https://gallant-spirit-production-7e6b.up.railway.app"
+    "BASTION_ORIGIN": "https://vr-lms-production.up.railway.app"
   }
 }
