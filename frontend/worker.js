@@ -16,7 +16,7 @@
 // Upstream gateway. Set BASTION_ORIGIN as a Worker var to point at a different
 // backend (staging) without editing code; the default is the Railway service.
 const DEFAULT_BASTION_ORIGIN =
-  'https://gallant-spirit-production-7e6b.up.railway.app';
+  'https://pleasant-passion-production-d1f0.up.railway.app';
 
 // Hop-by-hop headers must not be forwarded across a proxy (RFC 7230 §6.1), and
 // Cloudflare rejects some of them on a subrequest. Host is dropped so fetch()
