@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Outlet, NavLink, useLocation, Link, useNavigate } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
 import { logout as adminLogout, getStoredUser } from '@/admin/api/auth';
-import { getToken as getAdminToken } from '@/admin/api/client';
+import { getToken as getAdminToken, APPROVAL_REVOKED_KEY } from '@/admin/api/client';
+import { isAwaitingApproval } from '@/lib/adminApproval';
 import { leadStats } from '@/admin/api/leads';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { useDashboardTheme } from '@/hooks/useDashboardTheme';
@@ -470,6 +471,80 @@ export default function AdminLayout() {
         `flex items-center gap-3 px-3 py-[10px] rounded-ol-8 text-[14px] font-semibold transition-colors ${
             isActive ? 'bg-lightgreen text-skin' : 'text-gray hover:bg-lightgreen hover:text-skin'
         }`;
+
+    // A new admin has no dashboard until the root admin approves them ("Give
+    // Access" on /admin/admins). Until then the whole surface is replaced by a
+    // notice — no sidebar, no navbar, no Outlet — so there is nothing to reach
+    // by typing a URL. The server enforces the same rule (adminOnly returns
+    // ADMIN_APPROVAL_REQUIRED), so this is the presentation of that rule, not
+    // the rule itself.
+    //
+    // Teachers are a separate cohort and are never gated here. The JWT is
+    // preferred over the cached admin_user for the same reason as isTeacher:
+    // an older cached session can predate is_root_admin entirely.
+    const claims = tokenClaims ?? adminUser;
+
+    // The token is not the last word on approval. is_root_admin is signed in at
+    // login and the token lives for days, so an admin whose access the root
+    // admin revoked mid-session still carries a token that claims otherwise.
+    // The API answers ADMIN_APPROVAL_REQUIRED and the client records it; honour
+    // that here so the dashboard gives way to the notice without a refresh.
+    const [revoked, setRevoked] = useState(() => {
+        try { return localStorage.getItem(APPROVAL_REVOKED_KEY) === '1'; } catch { return false; }
+    });
+
+    useEffect(() => {
+        const onRevoked = () => setRevoked(true);
+        window.addEventListener('admin:approval-revoked', onRevoked);
+        return () => window.removeEventListener('admin:approval-revoked', onRevoked);
+    }, []);
+
+    const awaitingApproval = !isTeacher && (revoked || isAwaitingApproval(claims));
+
+    if (awaitingApproval) {
+        return (
+            <div className={`admin-theme min-h-screen flex flex-col bg-bodybg ${isDark ? 'dark admin-dark' : ''}`}>
+                <Navbar />
+
+                <div className="flex-1 flex items-center justify-center px-4 py-10">
+                    <div className="w-full max-w-[520px] bg-white border border-border rounded-ol-8 p-8 text-center">
+                        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-lightgreen">
+                            <i className="fa-solid fa-lock text-[22px] text-skin" aria-hidden="true" />
+                        </div>
+
+                        <h1 className="mb-2 text-[20px] font-semibold text-dark">
+                            Access pending approval
+                        </h1>
+
+                        <p className="mb-2 text-[14px] leading-relaxed text-gray">
+                            Your admin account has been created, but it hasn’t been given
+                            dashboard access yet.
+                        </p>
+                        <p className="mb-6 text-[14px] leading-relaxed text-gray">
+                            Please ask the root admin to approve your account from
+                            <span className="font-semibold text-dark"> Admins → Give Access</span>.
+                            You’ll see the full dashboard the next time you sign in after approval.
+                        </p>
+
+                        {claims?.email && (
+                            <p className="mb-6 text-[13px] text-gray">
+                                Signed in as <span className="font-semibold text-dark">{claims.email}</span>
+                            </p>
+                        )}
+
+                        <button
+                            type="button"
+                            onClick={handleLogout}
+                            className="inline-flex items-center justify-center gap-2 rounded-ol-8 bg-skin px-5 py-2.5 text-[14px] font-semibold text-white transition-opacity hover:opacity-90"
+                        >
+                            <i className="fa-solid fa-right-from-bracket" aria-hidden="true" />
+                            Log out
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className={`admin-theme min-h-screen flex flex-col bg-bodybg ${isDark ? 'dark admin-dark' : ''}`}>

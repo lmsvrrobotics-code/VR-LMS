@@ -5,10 +5,23 @@ import axios from 'axios';
 const BASE = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:5000';
 export const API_BASE = BASE;
 const TOKEN_KEY = 'admin_token';
+// Set when the API answers ADMIN_APPROVAL_REQUIRED, so the UI stops trusting
+// the is_root_admin baked into a token that was issued before the root admin
+// revoked access. Cleared on login and logout.
+export const APPROVAL_REVOKED_KEY = 'admin_approval_revoked';
 
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
-export const setToken = (token) => localStorage.setItem(TOKEN_KEY, token);
-export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
+// A fresh token is authoritative: it was just signed from the current DB row,
+// so any earlier revocation verdict no longer applies (this is how a
+// re-approved admin gets back in).
+export const setToken = (token) => {
+    localStorage.setItem(TOKEN_KEY, token);
+    try { localStorage.removeItem(APPROVAL_REVOKED_KEY); } catch { /* ignore */ }
+};
+export const clearToken = () => {
+    localStorage.removeItem(TOKEN_KEY);
+    try { localStorage.removeItem(APPROVAL_REVOKED_KEY); } catch { /* ignore */ }
+};
 
 const api = axios.create({
     baseURL: `${BASE}/api/admin`,
@@ -78,6 +91,20 @@ api.interceptors.response.use(
         // teacher whose restricted role can't reach an admin-only endpoint;
         // the calling component decides how to handle it (e.g. empty dropdown).
         if (status === 403) {
+            // One 403 is not like the others: ADMIN_APPROVAL_REQUIRED means the
+            // root admin revoked (or never granted) this account's access. The
+            // cached token still claims is_root_admin, so without this the UI
+            // would keep rendering the dashboard against an API that now
+            // refuses every call. Mark the session so AdminLayout switches to
+            // the access-pending notice on the spot.
+            if (error?.response?.data?.code === 'ADMIN_APPROVAL_REQUIRED') {
+                try {
+                    localStorage.setItem(APPROVAL_REVOKED_KEY, '1');
+                } catch { /* private mode / storage disabled */ }
+                console.warn(`[admin api] 403 on ${url} — admin access not approved`);
+                window.dispatchEvent(new CustomEvent('admin:approval-revoked'));
+                return Promise.reject(error);
+            }
             console.warn(`[admin api] 403 on ${url} — not permitted for this role (token kept)`);
             return Promise.reject(error);
         }

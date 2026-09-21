@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import vrRoboticsLogo from "@/assets/vrrobotics_logo.png";
@@ -25,6 +25,8 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { usePublicContentCounts } from "@/hooks/usePublicContentCounts";
 import { logout as adminLogout } from "@/admin/api/auth";
+import { getToken as getAdminToken } from "@/admin/api/client";
+import { decodeJwt, isAwaitingApproval } from "@/lib/adminApproval";
 
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -44,6 +46,14 @@ const Navbar = () => {
   const isActive = (path) => location.pathname === path;
 
   const dashboardPath = user?.role === "admin" ? "/admin/dashboard" : "/dashboard";
+
+  // An admin the root admin hasn't approved yet has no dashboard to go to —
+  // /admin only renders the "access pending" notice (AdminLayout). Hiding the
+  // link keeps the menu from offering a route that loops straight back to it.
+  // Non-admins are unaffected: their dashboard is /dashboard.
+  const adminClaims = useMemo(() => decodeJwt(getAdminToken()), []);
+  const hideDashboardLink =
+    user?.role === "admin" && isAwaitingApproval(adminClaims ?? { role: "admin" });
   const initials = (user?.name || user?.email || "U")
     .split(/\s+/)
     .map((s) => s[0])
@@ -275,19 +285,21 @@ const Navbar = () => {
                       </span>
                     )}
                   </div>
-                  <DropdownMenuItem asChild>
-                    <Link
-                      to={dashboardPath}
-                      onClick={(e) => {
-                        scrollToTopWithOffset(e, dashboardPath);
-                        setIsProfileOpen(false);
-                      }}
-                      className="flex items-center gap-2"
-                    >
-                      <LayoutDashboard className="w-4 h-4" />
-                      <span>Dashboard</span>
-                    </Link>
-                  </DropdownMenuItem>
+                  {!hideDashboardLink && (
+                    <DropdownMenuItem asChild>
+                      <Link
+                        to={dashboardPath}
+                        onClick={(e) => {
+                          scrollToTopWithOffset(e, dashboardPath);
+                          setIsProfileOpen(false);
+                        }}
+                        className="flex items-center gap-2"
+                      >
+                        <LayoutDashboard className="w-4 h-4" />
+                        <span>Dashboard</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem
                     onClick={handleLogout}
                     className="flex items-center gap-2 text-destructive focus:text-destructive"
@@ -403,19 +415,21 @@ const Navbar = () => {
                         <div className="text-xs text-muted-foreground truncate">{user.email}</div>
                       </div>
                     </div>
-                    <Button
-                      className="w-full justify-start bg-gradient-hero border-0"
-                      asChild
-                    >
-                      <Link
-                        to={dashboardPath}
-                        onClick={(e) => scrollToTopWithOffset(e, dashboardPath)}
-                        className="flex items-center space-x-3"
+                    {!hideDashboardLink && (
+                      <Button
+                        className="w-full justify-start bg-gradient-hero border-0"
+                        asChild
                       >
-                        <LayoutDashboard className="w-5 h-5" />
-                        <span>Dashboard</span>
-                      </Link>
-                    </Button>
+                        <Link
+                          to={dashboardPath}
+                          onClick={(e) => scrollToTopWithOffset(e, dashboardPath)}
+                          className="flex items-center space-x-3"
+                        >
+                          <LayoutDashboard className="w-5 h-5" />
+                          <span>Dashboard</span>
+                        </Link>
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       className="w-full justify-start"

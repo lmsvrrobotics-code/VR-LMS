@@ -14,32 +14,37 @@ const list = async ({ page = 1, per_page = 10, search = '' }) => {
     const limit = Number(per_page);
     const offset = (Number(page) - 1) * limit;
 
-    try {
-        const { rows, count } = await userRepo.paginateByRole('admin', {
-            search,
-            limit,
-            offset,
-            order: [['id', 'ASC']],
-        });
-        const rootId = await userRepo.findRootAdminId();
-        const admins = await Promise.all(
-            rows.map(async (r) => {
-                const course_count = await userRepo.courseCountFor(r.id);
-                return {
-                    ...sanitize(r),
-                    course_count,
-                    // Root access = original seeded root OR granted via flag.
-                    is_root_admin: r.id === rootId || r.is_root_admin === true,
-                    // The seeded root can't be revoked (would lock everyone out).
-                    is_primary_root: r.id === rootId,
-                };
-            })
-        );
-        return { admins, total: count, page: Number(page), per_page: limit, root_admin_id: rootId };
-    } catch (err) {
-        console.warn('[admins] DB query failed:', err.message);
-        return { admins: [], total: 0, page: Number(page), per_page: limit, root_admin_id: null };
-    }
+    // No try/catch here on purpose. This used to swallow every DB error and
+    // return an empty list with a 200, so a failing query was indistinguishable
+    // from a genuinely empty table: the UI rendered "No admins found" and its
+    // error branch could never fire. Letting the error reach asyncHandler means
+    // the error middleware logs it with a request id and the page shows
+    // "Couldn't load admins" with the real reason.
+    const { rows, count } = await userRepo.paginateByRole('admin', {
+        search,
+        limit,
+        offset,
+        order: [['id', 'ASC']],
+    });
+    const rootId = await userRepo.findRootAdminId();
+    const admins = await Promise.all(
+        rows.map(async (r) => {
+            // courses.user_id holds the owner's varchar unique_id, not the
+            // integer users.id (see Course.associate, which joins on
+            // targetKey: 'unique_id'). Passing r.id made Postgres compare
+            // `character varying = integer` and abort the whole listing.
+            const course_count = r.unique_id ? await userRepo.courseCountFor(r.unique_id) : 0;
+            return {
+                ...sanitize(r),
+                course_count,
+                // Root access = original seeded root OR granted via flag.
+                is_root_admin: r.id === rootId || r.is_root_admin === true,
+                // The seeded root can't be revoked (would lock everyone out).
+                is_primary_root: r.id === rootId,
+            };
+        })
+    );
+    return { admins, total: count, page: Number(page), per_page: limit, root_admin_id: rootId };
 };
 
 const get = async (id) => {

@@ -218,16 +218,47 @@ const schemas = {
   }),
 
   // Admin management
+  // Every field the admin Add/Edit form posts must be declared here: validate()
+  // runs with stripUnknown, so anything omitted is silently dropped before the
+  // service sees it. Omitting `password` made AdminService.create reject every
+  // submission with "Name, email, and password are required" even though the
+  // form sent one, and quietly discarded the whole profile (about, address,
+  // college_id, socials) on both create and update.
   createAdmin: joi.object({
     name: fields.string(2, 100).required(),
     email: fields.email,
+    password: joi.string().min(8).required(),
     phone: joi.string().pattern(/^\d{10,15}$/).optional(),
+    about: fields.stringOptional(0, 2000),
+    address: fields.stringOptional(0, 500),
+    college_name: fields.stringOptional(0, 255),
+    // '' is meaningful: the form always sends college_id, and empty means
+    // "not a school admin" (AdminService maps it to null).
+    college_id: joi.string().trim().max(64).allow(null, ''),
+    // Free-text social inputs with no scheme enforcement in the UI, so a bare
+    // "facebook.com/x" must not 400 on an otherwise-optional field.
+    facebook: joi.string().trim().max(255).allow(null, ''),
+    twitter: joi.string().trim().max(255).allow(null, ''),
+    website: joi.string().trim().max(255).allow(null, ''),
+    linkedin: joi.string().trim().max(255).allow(null, ''),
+    paymentkeys: joi.any().optional(),
   }),
 
   updateAdmin: joi.object({
     name: fields.stringOptional(2, 100),
     email: fields.emailOptional,
+    // Blank/absent = keep the current password (see AdminService.update).
+    password: joi.string().min(8).allow('').optional(),
     phone: joi.string().pattern(/^\d{10,15}$/).optional(),
+    about: fields.stringOptional(0, 2000),
+    address: fields.stringOptional(0, 500),
+    college_name: fields.stringOptional(0, 255),
+    college_id: joi.string().trim().max(64).allow(null, ''),
+    facebook: joi.string().trim().max(255).allow(null, ''),
+    twitter: joi.string().trim().max(255).allow(null, ''),
+    website: joi.string().trim().max(255).allow(null, ''),
+    linkedin: joi.string().trim().max(255).allow(null, ''),
+    paymentkeys: joi.any().optional(),
   }),
 
   // Category

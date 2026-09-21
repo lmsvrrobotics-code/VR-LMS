@@ -172,10 +172,94 @@ const optionalAuth = async (req, _res, next) => {
     return next();
 };
 
-const adminOnly = (req, res, next) => {
+// A newly created admin has no dashboard access until the root admin approves
+// them ("Give Access" on /admin/admins, which sets is_root_admin). Until then
+// every admin API is closed to them and the UI shows a full-page notice telling
+// them to ask the root admin — see AdminLayout.
+//
+// The distinct APPROVAL_REQUIRED code is what lets the frontend tell "you are
+// not an admin at all" apart from "you are an admin, just not approved yet";
+// a bare 403 would render as a generic error instead of the notice.
+const APPROVAL_REQUIRED = 'ADMIN_APPROVAL_REQUIRED';
+
+// Teachers are a separate cohort with their own surface (adminOrTeacher) and
+// are deliberately NOT subject to this gate.
+//
+// The gate applies only to the local admin JWT (AuthService.signToken), which
+// is the path every /admin login takes and the only one carrying is_root_admin.
+// A Supabase-issued token has no such claim — its admin role comes from
+// loadProfile — so gating it here would lock out accounts that were never part
+// of this approval flow. Those are identified by supabaseUid and pass through.
+const isApprovedAdmin = (user) =>
+    user?.role === 'root'
+    || user?.is_root_admin === true
+    || Boolean(user?.supabaseUid);
+
+// Admin identity WITHOUT the approval gate. Only for the couple of endpoints an
+// unapproved admin must still reach: /auth/me (so the UI can read its own
+// is_root_admin and decide to render the notice) and /auth/logout (so they are
+// not trapped in a page they cannot leave).
+const adminAuthed = (req, res, next) => {
     auth(req, res, () => {
         if (req.user?.role !== 'admin' && req.user?.role !== 'root') {
             return res.status(403).json({ error: 'Forbidden - Admin only' });
+        }
+        next();
+    });
+};
+
+// Approval as the DATABASE currently has it, not as the token claims it.
+//
+// is_root_admin is signed into the JWT at login and the token lives for
+// JWT_EXPIRES_IN (7d by default), so trusting the claim meant a revoked admin
+// kept full access for up to a week — refreshing, re-opening the tab and even
+// logging out changed nothing, because the token itself still said true. The
+// row is read per request instead: revoke now takes effect on the next call.
+//
+// Cost is one indexed primary-key lookup per admin API request, which is
+// nothing at admin-panel traffic and is the price of revocation actually
+// meaning something.
+//
+// Requires models lazily: auth.js is loaded from server.js before the Sequelize
+// models are wired up, so a top-level require would be a cycle.
+const readApprovalFromDb = async (user) => {
+    const { User } = require('../models');
+    const userRepo = require('../repositories/UserRepository');
+
+    const row = await User.findOne({
+        where: { id: user.id },
+        attributes: ['id', 'role', 'is_root_admin'],
+    });
+    // Deleted or demoted out of the admin role since the token was issued.
+    if (!row || (row.role !== 'admin' && row.role !== 'root')) return false;
+    if (row.is_root_admin === true) return true;
+
+    // The seeded primary root is root by identity, not by the flag — its row
+    // can carry is_root_admin false (revokeAccess refuses to touch it). Falling
+    // back to this keeps the one account that can restore everyone else's
+    // access from ever locking itself out.
+    return row.id === await userRepo.findRootAdminId();
+};
+
+const adminOnly = (req, res, next) => {
+    adminAuthed(req, res, async () => {
+        // Supabase-authenticated admins were never part of this flow and have
+        // no row in lms_admin.users to consult.
+        if (req.user?.supabaseUid) return next();
+
+        let approved;
+        try {
+            approved = await readApprovalFromDb(req.user);
+        } catch (err) {
+            // Fail closed: if approval cannot be confirmed, do not grant it.
+            return next(err);
+        }
+
+        if (!approved) {
+            return res.status(403).json({
+                error: 'Your admin access is pending approval by the root admin.',
+                code: APPROVAL_REQUIRED,
+            });
         }
         next();
     });
@@ -195,4 +279,4 @@ const adminOrTeacher = (req, res, next) => {
     });
 };
 
-module.exports = { auth, adminOnly, adminOrTeacher, optionalAuth };
+module.exports = { auth, adminAuthed, adminOnly, adminOrTeacher, optionalAuth, isApprovedAdmin, APPROVAL_REQUIRED };

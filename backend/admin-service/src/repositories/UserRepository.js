@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { User, Course } = require('../models');
+const { sequelize, User, Course } = require('../models');
 
 const findById = (id) => User.findByPk(id);
 
@@ -40,9 +40,52 @@ const isEmailTaken = async (email, excludeId = null) => {
     return Boolean(await User.findOne({ where }));
 };
 
-const create = (data) => User.create(data);
+// unique_id is NOT NULL on the User model, so an insert that omits it fails
+// client-side in Sequelize ("User.unique_id cannot be null") before any SQL
+// runs — that was a 500 on every Add Admin submission. Migration 09's helper
+// builds the id in the platform's convention (see seedRootAdmin.js, which
+// already does this).
+//
+// The helper derives its serial from COUNT(*) of rows created today, so two
+// admins added on the same day can be handed the same id; the UNIQUE index on
+// unique_id then rejects the loser. We retry on that collision rather than
+// surfacing it, mirroring lib/uniqueId.js's approach of keeping correctness in
+// the DB instead of trusting a read-then-write gap.
+const nextUniqueId = async (name, tx = null) => {
+    const [[row]] = await sequelize.query(
+        'SELECT lms_admin.get_next_user_id(:name) AS get_next_user_id',
+        { replacements: { name: name || 'User' }, transaction: tx },
+    );
+    return row.get_next_user_id;
+};
 
-const courseCountFor = (userId) => Course.count({ where: { user_id: userId } });
+const isUniqueViolation = (err) =>
+    err?.name === 'SequelizeUniqueConstraintError'
+    && (err.errors || []).some((e) => e.path === 'unique_id');
+
+const create = async (data, { attempts = 5 } = {}) => {
+    if (data.unique_id) return User.create(data);
+
+    let lastErr;
+    for (let i = 0; i < attempts; i += 1) {
+        try {
+            return await User.create({ ...data, unique_id: await nextUniqueId(data.name) });
+        } catch (err) {
+            if (!isUniqueViolation(err)) throw err;
+            lastErr = err;
+        }
+    }
+    throw lastErr;
+};
+
+// `userId` here is the owner's varchar unique_id, NOT the integer users.id:
+// courses.user_id is a VARCHAR holding unique_id (Course.associate joins on
+// targetKey: 'unique_id'). Passing the integer id makes Postgres abort with
+// `operator does not exist: character varying = integer`, which took the whole
+// admin listing down. Coerced to a string so a numeric-looking id can't
+// reintroduce that type mismatch.
+const courseCountFor = (uniqueId) =>
+    (uniqueId == null ? Promise.resolve(0) : Course.count({ where: { user_id: String(uniqueId) } }));
 
 const findTeachers = () =>
     User.findAll({
@@ -63,6 +106,8 @@ module.exports = {
     findRootAdminId,
     paginateByRole,
     isEmailTaken,
+    nextUniqueId,
+    isUniqueViolation,
     create,
     courseCountFor,
     findTeachers,
