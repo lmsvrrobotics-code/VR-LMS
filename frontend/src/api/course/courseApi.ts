@@ -231,3 +231,59 @@ export const listMyCertificates = () =>
   api
     .get("/certificate/mine")
     .then((r) => r.data as { certificates: StudentCertificateWithCourse[] });
+
+// ---- Challenge lessons -----------------------------------------------------
+// A challenge sends the student to an external site and takes a link back.
+// Submitting does NOT complete the lesson: a teacher has to approve it, which
+// is what writes the completion (see ChallengeService on the server).
+
+export type ChallengeSubmission = {
+  id: number;
+  lesson_id: number;
+  course_id: number | null;
+  submission_url: string;
+  submission_note: string | null;
+  /** 'submitted' = awaiting a mark, 'approved' = marked. */
+  status: "submitted" | "approved" | "needs_work";
+  /** Out of `max_score`. null until a teacher marks it — 0 is a real mark. */
+  score: number | null;
+  max_score: number;
+  feedback: string | null;
+  submitted_at: string;
+  reviewed_at: string | null;
+};
+
+/** One challenge the student can reach, with their own submission (if any). */
+export type StudentChallenge = {
+  lesson_id: number;
+  title: string;
+  description: string | null;
+  challenge_url: string | null;
+  course_id: number;
+  course_title: string | null;
+  course_slug: string | null;
+  /** The session this challenge sits in — the same label the teacher sees. */
+  session_title: string | null;
+  submission: ChallengeSubmission | null;
+};
+
+/** Every challenge across the student's courses — the Challenges tab. */
+export const listMyChallenges = () =>
+  api
+    .get("/challenges/mine")
+    .then((r) => r.data as { challenges: StudentChallenge[]; max_score?: number });
+
+/** The signed-in student's own submission, or null if they have not sent one. */
+export const getMyChallengeSubmission = (lessonId: number) =>
+  api
+    .get(`/challenges/${lessonId}/my-submission`)
+    .then((r) => (r.data?.submission ?? null) as ChallengeSubmission | null);
+
+/** Submit, or resubmit after a teacher asked for more work. */
+export const submitChallenge = (
+  lessonId: number,
+  body: { submission_url: string; submission_note?: string },
+) =>
+  api
+    .post(`/challenges/${lessonId}/submit`, body)
+    .then((r) => r.data as { message: string; submission: ChallengeSubmission });

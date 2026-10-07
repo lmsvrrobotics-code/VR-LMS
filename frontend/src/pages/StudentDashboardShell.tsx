@@ -19,9 +19,10 @@ import {
 import FeedbackFormsInbox from "@/pages/FeedbackFormsInbox";
 import StudentSidebar from "@/components/student/StudentSidebar";
 import FounderMeetingsView from "@/components/student/FounderMeetingsView";
+import ChallengesView from "@/components/student/ChallengesView";
 import { toast } from "react-toastify";
 import {
-  Menu, LayoutDashboard, MonitorPlay, ClipboardList, MessageSquare,
+  Menu, LayoutDashboard, MonitorPlay, ClipboardList, MessageSquare, Trophy,
   GraduationCap, ArrowRight, CheckCircle2, Clock, AlertTriangle, FileText,
   BadgeCheck, TrendingUp, CalendarClock, Target, Upload, Filter, Video, CalendarDays,
   Timer, Paperclip, Link as LinkIcon, Lock,
@@ -60,6 +61,7 @@ const navItems = [
   { name: "Dashboard", icon: LayoutDashboard },
   { name: "My Courses", icon: MonitorPlay },
   { name: "My Assignments", icon: ClipboardList },
+  { name: "Challenges", icon: Trophy },
   { name: "Founder Meetings", icon: CalendarClock },
   { name: "Feedback", icon: MessageSquare },
 ] as const;
@@ -1670,6 +1672,8 @@ const StudentDashboardShell = () => {
           <MyCoursesView />
         ) : active === "My Assignments" ? (
           <MyAssignmentsView />
+        ) : active === "Challenges" ? (
+          <ChallengesView />
         ) : active === "Founder Meetings" ? (
           <FounderMeetingsView />
         ) : (

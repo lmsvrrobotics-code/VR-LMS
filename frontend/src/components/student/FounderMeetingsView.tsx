@@ -56,6 +56,15 @@ const NextMeetingHero = ({ m }: { m: FounderMeeting }) => {
   const when = fmtParts(m.scheduled_at);
   const poster = posterFor(m);
   const isLive = m.state === "live";
+  // When the join link starts working, in the same IST basis as every other
+  // time on this page — a student reading "opens at 10:30 am" next to a
+  // "11:30 am" session must not have to reconcile two clocks.
+  const joinOpensLabel = m.join_opens_at
+    ? new Date(m.join_opens_at).toLocaleString("en-IN", {
+        day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+        hour12: true, timeZone: IST,
+      })
+    : null;
   return (
     <section className="relative overflow-hidden rounded-3xl border border-border/60 bg-card shadow-[0_30px_80px_-40px_rgba(0,0,0,0.45)] ring-1 ring-black/5 dark:ring-white/5">
       <div className="grid lg:grid-cols-[1.1fr_1fr]">
@@ -131,9 +140,29 @@ const NextMeetingHero = ({ m }: { m: FounderMeeting }) => {
               </p>
             </div>
           ) : (
-            <div className="flex items-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
-              You&apos;re registered — the joining link will be emailed to you.
+            /* No usable link yet. Two different situations, and they need
+               different copy:
+                 - a link EXISTS but the join window has not opened  → say when
+                   it will, so the student knows to come back rather than
+                   wondering whether something is broken
+                 - no link at all                                    → just
+                   confirm the seat
+               Promising an email is a claim this view cannot stand behind, and
+               it reads as a fobbing-off on the one screen that is supposed to
+               BE the student's record of the booking. */
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                Your seat is confirmed.
+              </div>
+              {m.has_meeting_link && m.state !== "past" && (
+                <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+                  <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  {joinOpensLabel
+                    ? `The Join button appears here at ${joinOpensLabel}`
+                    : `The Join button appears here ${m.join_window_mins ?? 60} minutes before the session`}
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -197,7 +226,17 @@ const MeetingCard = ({
                 {m.state === "live" ? "Join now" : "Join meeting"}
               </a>
             ) : (
-              <span className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+              /* Registered, but the join window has not opened. The title
+                 attribute carries the detail without crowding a compact card;
+                 the hero above spells the time out in full. */
+              <span
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-600 dark:text-emerald-400"
+                title={
+                  m.has_meeting_link && m.state !== "past"
+                    ? `The Join button appears ${m.join_window_mins ?? 60} minutes before the session`
+                    : undefined
+                }
+              >
                 <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> Registered
               </span>
             )

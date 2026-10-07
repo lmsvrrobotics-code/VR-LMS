@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { safeObj } from '@/components/course/format';
 import { submitQuizAttempt } from '@/api/course/courseApi';
+import QuestionMedia from './QuestionMedia';
 
 // "H:M:S" (or "HH:MM:SS") admin-set duration → total seconds. Defaults to 0
 // when malformed so the timer simply doesn't start (UI hides it).
@@ -298,6 +299,9 @@ export default function QuizPlayer({ lesson, onCompleted }) {
                 {questions.map((q, qi) => (
                     <li key={qi}>
                         <p className="font-medium mb-2">{q.q}</p>
+                        {/* The picture or clip the question is asking about,
+                            shown above the options so it's read first. */}
+                        <QuestionMedia image={q.image} video={q.video} title={q.q} />
                         {q.type === 'fill_blanks' ? (
                             <div>
                                 <input

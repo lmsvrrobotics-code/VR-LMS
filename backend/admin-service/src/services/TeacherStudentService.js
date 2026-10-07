@@ -19,8 +19,9 @@
 //
 // batch_teachers.batch_id / batch_members.batch_id are FKs to batches.unique_id
 // (varchar), NOT the surrogate integer batches.id. The join also accepts the
-// legacy batches.batch_id alias, a column present in the live DB but in none of
-// the numbered migrations, because older rows key off it.
+// unique_id as the ONLY key: batches has no `batch_id` column, and referencing
+// one made the query raise, which the best-effort catch turned into an empty
+// roster.
 //
 // Best-effort like its course-side counterpart: a DB miss returns an empty list
 // and logs, so the dashboard degrades to "no students" rather than 500ing.
@@ -43,7 +44,7 @@ const batchStudentRowsForTeacher = async (teacherId) => {
                 b.course_id           AS course_id
            FROM batches b
            JOIN batch_members bm
-             ON (bm.batch_id = b.unique_id OR bm.batch_id = b.batch_id)
+             ON bm.batch_id = b.unique_id
             AND COALESCE(bm.status, 'active') = 'active'
           WHERE COALESCE(b.is_active, TRUE) = TRUE
             AND (
@@ -51,7 +52,7 @@ const batchStudentRowsForTeacher = async (teacherId) => {
                OR EXISTS (
                     SELECT 1
                       FROM batch_teachers bt
-                     WHERE (bt.batch_id = b.unique_id OR bt.batch_id = b.batch_id)
+                     WHERE bt.batch_id = b.unique_id
                        AND bt.user_id = :tid
                        -- COALESCE: the column is nullable with a DEFAULT, so
                        -- rows written before it existed hold NULL and must

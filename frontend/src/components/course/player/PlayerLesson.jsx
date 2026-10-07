@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import Hls from 'hls.js';
 import QuizPlayer from './QuizPlayer';
+import ChallengePlayer from './ChallengePlayer';
 import { sanitizeHtml } from '@/lib/sanitizeHtml';
 
 // Same env var the rest of the app uses (Home/Overview/Programspage). System
@@ -181,6 +182,17 @@ function LessonRenderer({ lesson, course, onLessonEnded, onTimeUpdate, resumeAt 
         // the previous quiz's submission shape against the new quiz id.
         // Keying by lesson.id forces a clean unmount/remount per quiz.
         return <QuizPlayer key={lesson.id} lesson={lesson} onCompleted={onLessonEnded} />;
+    }
+
+    if (t === 'challenge') {
+        // Keyed by lesson.id for the same reason as the quiz above: navigating
+        // between two challenges must not keep one component instance, or the
+        // previous challenge's fetched submission and half-typed URL carry over
+        // into the next one.
+        // No onLessonEnded: a challenge is completed by the student pressing
+        // "Mark as complete", not by being marked. Passing it here would tick
+        // the class off the moment a score appeared.
+        return <ChallengePlayer key={lesson.id} lesson={lesson} />;
     }
 
     if (t === 'iframe' || t === 'scorm') {

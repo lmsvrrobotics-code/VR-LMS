@@ -421,16 +421,31 @@ function MeetingForm({ initial, onSubmit, submitLabel }) {
                 <label className="ol-form-label">Poster image</label>
                 {/* Previews the admin's upload, or the site-wide default when
                     there is none — so the form shows what the home page will
-                    actually render rather than an empty slot. */}
+                    actually render rather than an empty slot. aspect-video +
+                    object-contain MATCHES THE PUBLIC PAGE: previewing with
+                    object-cover would crop the sides here while the live page
+                    shows the whole flyer, so the admin could not trust what
+                    they saw. */}
                 {initial?.poster_url && (
                     <img
                         src={initial.poster_url}
                         alt=""
-                        className="mb-2 w-full h-40 object-cover rounded border border-ebordermuted"
+                        className="mb-2 w-full aspect-video object-contain bg-lightgreen/40 rounded border border-ebordermuted"
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
                 )}
                 <input className="ol-form-control" type="file" accept="image/*" onChange={(e) => setPoster(e.target.files[0])} />
+                {/* Posters are stored at 1600x900 with CONTAIN-fit
+                    (FounderMeetingService.storeUpload), so nothing is ever
+                    cropped: an exact-size upload is shown pixel-for-pixel, and
+                    an off-ratio one is letterboxed rather than losing its
+                    edges. This is the only place the admin learns the size. */}
+                <p className="text-[12px] text-gray mt-1">
+                    Use <strong>1600 × 900 px</strong> (16:9 landscape, JPG or PNG) and the poster
+                    is shown exactly as uploaded — nothing is cropped. A different shape still
+                    works: it is fitted inside 1600 × 900 with space either side rather than
+                    having its edges cut off.
+                </p>
                 <p className="text-[12px] text-gray mt-1">
                     {initial?.poster_url
                         ? 'Leave blank to keep the current one.'

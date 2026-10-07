@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useSearchParams } from 'react-router-dom';
 import { BsThreeDotsVertical } from 'react-icons/bs';
+import { FaTimesCircle } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import Modal from '../../components/Modal';
@@ -243,8 +244,13 @@ export default function CourseIndex() {
                                     className="text-gray hover:text-danger"
                                     onClick={clearFilters}
                                     title="Clear"
+                                    aria-label="Clear filters"
                                 >
-                                    <i className="fi-rr-cross-circle text-[18px]" />
+                                    {/* react-icons, not the `fi-rr-*` webfont:
+                                        that font is not loaded in this project,
+                                        so the glyph was zero-width and this
+                                        button was invisible. */}
+                                    <FaTimesCircle className="text-[16px]" />
                                 </button>
                             )}
                         </div>

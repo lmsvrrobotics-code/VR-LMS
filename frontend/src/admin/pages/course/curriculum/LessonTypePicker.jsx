@@ -15,15 +15,23 @@ const TYPES = [
 
 // Two-step picker. Step one asks what KIND of class this is:
 //
-//   Content — a lesson the student watches/reads; the ten content formats
-//             below then apply.
-//   Quiz    — a graded quiz, which has no content format at all, so the
-//             format grid is hidden and Next hands off to the quiz form.
+//   Content   — a lesson the student watches/reads; the ten content formats
+//               below then apply.
+//   Quiz      — a graded quiz, which has no content format at all, so the
+//               format grid is hidden and Next hands off to the quiz form.
+//   Challenge — a task the student completes on an EXTERNAL site (Scratch,
+//               Code.org, a GitHub exercise...) and then submits a link to.
+//               Like a quiz it has no content format, so the grid is hidden;
+//               unlike a quiz it is an ordinary lesson row, so it goes through
+//               the normal lesson form with lesson_type pre-set.
 //
-// Both kinds are `lessons` rows server-side; a quiz is just lesson_type 'quiz'.
+// All three are `lessons` rows server-side — a quiz is lesson_type 'quiz' and a
+// challenge is lesson_type 'challenge', which is why neither needs a parallel
+// curriculum pipeline.
 const KINDS = [
     { value: 'content', label: 'Content', hint: 'Video, document, text or embed' },
     { value: 'quiz', label: 'Quiz', hint: 'Graded questions with a pass mark' },
+    { value: 'challenge', label: 'Challenge', hint: 'External task the student submits a link for' },
 ];
 
 export default function LessonTypePicker({ course, onNext, onNextQuiz }) {
@@ -32,6 +40,9 @@ export default function LessonTypePicker({ course, onNext, onNextQuiz }) {
 
     const handleNext = () => {
         if (kind === 'quiz') onNextQuiz();
+        // A challenge reuses the normal lesson form; the form switches its own
+        // fields on lesson_type, so nothing else here needs to know about it.
+        else if (kind === 'challenge') onNext('challenge');
         else onNext(selected);
     };
 

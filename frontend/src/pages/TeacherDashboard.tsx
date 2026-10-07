@@ -10,6 +10,7 @@ import { toast } from "react-toastify";
 // Replaced by Batch Management System
 import ScheduleCalendar, { type ScheduleEvent } from "@/components/schedule/ScheduleCalendar";
 import FeedbackFormsView from "@/components/teacher/FeedbackFormsView";
+import TeacherChallengesView from "@/components/teacher/TeacherChallengesView";
 import Navbar from "@/components/layout/Navbar";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useDashboardTheme } from "@/hooks/useDashboardTheme";
@@ -32,6 +33,7 @@ import {
   MonitorPlay,
   Users,
   Library,
+  Trophy,
   Contact,
   Megaphone,
   IndianRupee,
@@ -62,6 +64,7 @@ const navItems = [
   { name: "Dashboard", icon: LayoutDashboard },
   { name: "My Courses", icon: MonitorPlay },
   { name: "Assignments", icon: ClipboardList },
+  { name: "Challenges", icon: Trophy },
   { name: "Demos", icon: MessageSquare },
   { name: "Classes", icon: MonitorPlay },
   { name: "Calendar", icon: CalendarDays },
@@ -2855,6 +2858,8 @@ const TeacherDashboard = () => {
           <MyCoursesView teacherId={user?.userId} />
         ) : active === "Assignments" ? (
           <AssignmentsView teacherId={user?.userId} />
+        ) : active === "Challenges" ? (
+          <TeacherChallengesView />
         ) : active === "Classes" ? (
           <ClassesView teacherId={user?.userId} />
         ) : active === "Calendar" ? (

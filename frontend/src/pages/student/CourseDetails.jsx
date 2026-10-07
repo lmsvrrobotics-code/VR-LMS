@@ -4,6 +4,7 @@ import axios from 'axios';
 import { toast } from 'react-toastify';
 import StudentSidebar from '@/components/student/StudentSidebar';
 import { completeLesson } from '@/api/course/courseApi';
+import { useDashboardTheme } from '@/hooks/useDashboardTheme';
 import LessonModal from './LessonModal';
 import './CourseDetails.css';
 
@@ -327,7 +328,14 @@ const ClassCard = ({ lesson, onOpen, opening = false, completed = false, onMarkC
                     {isQuiz && <span className="quiz-badge">Quiz</span>}
                     {lesson.title}
                 </h4>
-                {lesson.description && <p className="card-desc">{lesson.description}</p>}
+                {/* card_text, not description: the description is rich HTML
+                    now that the admin writes it in an editor, and this renders
+                    as plain text — so the tags showed up literally on the card.
+                    The server prefers the admin's summary and falls back to the
+                    description with its markup stripped. */}
+                {(lesson.card_text || lesson.description) && (
+                    <p className="card-desc">{lesson.card_text || lesson.description}</p>
+                )}
                 <div className="card-meta">
                     {lesson.duration && lesson.duration !== '00:00:00' && (
                         <span className="meta-muted"><IconClock />{lesson.duration}</span>
@@ -342,6 +350,11 @@ const ClassCard = ({ lesson, onOpen, opening = false, completed = false, onMarkC
 
 export default function CourseDetails() {
     const { courseId } = useParams();
+    // Course content on a top-level route (see App.tsx): it renders in the
+    // public <Layout>, NOT inside StudentDashboardShell, so it never inherited
+    // the `dash-dark` hook and stayed light while the rest of the student
+    // dashboard went dark. withShell() below carries the shared preference.
+    const { isDark } = useDashboardTheme();
     const navigate = useNavigate();
     const [course, setCourse] = useState(null);
     const [batch, setBatch] = useState(null);
@@ -462,7 +475,7 @@ export default function CourseDetails() {
     // while loading and on the not-found state too — not only once the course
     // has arrived.
     const withShell = (content) => (
-        <div className="student-shell">
+        <div className={`student-shell ${isDark ? 'dark dash-dark' : ''}`}>
             {navOpen && (
                 <div
                     className="lg:hidden fixed inset-0 z-30 bg-black/40"
@@ -537,7 +550,10 @@ export default function CourseDetails() {
 
     // A class passes when it matches the text AND every active filter.
     const classMatches = (l) => {
-        if (!matchesText(l.title, l.description)) return false;
+        // card_text, not description: searching raw HTML means a word split
+        // across tags ("a</div><div>b") never matches, while a search for
+        // "div" matches every rich-text class.
+        if (!matchesText(l.title, l.card_text || l.description)) return false;
         if (levelFilter && String(l.difficulty || '').toLowerCase() !== levelFilter) return false;
         if (statusFilter === 'completed' && !completedIds.includes(l.id)) return false;
         if (statusFilter === 'pending' && completedIds.includes(l.id)) return false;

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useDashboardTheme } from '@/hooks/useDashboardTheme';
 import { getPlayer, completeLesson, updateLessonProgress } from '@/api/course/courseApi';
 import { safeObj } from '@/components/course/format';
 import Navbar from '@/components/layout/Navbar';
@@ -12,6 +13,12 @@ const PLAY_BASE = '/courses/programs/course-details/play';
 
 export default function CoursePlayer() {
     const { user } = useAuth();
+    // The player is course CONTENT, reached from the student dashboard, so it
+    // follows the same scoped light/dark preference the dashboards use. It
+    // renders OUTSIDE StudentDashboardShell (its own top-level route, see
+    // App.tsx), which is why it never inherited `dash-dark` and stayed stuck on
+    // the light `.player-shell` gradient when a student turned dark mode on.
+    const { isDark } = useDashboardTheme();
     const { slug, lessonId } = useParams();
     const navigate = useNavigate();
 
@@ -159,7 +166,7 @@ export default function CoursePlayer() {
     }
     if (error) {
         return (
-            <div className="player-shell flex flex-col items-center justify-center min-h-screen p-8 text-center">
+            <div className={`player-shell flex flex-col items-center justify-center min-h-screen p-8 text-center ${isDark ? 'dark dash-dark' : ''}`}>
                 <p className="text-white text-[18px] font-semibold mb-2">{error}</p>
                 <button onClick={() => navigate('/courses/programs')} className="ol-btn-primary mt-4">Back to courses</button>
             </div>
@@ -187,7 +194,7 @@ export default function CoursePlayer() {
     const isDone = lesson && completedIds.includes(lesson.id);
 
     return (
-        <div ref={shellRef} className="player-shell flex flex-col">
+        <div ref={shellRef} className={`player-shell flex flex-col ${isDark ? 'dark dash-dark' : ''}`}>
             <Navbar />
 
             <section className="flex-1 py-4 sm:py-5">

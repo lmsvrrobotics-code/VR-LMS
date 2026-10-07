@@ -55,7 +55,9 @@ const seedFromDisk = async () => {
         originalname: 'founder-meeting-poster.png',
         mimetype: 'image/png',
     };
-    const url = await upload(file, 'uploads/founder/posters/default-founder-meeting.png', 1600, 900);
+    // fit:'contain' for the same reason as an admin upload — the seeded
+    // artwork must reach R2 intact rather than pre-cropped.
+    const url = await upload(file, 'uploads/founder/posters/default-founder-meeting.png', 1600, 900, { fit: 'contain' });
     if (!url) return '';
     await writeSetting(url);
     return url;

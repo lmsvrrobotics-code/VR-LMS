@@ -17,12 +17,14 @@ exports.quiz_show = asyncHandler(async (req, res) => {
 
 // Questions
 
+// req.files carries the optional per-question image/video (multer .fields).
+// JSON posts simply have no files, so the same handler serves both.
 exports.question_store = asyncHandler(async (req, res) => {
-    res.status(201).json(await quizService.createQuestion(req.body));
+    res.status(201).json(await quizService.createQuestion(req.body, req.files));
 });
 
 exports.question_update = asyncHandler(async (req, res) => {
-    res.json(await quizService.updateQuestion(req.params.id, req.body));
+    res.json(await quizService.updateQuestion(req.params.id, req.body, req.files));
 });
 
 exports.question_delete = asyncHandler(async (req, res) => {

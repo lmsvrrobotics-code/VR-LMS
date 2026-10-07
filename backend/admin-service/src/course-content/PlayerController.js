@@ -94,13 +94,22 @@ exports.progress = async (req, res) => {
         const totalSeconds = lesson ? toSeconds(lesson.duration) : 0;
 
         let isCompleted = 0;
-        // A quiz is completed by SUBMITTING it, never by elapsed time — its
-        // `duration` is the time limit, not content length, so the dwell/percent
-        // rules below would mark it done just for being opened. The player
-        // stamps 0 seconds on open (to record "last opened"), which makes this
-        // guard load-bearing rather than theoretical.
-        const isQuiz = lesson && lesson.lesson_type === 'quiz';
-        if (isQuiz) {
+        // Two lesson types are NEVER completed by elapsed time:
+        //
+        //   quiz      — its `duration` is a time LIMIT, not content length, so
+        //               the dwell/percent rules below would mark it done just
+        //               for being opened. It completes on submission.
+        //   challenge — it has no media at all, so totalSeconds is 0 and the
+        //               "readable lesson" branch below would tick it off after
+        //               ~10 seconds of sitting on the page. A challenge is the
+        //               student's own call: they press "Mark as complete" when
+        //               they are ready, and nothing else does it for them.
+        //
+        // The player stamps 0 seconds on open (to record "last opened"), which
+        // makes this guard load-bearing rather than theoretical.
+        const autoCompleteExempt = lesson
+            && (lesson.lesson_type === 'quiz' || lesson.lesson_type === 'challenge');
+        if (autoCompleteExempt) {
             isCompleted = 0;
         } else if (course && course.enable_drip_content) {
             let drip = {};

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import RichTextEditor from '../../../components/RichTextEditor';
 
 export const DIFFICULTY_LEVELS = [
     { value: '', label: 'Not specified' },
@@ -18,6 +19,11 @@ export default function ClassMetaFields({
     existingImage, onRemoveImage,
     description, onDescriptionChange,
     difficulty, onDifficultyChange,
+    // A challenge renders this field as the student's Instructions tab, so it
+    // gets a clearer label and a hint there. Every other class type keeps the
+    // generic wording.
+    descriptionLabel = 'Class description',
+    descriptionHint = '',
 }) {
     const [preview, setPreview] = useState(null);
 
@@ -62,13 +68,20 @@ export default function ClassMetaFields({
             </div>
 
             <div className="mb-3">
-                <label className="ol-form-label">Class description</label>
-                <textarea
-                    className="ol-form-control"
-                    rows="4"
+                <label className="ol-form-label">{descriptionLabel}</label>
+                {descriptionHint && (
+                    <p className="text-[12px] text-gray mb-1.5">{descriptionHint}</p>
+                )}
+                {/* Rich text rather than a raw-HTML textarea: the stored value
+                    is rendered through sanitizeHtml() in the player, so an
+                    admin was previously expected to hand-write the markup to
+                    get a list or a bold word. The editor emits the same plain
+                    HTML the field always held, so existing rows keep working. */}
+                <RichTextEditor
                     value={description}
-                    onChange={(e) => onDescriptionChange(e.target.value)}
+                    onChange={onDescriptionChange}
                     placeholder="What this class covers"
+                    rows={5}
                 />
             </div>
 

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { toast } from 'react-toastify';
 import { storeQuestion, updateQuestion } from '../../../api/quiz';
+import QuestionMediaFields from './QuestionMediaFields';
 
 const TYPES = [
     { value: 'mcq', label: 'Multiple choice' },
@@ -29,6 +30,14 @@ export default function QuestionForm({ quizId, question, onDone }) {
     const [blanks, setBlanks] = useState(initialBlanks.length ? initialBlanks : ['']);
 
     const [tfAnswer, setTfAnswer] = useState(editing && question.type === 'true_false' ? question.answer : 'true');
+
+    // Optional media the question asks about. `*File` is a newly picked file;
+    // `remove*` clears the stored one on an edit. A new file wins over the
+    // remove flag — the server applies the same rule.
+    const [imageFile, setImageFile] = useState(null);
+    const [videoFile, setVideoFile] = useState(null);
+    const [removeImage, setRemoveImage] = useState(false);
+    const [removeVideo, setRemoveVideo] = useState(false);
 
     const [saving, setSaving] = useState(false);
 
@@ -62,6 +71,11 @@ export default function QuestionForm({ quizId, question, onDone }) {
             } else {
                 body.answer = tfAnswer;
             }
+            if (imageFile) body.image = imageFile;
+            if (videoFile) body.video = videoFile;
+            if (removeImage && !imageFile) body.remove_image = '1';
+            if (removeVideo && !videoFile) body.remove_video = '1';
+
             if (editing) await updateQuestion(question.id, body);
             else await storeQuestion(body);
             onDone();
@@ -124,6 +138,19 @@ export default function QuestionForm({ quizId, question, onDone }) {
                     </label>
                 </div>
             )}
+
+            <QuestionMediaFields
+                currentImage={question?.image}
+                currentVideo={question?.video}
+                imageFile={imageFile}
+                videoFile={videoFile}
+                removeImage={removeImage}
+                removeVideo={removeVideo}
+                onImageFile={(f) => { setImageFile(f); if (f) setRemoveImage(false); }}
+                onVideoFile={(f) => { setVideoFile(f); if (f) setRemoveVideo(false); }}
+                onRemoveImage={setRemoveImage}
+                onRemoveVideo={setRemoveVideo}
+            />
 
             <div className="text-center">
                 <button className="ol-btn-primary w-full" disabled={saving}>{saving ? 'Saving…' : (editing ? 'Update question' : 'Add question')}</button>

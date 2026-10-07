@@ -33,8 +33,18 @@ export interface FounderMeeting {
   /** Present only on registered meetings. */
   registration_status?: string;
   /** The join link — released only on the student's OWN registered meetings,
-   *  and only while the session is still joinable (null once it's past). */
+   *  and only once the join window has opened (null before then, and null
+   *  once the session is past). */
   meeting_link?: string | null;
+  /** Whether the admin has set a link at all. Distinguishes "there is a link,
+   *  it just isn't live yet" from "no link exists", which need different copy:
+   *  one is a countdown, the other has nothing to count down to. */
+  has_meeting_link?: boolean;
+  /** When `meeting_link` starts being returned (ISO). Null when unscheduled. */
+  join_opens_at?: string | null;
+  /** How many minutes before the start the link opens — quoted in the UI so
+   *  the copy and the server agree on one number. */
+  join_window_mins?: number;
 }
 
 export interface MyFounderMeetings {

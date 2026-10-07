@@ -274,6 +274,10 @@ export default function LessonEditForm({ lessonId, sections, onDone }) {
                 onDescriptionChange={setDescription}
                 difficulty={difficulty}
                 onDifficultyChange={setDifficulty}
+                descriptionLabel={lesson?.lesson_type === 'challenge' ? 'Instructions' : 'Class description'}
+                descriptionHint={lesson?.lesson_type === 'challenge'
+                    ? 'Shown to the student as the Instructions tab, before they open the task.'
+                    : ''}
             />
 
             <div className="mb-3">

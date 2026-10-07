@@ -4,6 +4,10 @@ const submissionRepo = require('../repositories/QuizSubmissionRepository');
 const userRepo = require('../repositories/UserRepository');
 const { HttpError } = require('../middlewares/error');
 const { normalizeDifficulty } = require('../lib/curriculumFields');
+const { upload, removeFile, niceFileName } = require('../helpers/fileUploader');
+const {
+    questionFolder, pickFile, isImageFile, isVideoFile, planMediaSlot,
+} = require('../lib/questionMedia');
 
 const validateDuration = (h, m, s) => {
     h = Number(h || 0); m = Number(m || 0); s = Number(s || 0);
@@ -106,7 +110,68 @@ const buildQuestionData = (b) => {
     return { quiz_id: b.quiz_id, title: b.title, type: b.type, answer, options };
 };
 
-const createQuestion = async (b) => {
+// Multipart options/answer arrive as JSON strings (FormData cannot carry an
+// array), so parse them back before the type-specific rules run. A plain
+// string that isn't JSON is left alone — true_false sends "true"/"false".
+const parseMultipartArrays = (b) => {
+    const out = { ...b };
+    for (const key of ['options', 'answer']) {
+        const raw = out[key];
+        if (typeof raw !== 'string') continue;
+        const trimmed = raw.trim();
+        if (!trimmed.startsWith('[')) continue;
+        try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) out[key] = parsed;
+        } catch { /* keep the raw string; the type rules below will judge it */ }
+    }
+    return out;
+};
+
+// Upload whichever of `image` / `video` the form sent and return the columns
+// to write. `current` is the existing row on an update (undefined on create),
+// and any file it replaces is swept from storage afterwards.
+//
+// Videos route to Bunny Stream and images to R2 automatically — fileUploader
+// picks the backend off the mimetype — so both slots use the same call. We
+// still check the file type ourselves so a video dropped into the image field
+// doesn't get silently resized as a picture.
+const applyQuestionMedia = async (data, b, files, current = {}) => {
+    const slots = [
+        { column: 'image', file: pickFile(files, 'image'), remove: b.remove_image, matches: isImageFile, label: 'Image' },
+        { column: 'video', file: pickFile(files, 'video'), remove: b.remove_video, matches: isVideoFile, label: 'Video' },
+    ];
+
+    for (const slot of slots) {
+        if (slot.file && !slot.matches(slot.file)) {
+            throw new HttpError(422, `${slot.label} must be a${slot.label === 'Image' ? 'n image' : ' video'} file.`);
+        }
+
+        const plan = planMediaSlot({
+            file: slot.file,
+            removeFlag: slot.remove,
+            current: current[slot.column],
+        });
+
+        if (plan.action === 'replace') {
+            const dest = `${questionFolder(b.quiz_id || current.quiz_id)}/${niceFileName(slot.column, (plan.file.originalname || '').split('.').pop() || 'bin')}`;
+            // Images are capped at a readable width so a 12MP phone photo
+            // doesn't push a 5 MB payload at every student taking the quiz.
+            data[slot.column] = slot.column === 'image'
+                ? await upload(plan.file, dest, 1280, null)
+                : await upload(plan.file, dest);
+            if (current[slot.column]) await removeFile(current[slot.column]);
+        } else if (plan.action === 'clear') {
+            data[slot.column] = null;
+            await removeFile(current[slot.column]);
+        }
+    }
+
+    return data;
+};
+
+const createQuestion = async (rawBody, files = null) => {
+    const b = parseMultipartArrays(rawBody);
     if (!b.title) throw new HttpError(422, 'Title is required');
     if (!b.type) throw new HttpError(422, 'Type is required');
     if (b.answer === undefined || b.answer === null || b.answer === '') throw new HttpError(422, 'Answer is required');
@@ -115,22 +180,32 @@ const createQuestion = async (b) => {
     const last = await questionRepo.findLastSort(b.quiz_id);
     const data = buildQuestionData(b);
     data.sort = (last ? last.sort : 0) + 1;
+    await applyQuestionMedia(data, b, files);
     const question = await questionRepo.create(data);
     return { message: 'Question has been added.', question };
 };
 
-const updateQuestion = async (id, b) => {
+const updateQuestion = async (id, rawBody, files = null) => {
+    const b = parseMultipartArrays(rawBody);
     const q = await questionRepo.findById(id);
     if (!q) throw new HttpError(404, 'Data not found.');
     if (!b.title) throw new HttpError(422, 'Title is required');
     if (b.type === 'mcq' && (!b.options || !b.options.length)) throw new HttpError(422, 'When type is MCQ, options are required.');
-    await q.update(buildQuestionData(b));
+    const data = buildQuestionData(b);
+    // The edit form posts to one quiz; keep the row's own quiz_id as the
+    // upload folder when the body omits it.
+    await applyQuestionMedia(data, b, files, q);
+    await q.update(data);
     return { message: 'Question has been updated.', question: q };
 };
 
 const deleteQuestion = async (id) => {
     const q = await questionRepo.findById(id);
     if (!q) throw new HttpError(404, 'Data not found.');
+    // Sweep the question's own media so deleting it doesn't orphan an R2
+    // object or a Bunny video.
+    if (q.image) await removeFile(q.image);
+    if (q.video) await removeFile(q.video);
     await q.destroy();
     return { message: 'Question has been deleted.' };
 };
@@ -166,6 +241,8 @@ const attemptDetail = async (submission_id) => {
 };
 
 module.exports = {
+    // Exported for tests: multipart turns options/answer into JSON strings.
+    parseMultipartArrays,
     createQuiz,
     updateQuiz,
     showQuiz,

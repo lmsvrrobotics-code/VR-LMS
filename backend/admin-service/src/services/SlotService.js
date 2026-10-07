@@ -183,13 +183,13 @@ const listForTeacher = async (teacherId) => {
                     COALESCE(b.name, b.display_name) AS batch_name
                FROM slots s
                JOIN batches b
-                 ON (CAST(s.batch_id AS TEXT) = b.unique_id OR CAST(s.batch_id AS TEXT) = b.batch_id)
+                 ON CAST(s.batch_id AS TEXT) = b.unique_id
               WHERE COALESCE(b.is_active, TRUE) = TRUE
                 AND (
                       b.primary_teacher_id = :tid
                    OR EXISTS (
                         SELECT 1 FROM batch_teachers bt
-                         WHERE (bt.batch_id = b.unique_id OR bt.batch_id = b.batch_id)
+                         WHERE bt.batch_id = b.unique_id
                            AND bt.user_id = :tid
                            AND COALESCE(bt.status, 'active') = 'active'
                       )

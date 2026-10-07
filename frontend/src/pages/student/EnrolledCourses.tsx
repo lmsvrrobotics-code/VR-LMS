@@ -9,6 +9,7 @@ import {
   RotateCw,
 } from "lucide-react";
 import { getMyCourses } from "@/api/course/courseApi";
+import { useDashboardTheme } from "@/hooks/useDashboardTheme";
 
 // Shape returned by /api/public/my-courses (sanitizeCourse + a `progress`
 // field). Every property is optional-safe because a delegated (batch) course a
@@ -171,6 +172,11 @@ const SkeletonCard = () => (
 // source the admin "Manage Students" list and Manage Batches drive. So a
 // student sees here exactly the courses an admin granted them.
 export default function EnrolledCourses() {
+  // Course content on a top-level route (see App.tsx): it renders in the
+  // public <Layout>, NOT inside StudentDashboardShell, so it never inherited
+  // the `dash-dark` hook and stayed light while the rest of the student
+  // dashboard went dark. Carry the shared preference onto this root.
+  const { isDark } = useDashboardTheme();
   const [courses, setCourses] = useState<MyCourse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -194,7 +200,7 @@ export default function EnrolledCourses() {
   const completed = courses.filter((c) => (Number(c.progress) || 0) >= 100).length;
 
   return (
-    <div className="section-padding">
+    <div className={`section-padding ${isDark ? "dark dash-dark" : ""}`}>
       <div className="container-ngo">
         {/* Header */}
         <div className="text-center space-y-3 mb-10">

@@ -1,7 +1,16 @@
 const joi = require('joi');
 const router = require('express').Router();
+const multer = require('multer');
 const ctrl = require('../controllers/QuizController');
 const { validateBody, validateParams, schemas } = require('../lib/validators');
+
+// A question may carry one image and/or one video. multer leaves req.body
+// alone for a plain JSON post, so the existing JSON clients keep working.
+const upload = multer({ dest: 'tmp/' });
+const questionFiles = upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'video', maxCount: 1 },
+]);
 
 // Quiz
 router.post('/quiz', validateBody(schemas.createQuiz), ctrl.quiz_store);
@@ -9,8 +18,8 @@ router.post('/quiz/:id', validateParams(schemas.idParam), validateBody(schemas.u
 router.get('/quiz/:id', validateParams(schemas.idParam), ctrl.quiz_show);
 
 // Questions
-router.post('/question', validateBody(schemas.createQuestion), ctrl.question_store);
-router.post('/question/:id', validateParams(schemas.idParam), validateBody(schemas.updateQuestion), ctrl.question_update);
+router.post('/question', questionFiles, validateBody(schemas.createQuestion), ctrl.question_store);
+router.post('/question/:id', validateParams(schemas.idParam), questionFiles, validateBody(schemas.updateQuestion), ctrl.question_update);
 router.delete('/question/:id', validateParams(schemas.idParam), ctrl.question_delete);
 router.post('/question/sort', validateBody(joi.object({
   questions: joi.array().items(joi.object({ id: joi.number().required(), sort_order: joi.number().required() })).required(),

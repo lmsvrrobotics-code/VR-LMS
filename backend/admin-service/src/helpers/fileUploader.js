@@ -38,7 +38,10 @@ const niceFileName = (title, ext) => {
 // in DB — that's the public R2 URL when env.r2.publicUrl is set, otherwise
 // the R2 key (so the legacy `uploads/...` path still resolves on the
 // frontend through the bastion / API).
-const upload = async (file, destPath, width = null, height = null) => {
+// `opts.fit` is forwarded to sharp: 'cover' (default) crops to fill, while
+// 'contain' letterboxes so the whole image survives the upload. See the note
+// in R2Storage.uploadFile — cover-fit discards the cropped edges for good.
+const upload = async (file, destPath, width = null, height = null, opts = {}) => {
     if (!file) return null;
 
     // Videos always go to Bunny Stream. Caller passes the desired display
@@ -54,7 +57,9 @@ const upload = async (file, destPath, width = null, height = null) => {
 
     // Everything else → R2 (images/PDFs/attachments).
     const key = toR2Key(destPath);
-    const resize = (width || height) ? { width, height } : null;
+    const resize = (width || height)
+        ? { width, height, ...(opts.fit ? { fit: opts.fit } : {}) }
+        : null;
     const result = await r2.uploadFile(file, key, { resize });
 
     // Backwards-compatible return value: keep the same "uploads/..." path

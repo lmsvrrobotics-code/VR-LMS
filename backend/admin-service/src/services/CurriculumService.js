@@ -223,6 +223,35 @@ const buildLessonData = async (b, files) => {
         case 'iframe':
             data.lesson_src = b.iframe_source;
             break;
+        // A CHALLENGE sends the student to an external site; the URL rides in
+        // lesson_src exactly as a video URL does, so there is no duration to
+        // parse. It carries two pieces of briefing material, shown as tabs
+        // before the student opens the task:
+        //
+        //   Instructions    → `description` (rich text, set for every type
+        //                     above this switch — nothing extra needed here)
+        //   Expected output → `attachment` + `attachment_type`, reusing the
+        //                     same pair an image/document lesson uses. Either
+        //                     an UPLOADED file or a pasted URL (YouTube, a
+        //                     hosted image), because a teacher demoing on
+        //                     YouTube should not have to download and re-upload
+        //                     it just to reference it here.
+        //
+        // attachment_type records which, so the player knows whether to render
+        // an <img>, a <video> or an embed rather than sniffing the extension.
+        case 'challenge': {
+            data.lesson_src = b.lesson_src;
+            const out = pickFile(files, 'attachment');
+            if (out) {
+                const dest = `${courseFolder(b.course_id)}/${uniqueName(out.originalname)}`;
+                data.attachment = await upload(out, dest);
+                data.attachment_type = (out.mimetype || '').startsWith('video/') ? 'video' : 'image';
+            } else if (b.expected_output_url) {
+                data.attachment = String(b.expected_output_url).trim();
+                data.attachment_type = 'url';
+            }
+            break;
+        }
         case 'document_type': {
             const f = pickFile(files, 'attachment');
             if (f) {
@@ -347,6 +376,35 @@ const updateLesson = async ({ body, files }) => {
         case 'iframe':
             data.lesson_src = b.iframe_source;
             break;
+        // A CHALLENGE sends the student to an external site; the URL rides in
+        // lesson_src exactly as a video URL does, so there is no duration to
+        // parse. It carries two pieces of briefing material, shown as tabs
+        // before the student opens the task:
+        //
+        //   Instructions    → `description` (rich text, set for every type
+        //                     above this switch — nothing extra needed here)
+        //   Expected output → `attachment` + `attachment_type`, reusing the
+        //                     same pair an image/document lesson uses. Either
+        //                     an UPLOADED file or a pasted URL (YouTube, a
+        //                     hosted image), because a teacher demoing on
+        //                     YouTube should not have to download and re-upload
+        //                     it just to reference it here.
+        //
+        // attachment_type records which, so the player knows whether to render
+        // an <img>, a <video> or an embed rather than sniffing the extension.
+        case 'challenge': {
+            data.lesson_src = b.lesson_src;
+            const out = pickFile(files, 'attachment');
+            if (out) {
+                const dest = `${courseFolder(b.course_id)}/${uniqueName(out.originalname)}`;
+                data.attachment = await upload(out, dest);
+                data.attachment_type = (out.mimetype || '').startsWith('video/') ? 'video' : 'image';
+            } else if (b.expected_output_url) {
+                data.attachment = String(b.expected_output_url).trim();
+                data.attachment_type = 'url';
+            }
+            break;
+        }
         case 'document_type': {
             const f = pickFile(files, 'attachment');
             if (f) {

@@ -25,9 +25,9 @@
 // join in TeacherStudentService / TeacherCourseService.
 //
 // batch_teachers.batch_id / batch_members.batch_id are FKs to batches.unique_id
-// (varchar), NOT the surrogate integer batches.id. The join also accepts the
-// legacy batches.batch_id alias, a column present in the live DB but in none of
-// the numbered migrations, because older rows key off it.
+// (varchar), NOT the surrogate integer batches.id. unique_id is the ONLY key
+// these joins use: batches has no `batch_id` column, and referencing one made
+// the whole query raise, which the best-effort catch turned into "no courses".
 //
 // Best-effort like both counterparts: a DB miss returns an empty list and logs,
 // so the panel degrades to "no courses" rather than 500ing the whole detail view.
@@ -49,7 +49,7 @@ const sharedBatchRows = async (teacherId, studentId) => {
                 b.course_id AS course_id
            FROM batches b
            JOIN batch_members bm
-             ON (bm.batch_id = b.unique_id OR bm.batch_id = b.batch_id)
+             ON bm.batch_id = b.unique_id
             AND COALESCE(bm.status, 'active') = 'active'
             -- student_id: the public "VRS…" id the dashboard may hold instead of
             -- the auth userId. Matching either means the panel works whichever
@@ -62,7 +62,7 @@ const sharedBatchRows = async (teacherId, studentId) => {
                OR EXISTS (
                     SELECT 1
                       FROM batch_teachers bt
-                     WHERE (bt.batch_id = b.unique_id OR bt.batch_id = b.batch_id)
+                     WHERE bt.batch_id = b.unique_id
                        AND bt.user_id = :tid
                        -- COALESCE: the column is nullable with a DEFAULT, so
                        -- rows written before it existed hold NULL and must

@@ -27,6 +27,32 @@ const fields = {
   score: joi.number().min(0).max(100),
 };
 
+// --- quiz question field shapes ---------------------------------------------
+// Shared by createQuestion / updateQuestion. The admin question form turned
+// multipart when per-question image/video upload arrived, and FormData has no
+// array type: it posts `options` and `answer` as JSON strings. These accept the
+// JSON-encoded string as well as the native array a JSON client still sends;
+// QuizService.parseMultipartArrays turns the string back into an array before
+// the per-type rules (mcq needs options, etc.) are applied.
+const jsonArrayString = joi.string().max(20000).pattern(/^\s*\[/);
+
+const questionOptions = joi.alternatives().try(
+  joi.array().items(joi.string().allow('').max(500)),
+  jsonArrayString,
+).optional();
+
+const questionAnswer = joi.alternatives().try(
+  joi.array().items(joi.string().allow('').max(1000)),
+  jsonArrayString,
+  joi.string().max(1000),
+  joi.number(),
+).optional();
+
+// "Clear this image/video" checkbox. Multipart makes every scalar a string, so
+// the flag can arrive as "1"/"true"/"on" (or "0"/"false" when the form always
+// sends it). QuizService decides truthiness; here we only bound the size.
+const mediaRemoveFlag = joi.alternatives().try(joi.boolean(), joi.string().max(10)).optional();
+
 // Validation schemas for critical endpoints
 const schemas = {
   // Courses
@@ -324,27 +350,28 @@ const schemas = {
   // question text is `title`, the type is mcq|fill_blanks|true_false, and
   // `answer` is an array (mcq / fill_blanks) or a string (true_false). The
   // service enforces the semantic rules (answer required; mcq needs options).
+  // A question may carry an image and/or a video, which makes the form
+  // multipart — and FormData cannot carry an array, so the admin posts
+  // `options`/`answer` as JSON strings. Accept both shapes here; QuizService
+  // parses the string back before applying the per-type rules. `remove_image`
+  // / `remove_video` are the edit form's "clear this media" checkboxes.
   createQuestion: joi.object({
     quiz_id: fields.id,
     title: fields.string(1, 1000).required(),
     type: fields.enum(['mcq', 'fill_blanks', 'true_false']),
-    options: joi.array().items(joi.string().allow('').max(500)).optional(),
-    answer: joi.alternatives().try(
-      joi.array().items(joi.string().allow('').max(1000)),
-      joi.string().max(1000),
-      joi.number(),
-    ).optional(),
+    options: questionOptions,
+    answer: questionAnswer,
+    remove_image: mediaRemoveFlag,
+    remove_video: mediaRemoveFlag,
   }).unknown(true),
 
   updateQuestion: joi.object({
     title: fields.stringOptional(1, 1000),
     type: fields.enumOptional(['mcq', 'fill_blanks', 'true_false']),
-    options: joi.array().items(joi.string().allow('').max(500)).optional(),
-    answer: joi.alternatives().try(
-      joi.array().items(joi.string().allow('').max(1000)),
-      joi.string().max(1000),
-      joi.number(),
-    ).optional(),
+    options: questionOptions,
+    answer: questionAnswer,
+    remove_image: mediaRemoveFlag,
+    remove_video: mediaRemoveFlag,
   }).unknown(true),
 
   // Common param validators

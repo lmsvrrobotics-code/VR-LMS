@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CalendarClock, Video, ArrowRight, Flame, Users, Check, Clock, Globe, ShieldCheck, MailCheck, LayoutDashboard } from "lucide-react";
+import { CalendarClock, Video, ArrowRight, Flame, Users, Check, Clock, Globe, LayoutDashboard } from "lucide-react";
 import { posterFor, isLowOnSeats } from "@/lib/founderMeetingDefaults";
 import { validateEmail, validateName, validatePhone } from "@/lib/fieldValidation";
 import { apiErrorMessage } from "@/lib/apiErrorMessage";
@@ -271,27 +271,38 @@ const RegistrationForm = ({
                 {"Save this link — we've also sent it to your email."}
               </p>
             </>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              {"We'll email you the joining details before the session."}
-            </p>
-          )}
+          ) : null}
 
-          {/* Logged-in students get a direct route into their Founder Meetings
-              tab, where this registration now lives alongside the join link. */}
-          {isStudent && (
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                navigate("/student/dashboard", { state: { tab: "Founder Meetings" } });
-              }}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/5 px-8 py-3 text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
-            >
-              <LayoutDashboard className="h-4 w-4" aria-hidden="true" />
-              View in My Dashboard
-            </button>
-          )}
+          {/* Route to the Founder Meetings tab, where this registration now
+              lives alongside its joining link.
+
+              Shown to EVERYONE, not only a logged-in student. The previous
+              `isStudent` gate meant an anonymous registrant — the common case
+              on a public marketing page — finished the flow with nothing to do
+              but close the dialog, so the one place their booking exists was
+              never offered to them. A guest lands on the dashboard route and is
+              asked to sign in, which is the correct next step rather than a
+              dead end.
+
+              When the session has no join link yet this is the PRIMARY action,
+              so it takes the brand-gradient treatment; alongside a join link it
+              steps back to a quieter outline. */}
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              navigate("/student/dashboard", { state: { tab: "Founder Meetings" } });
+            }}
+            className={
+              joinLink
+                ? "inline-flex w-full items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/5 px-8 py-3 text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
+                : "inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-hero px-8 py-3.5 font-semibold text-white shadow-sm transition-all duration-300 hover:brightness-105 hover:shadow-lg"
+            }
+          >
+            <LayoutDashboard className="h-4 w-4" aria-hidden="true" />
+            {isStudent ? "View in My Dashboard" : "View my meetings"}
+            <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          </button>
 
           <button
             type="button"
@@ -356,6 +367,10 @@ const RegistrationForm = ({
 };
 
 const FounderMeetingSection = () => {
+  // Used by the past/closed card's "Explore our courses" button. Declared here
+  // because RegistrationForm's own `navigate` is scoped to that component and
+  // is NOT visible in this one.
+  const navigate = useNavigate();
   const [meeting, setMeeting] = useState<FounderMeeting | null>(null);
   // Held here rather than in the form so the link survives the form unmounting
   // into its confirmation state.
@@ -397,6 +412,19 @@ const FounderMeetingSection = () => {
   // Sold out only when a cap was actually set and every seat is gone. An
   // uncapped session has seats_left === null and can never be "full".
   const isSoldOut = !isPast && meeting.capacity != null && meeting.seats_left === 0;
+  // Show the seat counter for ANY capped session, including a finished one.
+  //
+  // It was originally gated on `can_register`, which the server sets false once
+  // a session is past — so the corner sat empty on exactly the meeting being
+  // looked at. The details rail reports "30 of 30 seats left" regardless, so
+  // hiding the corner chip only made the two disagree.
+  //
+  // An UNCAPPED session still shows nothing: capacity === null means there is
+  // genuinely no number to report, and "unlimited seats" would be noise.
+  const showSeatCount =
+    meeting.capacity != null &&
+    meeting.seats_left != null &&
+    meeting.seats_left > 0;
 
   return (
     <section
@@ -409,72 +437,203 @@ const FounderMeetingSection = () => {
         aria-hidden="true"
         className="pointer-events-none absolute left-1/2 top-0 -z-0 h-[420px] w-[820px] max-w-[95vw] -translate-x-1/2 rounded-full bg-primary/10 blur-[120px]"
       />
+      {/* A second, cooler glow low and to the side. Two offset washes read as
+          depth; one centred circle reads as a flat vignette. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-32 bottom-0 -z-0 h-[360px] w-[520px] rounded-full bg-primary/[0.07] blur-[120px]"
+      />
       <div className="container-ngo relative z-10">
-        {/* Section header in the page's established pattern: small primary
-            eyebrow, a heading with one gradient accent, supporting line. The
-            eyebrow is fixed UI chrome; every word below it is admin data. */}
-        <div className="text-center space-y-3 mb-12">
-          <p className="text-primary font-semibold">
-            {isPast ? "Previous Session" : "Live Session"}
-          </p>
+        {/* Section header. The eyebrow is a proper pill rather than a loose
+            line of text — it gives the block a confident entry point and, when
+            the session is LIVE, carries a pulsing dot that earns attention
+            honestly instead of shouting. Everything below it is admin data. */}
+        <div className="text-center mb-12">
+          <span
+            className={`inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-semibold ${
+              isLive
+                ? "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400"
+                : "border-primary/25 bg-primary/10 text-primary"
+            }`}
+          >
+            {isLive ? (
+              <span className="relative flex h-2 w-2" aria-hidden="true">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+              </span>
+            ) : (
+              <Video className="h-4 w-4" aria-hidden="true" />
+            )}
+            {isLive ? "Live right now" : isPast ? "Previous Session" : "Live Session"}
+          </span>
+
+          {/* The title is the single biggest thing on the section — this is
+              the moment that has to land. The gradient is the brand's own
+              `text-gradient`, already used by the hero. */}
           <h2
             id="founder-meeting-heading"
-            className="text-3xl md:text-4xl font-bold"
+            className="mt-5 text-4xl font-bold leading-[1.1] tracking-tight md:text-5xl lg:text-6xl"
           >
-            {meeting.title}
+            <span className="text-gradient">{meeting.title}</span>
           </h2>
+
           {meeting.description && (
-            <p className="text-muted-foreground max-w-2xl mx-auto">
+            <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-muted-foreground">
               {meeting.description}
             </p>
           )}
+
+          <div className="mx-auto mt-7 h-1 w-24 rounded-full bg-gradient-hero" aria-hidden="true" />
         </div>
 
-        <div className="card-ngo-static relative overflow-hidden rounded-3xl border border-border/60 shadow-[0_30px_80px_-40px_rgba(0,0,0,0.45)] ring-1 ring-black/5 dark:ring-white/5">
-          {/* Almost-full badge, pinned to the card's top-right. z-10 keeps it
-              above the poster; it is announced politely rather than
-              interrupting whatever a screen-reader user is already reading. */}
-          {lowOnSeats && (
+        {/* Animated gradient edge. `.glow-border` is a 1px-padded wrapper whose
+            ::before is a conic sheet that SPINS (see index.css) — the brand
+            orange running through amber, cyan and indigo, so the card is
+            outlined in moving light rather than a flat grey hairline.
+
+            The rotation is a transform on a child, not an animated gradient:
+            animating a conic-gradient needs `@property`, which Safari only
+            supports from 16.4 and which silently fails to interpolate
+            elsewhere. A transform works in every browser and stays on the
+            compositor. It stops under prefers-reduced-motion, keeping the
+            colour but dropping the motion. */}
+        {/* `.glow-border-wrap` hosts the outer bloom. It has to be a SEPARATE
+            element: .glow-border clips its own children to the card radius, so
+            a glow drawn inside would be sliced off at the edge instead of
+            spilling onto the page. */}
+        <div className="glow-border-wrap rounded-[30px]">
+        <div className="glow-border rounded-[30px] p-[5px] shadow-[0_40px_90px_-45px_rgba(255,106,0,0.45)]">
+        <div className="glow-border__inner card-ngo-static relative overflow-hidden rounded-[25px] bg-card">
+          {/* ---- Seat counter, pinned to the card's top-right ----------
+              Always present while a capped session is open, not only once it
+              is nearly full: a visitor arriving at "30 of 30" should still see
+              that seats are limited and being tracked — that is what makes the
+              count feel live rather than like a warning that appears out of
+              nowhere.
+
+              It is TIERED, so the styling carries the meaning:
+                plenty  → calm glass chip, no animation
+                low     → amber, pulsing (genuine scarcity, earns the emphasis)
+                sold out→ solid slate, no pulse ("act now" is the wrong message
+                          once there is nothing left to act on)
+
+              z-20 keeps it above the poster and its backdrop. Announced
+              politely so it never interrupts a screen-reader user mid-sentence. */}
+          {isSoldOut ? (
             <div
-              className="seat-badge absolute right-4 top-4 z-10 flex items-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-white shadow-lg"
+              className="absolute right-4 top-4 z-20 flex items-center gap-2 rounded-full bg-foreground/90 px-4 py-2 text-sm font-bold tracking-wide text-background shadow-xl backdrop-blur"
+              role="status"
+            >
+              <Users className="h-4 w-4 shrink-0" aria-hidden="true" />
+              SOLD OUT
+            </div>
+          ) : showSeatCount ? (
+            <div
+              className={`absolute right-4 top-4 z-20 flex items-center gap-2.5 rounded-full px-4 py-2 shadow-xl backdrop-blur-md ${
+                isPast
+                  ? "bg-background/70 text-muted-foreground ring-1 ring-border/60"
+                  : lowOnSeats
+                    ? "seat-badge bg-amber-500/95 text-white ring-1 ring-white/30"
+                    : "bg-background/80 text-foreground ring-1 ring-border/70"
+              }`}
               role="status"
               aria-live="polite"
             >
-              <Flame className="h-4 w-4 shrink-0" aria-hidden="true" />
-              <span className="text-sm font-bold">
-                Only {meeting.seats_left} {meeting.seats_left === 1 ? "seat" : "seats"} left
+              {isPast ? (
+                /* Finished: a neutral glyph. A live dot or a flame here would
+                   imply the seats are still there to be taken. */
+                <Users className="h-4 w-4 shrink-0" aria-hidden="true" />
+              ) : lowOnSeats ? (
+                <Flame className="h-4 w-4 shrink-0" aria-hidden="true" />
+              ) : (
+                /* A small live dot: quietly signals "this number is current"
+                   without the urgency of a flame. */
+                <span className="relative flex h-2 w-2 shrink-0" aria-hidden="true">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60 motion-reduce:hidden" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+                </span>
+              )}
+              <span className="text-sm font-bold leading-none">
+                {isPast ? (
+                  <>
+                    {meeting.capacity}
+                    <span className="font-medium opacity-70"> seats</span>
+                  </>
+                ) : lowOnSeats ? (
+                  <>Only {meeting.seats_left} {meeting.seats_left === 1 ? "seat" : "seats"} left</>
+                ) : (
+                  <>
+                    {meeting.seats_left}
+                    <span className="font-medium opacity-70"> / {meeting.capacity} seats left</span>
+                  </>
+                )}
               </span>
             </div>
-          )}
-
-          {/* Sold out takes the same corner slot — the two are mutually
-              exclusive, so the card never carries both. No pulse here: the
-              glow says "act now", which is the wrong message once there is
-              nothing left to act on. */}
-          {isSoldOut && (
-            <div
-              className="absolute right-4 top-4 z-10 rounded-full bg-foreground/85 px-4 py-2 text-sm font-bold tracking-wide text-background shadow-lg backdrop-blur"
-              role="status"
-            >
-              SOLD OUT
-            </div>
-          )}
+          ) : null}
 
           <div className="grid lg:grid-cols-2">
-            {/* Media — the admin's poster, else their uploaded video. */}
-            <div className="relative bg-muted">
+            {/* Media — the admin's poster, else their uploaded video.
+                The poster is stored WHOLE at 1600x900 (contain-fit, see
+                FounderMeetingService.storeUpload), so it is shown whole here:
+                `aspect-video` holds the box at the artwork's own 16:9 and
+                object-contain guarantees nothing is ever sliced off, even if an
+                admin uploads an off-ratio flyer.
+
+                The column centres its image rather than stretching it. The
+                details rail beside it is naturally taller, and an earlier
+                version let the <img> fill that height with object-cover — which
+                cropped the left and right edges and cut the academy logo and
+                the "Register now" button out of the flyer. The subtle tinted
+                ground behind the image absorbs the leftover height so the
+                column reads as a deliberate frame instead of dead space. */}
+            <div className="relative flex items-center justify-center overflow-hidden bg-gradient-to-br from-[#1b1d2b] via-[#232637] to-[#15161f] p-4 sm:p-6 lg:p-10">
+              {/* ---- Decorative backdrop ----------------------------------
+                  The poster is 16:9 inside a taller column, so there is real
+                  estate around it either way. Rather than leave that as flat
+                  dead space, it becomes a deep "studio" ground the flyer is
+                  presented against — the artwork reads as lit and deliberate
+                  instead of pasted onto a blank panel.
+
+                  Everything here is aria-hidden and pointer-events-none: it is
+                  pure atmosphere and must never intercept a click or reach a
+                  screen reader. The animations reuse the page's existing
+                  orb-drift / glow-pulse / ring-spin helpers, which already have
+                  prefers-reduced-motion guards in index.css, so this adds no
+                  new motion a user cannot turn off. */}
+              <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+                {/* Blueprint grid — a faint engineering lattice that suits a
+                    robotics academy without competing with the flyer. */}
+                <div
+                  className="absolute inset-0 opacity-[0.18]"
+                  style={{
+                    backgroundImage:
+                      "linear-gradient(to right, rgba(255,255,255,0.09) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.09) 1px, transparent 1px)",
+                    backgroundSize: "44px 44px",
+                  }}
+                />
+                {/* Brand orbs, drifting slowly at different depths. */}
+                <div className="animate-orb-drift absolute -left-16 -top-16 h-64 w-64 rounded-full bg-primary/25 blur-[70px]" />
+                <div className="animate-glow-pulse absolute -bottom-20 -right-10 h-72 w-72 rounded-full bg-primary/20 blur-[80px]" />
+                {/* A slow concentric ring, echoing the robotics/orbit motif. */}
+                <div className="animate-ring-spin absolute -right-24 top-1/2 h-[420px] w-[420px] -translate-y-1/2 rounded-full border border-dashed border-white/[0.07]" />
+                <div className="absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.05]" />
+                {/* Vignette so the corners fall away and the eye lands on the
+                    poster rather than wandering to the edges. */}
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_35%,rgba(0,0,0,0.55)_100%)]" />
+              </div>
+
               {poster ? (
                 <img
                   src={poster}
                   alt={meeting.title}
-                  className="h-full w-full object-cover"
+                  className="relative z-10 aspect-video w-full rounded-xl object-contain shadow-[0_30px_70px_-20px_rgba(0,0,0,0.75)] ring-1 ring-white/15 transition-transform duration-500 hover:scale-[1.015] motion-reduce:transition-none motion-reduce:hover:scale-100"
                   loading="lazy"
                   // If the default flyer has not been added to /public yet,
                   // hide the element rather than show a broken-image icon.
                   onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
                 />
               ) : (
-                <div className="aspect-video w-full">
+                <div className="relative z-10 aspect-video w-full overflow-hidden rounded-xl shadow-[0_30px_70px_-20px_rgba(0,0,0,0.75)] ring-1 ring-white/15">
                   <iframe
                     title={meeting.title}
                     src={meeting.video_url as string}
@@ -486,7 +645,7 @@ const FounderMeetingSection = () => {
               )}
 
               {isLive && (
-                <span className="absolute left-5 top-5 inline-flex items-center gap-2 rounded-full bg-red-600 px-3 py-1.5 text-xs font-semibold tracking-wide text-white shadow-lg">
+                <span className="absolute left-7 top-7 z-20 inline-flex items-center gap-2 rounded-full bg-red-600 px-3 py-1.5 text-xs font-semibold tracking-wide text-white shadow-lg sm:left-9 sm:top-9 lg:left-11 lg:top-11">
                   <span className="relative flex h-2 w-2" aria-hidden="true">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
                     <span className="relative inline-flex h-2 w-2 rounded-full bg-white" />
@@ -558,25 +717,10 @@ const FounderMeetingSection = () => {
                   </div>
                 </div>
 
-                {/* Seats: only when a real cap exists. Frames availability as
-                    reference info here; the amber badge handles urgency. */}
-                {meeting.capacity != null && meeting.seats_left != null && (
-                  <div className="flex items-start gap-3.5">
-                    <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      <Users className="h-[18px] w-[18px]" aria-hidden="true" />
-                    </span>
-                    <div className="min-w-0">
-                      <dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Availability
-                      </dt>
-                      <dd className="mt-0.5 font-semibold">
-                        {meeting.seats_left > 0
-                          ? <>{meeting.seats_left} of {meeting.capacity} seats left</>
-                          : <>All {meeting.capacity} seats taken</>}
-                      </dd>
-                    </div>
-                  </div>
-                )}
+                {/* No AVAILABILITY row here. The seat count now lives in the
+                    card's top-right chip, which reports the same number in the
+                    same three tiers — repeating it as an info row said the same
+                    thing twice a few hundred pixels apart. */}
               </dl>
 
               <div className="border-t border-border/60 pt-6">
@@ -585,24 +729,18 @@ const FounderMeetingSection = () => {
                     <button
                       type="button"
                       onClick={() => setFormOpen(true)}
-                      className="group inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-hero px-8 py-4 text-base font-bold text-white shadow-md shadow-primary/20 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/30"
+                      className="group relative inline-flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl bg-gradient-hero px-8 py-4 text-base font-bold text-white shadow-lg shadow-primary/25 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-primary/40 focus-visible:-translate-y-1"
                     >
-                      Register Now
-                      <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" aria-hidden="true" />
+                      {/* A light sweep that crosses the button on hover. Pure
+                          decoration, behind the label, and it never intercepts
+                          the click (pointer-events-none). */}
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent transition-transform duration-700 group-hover:translate-x-full motion-reduce:hidden"
+                      />
+                      <span className="relative">Register Now</span>
+                      <ArrowRight className="relative h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" aria-hidden="true" />
                     </button>
-                    {/* Trust microcopy — two guarantees that are literally true
-                        of this flow (instant confirmation, emailed link), so
-                        the promise is honest, not marketing filler. */}
-                    <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
-                      <span className="inline-flex items-center gap-1.5">
-                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" aria-hidden="true" />
-                        Instant confirmation
-                      </span>
-                      <span className="inline-flex items-center gap-1.5">
-                        <MailCheck className="h-3.5 w-3.5 text-emerald-500" aria-hidden="true" />
-                        Joining link sent to your email
-                      </span>
-                    </div>
                   </div>
                 ) : isSoldOut ? (
                   /* Sold out is the state worth designing for: it is the only
@@ -628,11 +766,36 @@ const FounderMeetingSection = () => {
                     </p>
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">
-                    {isPast
-                      ? "This session has finished."
-                      : "Registration is closed for this session."}
-                  </p>
+                  /* Past / closed. Previously a single grey line, which made an
+                     otherwise rich card trail off into nothing — the visitor's
+                     last impression was an apology. It is now a proper panel
+                     that acknowledges the state AND points somewhere useful, so
+                     a late arrival still has a next step. */
+                  <div className="rounded-xl border border-border/60 bg-muted/40 p-5">
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                        <Check className="h-5 w-5" aria-hidden="true" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="font-bold leading-snug">
+                          {isPast ? "This session has wrapped" : "Registration closed"}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {isPast
+                            ? "A new session is announced here every week."
+                            : "Seats are no longer being taken for this session."}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => navigate("/courses")}
+                      className="group mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-6 py-3 text-sm font-bold text-primary transition-all duration-300 hover:bg-primary/10"
+                    >
+                      Explore our courses
+                      <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" aria-hidden="true" />
+                    </button>
+                  </div>
                 )}
 
                 {/* Only a separate link when a poster occupies the media slot;
@@ -650,6 +813,8 @@ const FounderMeetingSection = () => {
               </div>
             </div>
           </div>
+        </div>
+        </div>
         </div>
       </div>
 

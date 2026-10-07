@@ -48,8 +48,17 @@ function publicUrlFor(key) {
 }
 
 // Upload a local file (typically Multer's tmp path) to R2 under `key`.
-// Optional `resize` resizes images to width x height using cover-fit before
-// upload (mirrors the old fileUploader.js behavior for avatars/thumbnails).
+// Optional `resize` resizes images to width x height before upload.
+//
+// `resize.fit` defaults to 'cover' (the historic behaviour: fill the box and
+// crop the overflow), which is right for avatars and card thumbnails where a
+// consistent shape matters more than seeing every pixel.
+//
+// Pass fit:'contain' for artwork that must survive INTACT — a marketing poster,
+// for example. Cover-fit is destructive: it crops at UPLOAD time, so the lost
+// edges are gone from the stored object and no amount of CSS can bring them
+// back. 'contain' letterboxes instead, padding onto a transparent (or
+// `background`) ground so the whole image is preserved at the target size.
 async function uploadFile(file, key, { resize = null, contentType = null } = {}) {
     if (!file?.path) throw new Error('uploadFile: file.path is required');
     if (!env.r2.bucket) throw new Error('uploadFile: R2_BUCKET_NAME not configured');
@@ -59,10 +68,24 @@ async function uploadFile(file, key, { resize = null, contentType = null } = {})
     let resolvedType = contentType || file.mimetype || 'application/octet-stream';
 
     if (resize && (resize.width || resize.height)) {
-        const buf = await sharp(file.path)
-            .resize(resize.width || null, resize.height || null, { fit: 'cover' })
-            .toBuffer();
-        body = buf;
+        const fit = resize.fit || 'cover';
+        const pipeline = sharp(file.path).resize(
+            resize.width || null,
+            resize.height || null,
+            {
+                fit,
+                // Only meaningful for 'contain'. Transparent keeps PNG artwork
+                // clean; `background` lets a caller letterbox onto a solid
+                // colour instead of leaving bars that read as missing image.
+                ...(fit === 'contain'
+                    ? { background: resize.background || { r: 0, g: 0, b: 0, alpha: 0 } }
+                    : {}),
+                // Never scale a small image UP to hit the target box: that only
+                // blurs it. A smaller poster is letterboxed at its own size.
+                withoutEnlargement: resize.withoutEnlargement !== false,
+            },
+        );
+        body = await pipeline.toBuffer();
     } else {
         body = fs.createReadStream(file.path);
     }

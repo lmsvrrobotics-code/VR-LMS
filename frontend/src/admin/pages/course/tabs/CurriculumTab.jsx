@@ -6,6 +6,7 @@ import ConfirmDialog from '../../../components/ConfirmDialog';
 import { listCurriculum, storeSection, updateSection, deleteSection, deleteLesson } from '../../../api/curriculum';
 import SessionForm from '../curriculum/SessionForm';
 import LessonTypePicker from '../curriculum/LessonTypePicker';
+import ChallengeSubmissions from '../curriculum/ChallengeSubmissions';
 import LessonAddForm from '../curriculum/LessonAddForm';
 import LessonEditForm from '../curriculum/LessonEditForm';
 import SectionSort from '../curriculum/SectionSort';
@@ -84,14 +85,14 @@ export default function CurriculumTab({ course }) {
 
     return (
         <div className="w-full">
-            <div className="flex items-center mb-3 flex-wrap gap-2">
-                <button className="ol-btn-light ol-btn-sm" onClick={() => setModal({ type: 'add-session' })}>Add session</button>
+            <div className="flex items-center mb-4 flex-wrap gap-2">
+                <button className="ol-btn-light ol-btn-sm whitespace-nowrap" onClick={() => setModal({ type: 'add-session' })}>Add session</button>
                 {sections.length > 0 && (
                     <>
                         {/* One entry point for both class kinds — the picker's
                             first step routes to content vs quiz. */}
-                        <button className="ol-btn-light ol-btn-sm" onClick={() => setModal({ type: 'lesson-type-picker' })}>Add class</button>
-                        <button className="ol-btn-light ol-btn-sm" onClick={() => setModal({ type: 'sort-sections' })}>Sort Sessions</button>
+                        <button className="ol-btn-light ol-btn-sm whitespace-nowrap" onClick={() => setModal({ type: 'lesson-type-picker' })}>Add class</button>
+                        <button className="ol-btn-light ol-btn-sm whitespace-nowrap" onClick={() => setModal({ type: 'sort-sections' })}>Sort Sessions</button>
                     </>
                 )}
             </div>
@@ -110,13 +111,16 @@ export default function CurriculumTab({ course }) {
                     </li>
                 ) : sections.map((s, i) => (
                     // `group/section` lets the inline controls react to the
-                    // ROW's hover (not just their own). The Sort Lessons / Edit
-                    // / Delete buttons fade in only when the section is hovered;
-                    // the expand chevron stays visible so users can always see
-                    // and toggle the open/closed state.
+                    // ROW's hover (not just their own). Sort Classes / Edit /
+                    // Delete rest at opacity-70 and go fully opaque on hover or
+                    // keyboard focus. They are deliberately NOT opacity-0: a
+                    // control that is invisible until hover cannot be found by
+                    // touch users (no hover event at all) and reads as "the
+                    // buttons are missing" on desktop. Hover is emphasis here,
+                    // never the on/off switch for discoverability.
                     <li key={s.id} className="ol-card border border-ebordermuted group/section">
-                        <div className="flex items-center justify-between px-4 py-3">
-                            <button type="button" className="flex items-center gap-3 flex-grow text-left min-w-0" onClick={() => toggle(s.id)}>
+                        <div className="flex items-center justify-between gap-3 px-4 py-3">
+                            <button type="button" className="flex items-center gap-3 flex-1 text-left min-w-0" onClick={() => toggle(s.id)}>
                                 {s.image && (
                                     <img
                                         src={s.image}
@@ -131,11 +135,11 @@ export default function CurriculumTab({ course }) {
                                     )}
                                 </span>
                             </button>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1 shrink-0">
                                 {s.lessons.length > 0 && (
                                     <button
                                         type="button"
-                                        className="ol-btn-outline-secondary ol-btn-sm inline-flex items-center gap-1.5 opacity-0 group-hover/section:opacity-100 focus-visible:opacity-100 transition-opacity"
+                                        className="ol-btn-outline-secondary ol-btn-sm inline-flex items-center gap-1.5 whitespace-nowrap leading-none opacity-70 group-hover/section:opacity-100 focus-visible:opacity-100 transition-opacity"
                                         onClick={(e) => { e.stopPropagation(); setModal({ type: 'sort-lessons', section: s }); }}
                                     >
                                         <FaSort className="text-[11px] text-gray-400" />
@@ -146,14 +150,14 @@ export default function CurriculumTab({ course }) {
                                     type="button"
                                     title="Edit session"
                                     aria-label={`Edit session ${s.title}`}
-                                    className="text-gray-400 hover:text-gray-600 px-2 opacity-0 group-hover/section:opacity-100 focus-visible:opacity-100 transition-opacity"
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-ol-8 text-gray-400 hover:text-gray-600 hover:bg-lightgreen/50 opacity-70 group-hover/section:opacity-100 focus-visible:opacity-100 transition-opacity"
                                     onClick={(e) => { e.stopPropagation(); setModal({ type: 'edit-session', session: s }); }}
                                 ><FaPen className="text-[13px]" /></button>
                                 <button
                                     type="button"
                                     title="Delete session"
                                     aria-label={`Delete session ${s.title}`}
-                                    className="text-gray-400 hover:text-gray-600 px-2 opacity-0 group-hover/section:opacity-100 focus-visible:opacity-100 transition-opacity"
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-ol-8 text-gray-400 hover:text-gray-600 hover:bg-lightgreen/50 opacity-70 group-hover/section:opacity-100 focus-visible:opacity-100 transition-opacity"
                                     onClick={(e) => { e.stopPropagation(); setConfirm({ kind: 'session', id: s.id, label: s.title }); }}
                                 ><FaTrash className="text-[13px]" /></button>
                                 {/* Chevron stays visible at rest — it's also a
@@ -163,7 +167,7 @@ export default function CurriculumTab({ course }) {
                                     title={expanded.has(s.id) ? 'Collapse' : 'Expand'}
                                     aria-label={expanded.has(s.id) ? `Collapse ${s.title}` : `Expand ${s.title}`}
                                     aria-expanded={expanded.has(s.id)}
-                                    className="text-gray-400 hover:text-gray-600 px-2 transition-colors"
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-ol-8 text-gray-400 hover:text-gray-600 hover:bg-lightgreen/50 transition-colors"
                                     onClick={(e) => { e.stopPropagation(); toggle(s.id); }}
                                 >
                                     {expanded.has(s.id)
@@ -179,26 +183,38 @@ export default function CurriculumTab({ course }) {
                                 ) : s.lessons.map((l) => (
                                     // `group/lesson` scopes hover to THIS row only.
                                     // Edit / Delete (and the quiz "Questions" pill)
-                                    // fade in when the lesson row is hovered.
-                                    <li key={l.id} className="flex items-center justify-between px-4 py-3 border-b border-ebordermuted last:border-b-0 group/lesson">
-                                        <h4 className="text-[14px] font-medium text-dark m-0 flex items-center gap-2">
-                                            {l.lesson_type === 'quiz' && <span className="text-[11px] uppercase bg-lightgreen/60 text-skin px-2 py-[2px] rounded-ol-8">Quiz</span>}
-                                            {l.title}
+                                    // rest at opacity-70 and reach full opacity on
+                                    // hover/focus — same reasoning as the section
+                                    // row above: never opacity-0, or the controls
+                                    // are undiscoverable on touch.
+                                    <li key={l.id} className="flex items-center justify-between gap-3 px-4 py-3 border-b border-ebordermuted last:border-b-0 group/lesson">
+                                        <h4 className="text-[14px] font-medium text-dark m-0 flex items-center gap-2 min-w-0 flex-1">
+                                            {l.lesson_type === 'quiz' && <span className="shrink-0 text-[11px] uppercase bg-lightgreen/60 text-skin px-2 py-[2px] rounded-ol-8">Quiz</span>}
+                                            {l.lesson_type === 'challenge' && <span className="shrink-0 text-[11px] uppercase bg-lightgreen/60 text-skin px-2 py-[2px] rounded-ol-8">Challenge</span>}
+                                            <span className="truncate">{l.title}</span>
                                         </h4>
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            {l.lesson_type === 'challenge' && (
+                                                <button
+                                                    type="button"
+                                                    title="Review submissions"
+                                                    className="ol-btn-outline-secondary ol-btn-sm whitespace-nowrap leading-none opacity-70 group-hover/lesson:opacity-100 focus-visible:opacity-100 transition-opacity"
+                                                    onClick={() => setModal({ type: 'challenge-submissions', lesson: l })}
+                                                >Submissions</button>
+                                            )}
                                             {l.lesson_type === 'quiz' ? (
                                                 <>
                                                     <button
                                                         type="button"
                                                         title="Manage questions"
-                                                        className="ol-btn-outline-secondary ol-btn-sm opacity-0 group-hover/lesson:opacity-100 focus-visible:opacity-100 transition-opacity"
+                                                        className="ol-btn-outline-secondary ol-btn-sm whitespace-nowrap leading-none opacity-70 group-hover/lesson:opacity-100 focus-visible:opacity-100 transition-opacity"
                                                         onClick={() => setModal({ type: 'questions', quizId: l.id })}
                                                     >Questions</button>
                                                     <button
                                                         type="button"
                                                         title="Edit quiz"
                                                         aria-label={`Edit ${l.title}`}
-                                                        className="text-gray-400 hover:text-gray-600 px-2 opacity-0 group-hover/lesson:opacity-100 focus-visible:opacity-100 transition-opacity"
+                                                        className="inline-flex h-8 w-8 items-center justify-center rounded-ol-8 text-gray-400 hover:text-gray-600 hover:bg-lightgreen/50 opacity-70 group-hover/lesson:opacity-100 focus-visible:opacity-100 transition-opacity"
                                                         onClick={() => setModal({ type: 'edit-quiz', quizId: l.id })}
                                                     ><FaPen className="text-[12px]" /></button>
                                                 </>
@@ -207,7 +223,7 @@ export default function CurriculumTab({ course }) {
                                                     type="button"
                                                     title="Edit class"
                                                     aria-label={`Edit ${l.title}`}
-                                                    className="text-gray-400 hover:text-gray-600 px-2 opacity-0 group-hover/lesson:opacity-100 focus-visible:opacity-100 transition-opacity"
+                                                    className="inline-flex h-8 w-8 items-center justify-center rounded-ol-8 text-gray-400 hover:text-gray-600 hover:bg-lightgreen/50 opacity-70 group-hover/lesson:opacity-100 focus-visible:opacity-100 transition-opacity"
                                                     onClick={() => setModal({ type: 'edit-lesson', lesson: l })}
                                                 ><FaPen className="text-[12px]" /></button>
                                             )}
@@ -215,7 +231,7 @@ export default function CurriculumTab({ course }) {
                                                 type="button"
                                                 title="Delete class"
                                                 aria-label={`Delete ${l.title}`}
-                                                className="text-gray-400 hover:text-gray-600 px-2 opacity-0 group-hover/lesson:opacity-100 focus-visible:opacity-100 transition-opacity"
+                                                className="inline-flex h-8 w-8 items-center justify-center rounded-ol-8 text-gray-400 hover:text-gray-600 hover:bg-lightgreen/50 opacity-70 group-hover/lesson:opacity-100 focus-visible:opacity-100 transition-opacity"
                                                 onClick={() => setConfirm({ kind: 'lesson', id: l.id, label: l.title })}
                                             ><FaTrash className="text-[12px]" /></button>
                                         </div>
@@ -278,6 +294,11 @@ export default function CurriculumTab({ course }) {
             {modal?.type === 'questions' && (
                 <Modal title="Quiz questions" onClose={closeModal} size="xl">
                     <QuestionList quizId={modal.quizId} onClose={closeModal} />
+                </Modal>
+            )}
+            {modal?.type === 'challenge-submissions' && (
+                <Modal title="Challenge submissions" onClose={closeModal} size="xl">
+                    <ChallengeSubmissions lesson={modal.lesson} />
                 </Modal>
             )}
             {modal?.type === 'sort-sections' && (

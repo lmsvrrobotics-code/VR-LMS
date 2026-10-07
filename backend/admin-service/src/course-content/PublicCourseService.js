@@ -36,24 +36,37 @@ const safeJSON = (raw, fallback) => {
 //   { q, type, options:[...], answer }
 // where `answer` is the 0-based option index for mcq/true_false (so scoring is
 // a simple equality check) and the raw expected text(s) for fill_blanks.
+// A question may also carry media the admin uploaded: `image` (an R2 URL, or a
+// legacy "uploads/..." key) and `video` (a Bunny Stream embed/HLS URL). Both
+// ride along unchanged on every question shape so the player can render the
+// picture or clip the question is asking about. Omitted when absent, so a
+// text-only question's payload is exactly what it was before.
+const questionMedia = (r) => {
+    const media = {};
+    if (r.image) media.image = r.image;
+    if (r.video) media.video = r.video;
+    return media;
+};
+
 const normalizeQuizQuestion = (row) => {
     const r = row.toJSON ? row.toJSON() : row;
     const options = safeJSON(r.options, []);
+    const media = questionMedia(r);
     let answer;
     if (r.type === 'true_false') {
         // options rendered as ['True','False']; map stored "true"/"false".
         answer = String(r.answer).toLowerCase() === 'true' ? 0 : 1;
-        return { id: r.id, q: r.title, type: r.type, options: ['True', 'False'], answer };
+        return { id: r.id, q: r.title, type: r.type, options: ['True', 'False'], answer, ...media };
     }
     if (r.type === 'fill_blanks') {
         // No options; keep accepted answer(s) as a lowercased string list.
         const accepted = safeJSON(r.answer, [r.answer]).map((a) => String(a).trim().toLowerCase());
-        return { id: r.id, q: r.title, type: r.type, options: [], answer: accepted };
+        return { id: r.id, q: r.title, type: r.type, options: [], answer: accepted, ...media };
     }
     // mcq (default): stored answer is a JSON array of correct option *values*.
     const correctVals = safeJSON(r.answer, []);
     const idx = options.findIndex((opt) => correctVals.includes(opt));
-    return { id: r.id, q: r.title, type: 'mcq', options, answer: idx };
+    return { id: r.id, q: r.title, type: 'mcq', options, answer: idx, ...media };
 };
 
 const sumLessonSeconds = (lessons) =>
@@ -163,6 +176,43 @@ const resolveTeacher = async (course) => {
     return null;
 };
 
+/**
+ * One line of PLAIN TEXT for a class card.
+ *
+ * The description is rich HTML now that the admin writes it in an editor, and a
+ * card renders it as text — so `<div><br></div>` was showing up literally on
+ * the student's course page. Cards want a blurb, not markup.
+ *
+ * Prefers the admin's own `summary` when they wrote one, because that is what
+ * the field is for. Otherwise it falls back to the description with its tags
+ * stripped, so a class that predates the summary field (most of them) still
+ * shows something rather than going blank.
+ *
+ * Tag-stripping is deliberately crude: this is for DISPLAY truncation, not
+ * sanitisation. Nothing here is rendered as HTML — the full description still
+ * goes through DOMPurify wherever it is shown properly.
+ */
+const cardText = (lesson) => {
+    // Newlines collapse to spaces: a card is a single clamped line, so a
+    // multi-line summary would otherwise render as one run-on string with no
+    // breaks where the author put them.
+    const summary = String(lesson?.summary || '').replace(/\s+/g, ' ').trim();
+    if (summary) return summary;
+    return String(lesson?.description || '')
+        // Block-level tags become a space so "a</div><div>b" does not read as "ab".
+        .replace(/<\/?(div|p|br|li|ul|ol|h[1-6]|tr|td)[^>]*>/gi, ' ')
+        .replace(/<[^>]*>/g, '')
+        // Entities an editor emits for spacing and quotes.
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;/gi, "'")
+        .replace(/\s+/g, ' ')
+        .trim();
+};
+
 const sanitizeCourse = (course, sections = [], lessons = [], creator = null) => {
     const c = course.toJSON ? course.toJSON() : { ...course };
     const lessonsBySection = sections.reduce((acc, sec) => {
@@ -187,6 +237,9 @@ const sanitizeCourse = (course, sections = [], lessons = [], creator = null) => 
             // Class card art, blurb and difficulty — same reason as above.
             thumbnail: l.thumbnail || '',
             description: l.description || '',
+            // Plain-text blurb for the card. `description` stays as-is for the
+            // places that render it properly through a sanitizer.
+            card_text: cardText(l),
             difficulty: l.difficulty || '',
         })),
     }));
@@ -285,32 +338,47 @@ const list = async (query = {}) => {
         offset,
     });
 
-    // Strict student-scope gate: when user_id is supplied, only courses
-    // whose batch_ids overlap one of the student's batches surface. The
-    // admin links every course to specific batches, so unscoped courses
-    // and courses missed by the student's memberships must NOT leak through.
+    // Strict student-scope gate: when user_id is supplied, only courses the
+    // student actually reaches through a batch surface. Unscoped courses and
+    // courses missed by the student's memberships must NOT leak through.
     // Anonymous callers (no user_id) still get the college-only result —
     // they're public catalog browsers, not enrolled students.
+    //
+    // A course is reachable two ways, and BOTH count:
+    //   1. batches.course_id — what Add Batch / Manage Batches writes. This is
+    //      the primary link, so it is resolved through the same
+    //      coursesForStudent() grant My Courses uses; the two screens can then
+    //      never disagree about what a student may open.
+    //   2. courses.batch_ids — the JSONB list the course edit form maintains.
+    //      It is keyed by the batch's SURROGATE INTEGER id, while
+    //      batch_members.batch_id holds the varchar unique_id ("VR-B-00001"),
+    //      so the member rows must be joined to batches to compare them. The
+    //      previous Number(bm.batch_id) coercion produced NaN for every row,
+    //      emptied the id set and filtered the whole catalogue away — which is
+    //      exactly "the batch course doesn't show up in the dashboard".
     const userIdRaw = query.user_id;
     let filteredRows = rows;
     if (userIdRaw) {
-        const memberRows = await BatchMember.findAll({
-            where: { user_id: String(userIdRaw) },
-            attributes: ['batch_id'],
-            raw: true,
-        }).catch(() => []);
+        const uid = String(userIdRaw);
+        const [grantedCourseIds, memberRows] = await Promise.all([
+            teachingSvc.coursesForStudent(uid),
+            BatchMember.findAll({
+                where: { user_id: uid },
+                attributes: ['batch_id'],
+                include: [{ association: 'batch', attributes: ['id'], required: true }],
+            }).catch(() => []),
+        ]);
+        const grantedIds = new Set((grantedCourseIds || []).map(Number));
         const studentBatchIds = new Set(
-            memberRows.map((r) => Number(r.batch_id)).filter((n) => Number.isFinite(n))
+            memberRows
+                .map((r) => Number(r.batch?.id))
+                .filter((n) => Number.isFinite(n)),
         );
-        if (studentBatchIds.size === 0) {
-            filteredRows = [];
-        } else {
-            filteredRows = rows.filter((r) => {
-                const cb = Array.isArray(r.batch_ids) ? r.batch_ids : [];
-                if (cb.length === 0) return false;
-                return cb.some((id) => studentBatchIds.has(Number(id)));
-            });
-        }
+        filteredRows = rows.filter((r) => {
+            if (grantedIds.has(Number(r.id))) return true;
+            const cb = Array.isArray(r.batch_ids) ? r.batch_ids : [];
+            return cb.some((id) => studentBatchIds.has(Number(id)));
+        });
     }
 
     // Per-course progress hydration for the signed-in student. We batch two
@@ -679,6 +747,10 @@ const playerData = async (slug, lessonIdRaw, userIdRaw, { verifiedUserId = null,
             is_free: currentLessonRow.is_free || 0,
             lesson_src: currentLessonRow.lesson_src || '',
             attachment: currentLessonRow.attachment || '',
+            // 'image' | 'video' | 'url' on a challenge — tells the player how to
+            // render the Expected output tab instead of sniffing the extension,
+            // which gets a hosted YouTube link wrong every time.
+            attachment_type: currentLessonRow.attachment_type || '',
             description: currentLessonRow.description || '',
             sort: currentLessonRow.sort,
             // Quiz-only admin-set metadata — shown on the cover/intro screen
@@ -1089,4 +1161,9 @@ const catalog = async ({ limit = 12, classFrom = null, classTo = null, track = n
     });
 };
 
-module.exports = { list, catalog, detailsBySlug, detailsFirstActive, playerData, submitQuiz, myCourses };
+module.exports = {
+    list, catalog, detailsBySlug, detailsFirstActive, playerData, submitQuiz, myCourses,
+    // Exported for tests: the shape the student QuizPlayer consumes, including
+    // the per-question image/video passthrough.
+    normalizeQuizQuestion,
+};

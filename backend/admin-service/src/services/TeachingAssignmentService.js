@@ -67,7 +67,7 @@ module.exports = {
         `SELECT DISTINCT b.unique_id
            FROM batch_members bm
            JOIN batches b
-             ON b.batch_id = bm.batch_id OR b.unique_id = bm.batch_id
+             ON b.unique_id = bm.batch_id
           WHERE b.course_id = :cid
             AND bm.status = 'active'
             AND (bm.user_id = :uid OR bm.student_id = :uid)`,
@@ -97,7 +97,7 @@ module.exports = {
 
   // Course IDs a student can access through batch membership. Joins
   // batch_members → batches on the string batch key (batch_members.batch_id
-  // matches batches.batch_id OR batches.unique_id) and returns the distinct,
+  // holds batches.unique_id, e.g. "VR-B-00001") and returns the distinct,
   // non-null course_ids of the student's ACTIVE batches. Returns [] on any
   // failure so /my-courses still surfaces the enrolled (user_progress) courses.
   coursesForStudent: async (userId) => {
@@ -108,7 +108,7 @@ module.exports = {
         `SELECT DISTINCT b.course_id
            FROM batch_members bm
            JOIN batches b
-             ON b.batch_id = bm.batch_id OR b.unique_id = bm.batch_id
+             ON b.unique_id = bm.batch_id
           WHERE bm.user_id = :uid
             AND bm.status = 'active'
             AND b.course_id IS NOT NULL`,
@@ -132,7 +132,7 @@ module.exports = {
         `SELECT DISTINCT bm.user_id
            FROM batch_members bm
            JOIN batches b
-             ON b.batch_id = bm.batch_id OR b.unique_id = bm.batch_id
+             ON b.unique_id = bm.batch_id
           WHERE b.course_id = :cid
             AND bm.status = 'active'
             AND bm.user_id IS NOT NULL`,

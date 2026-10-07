@@ -141,6 +141,38 @@ const meetingPatch = (body = {}, { partial = false } = {}) => {
  *
  * @returns 'unscheduled' | 'upcoming' | 'live' | 'past'
  */
+/**
+ * How long before a session starts its joining link becomes usable.
+ *
+ * The link used to be released the moment someone registered, which could be
+ * days ahead: people clicked it early, found an empty room, and had no way to
+ * tell whether they had the wrong link or simply the wrong time. Holding it
+ * until shortly before the call makes the button mean "this works now".
+ *
+ * Exported so the API, the student dashboard and the UI copy all quote the same
+ * number instead of three hard-coded guesses drifting apart.
+ */
+const JOIN_WINDOW_MINS = 60;
+
+/**
+ * Is the joining link usable yet?
+ *
+ * True from JOIN_WINDOW_MINS before the start until the session ends (the
+ * 'live' window already covers the call itself, so a late joiner is not locked
+ * out mid-session). An UNSCHEDULED meeting has no start to count back from, so
+ * its link is released immediately — withholding it forever would be worse.
+ * A PAST meeting never qualifies: a dead link shown as "Join now" is worse than
+ * no button at all.
+ */
+const isJoinWindowOpen = (meeting, now = new Date()) => {
+    const state = meetingState(meeting, now);
+    if (state === 'past') return false;
+    if (state === 'live') return true;
+    if (state === 'unscheduled') return true;
+    const at = new Date(meeting.scheduled_at);
+    return now.getTime() >= at.getTime() - JOIN_WINDOW_MINS * 60 * 1000;
+};
+
 const meetingState = (meeting, now = new Date()) => {
     const at = meeting?.scheduled_at ? new Date(meeting.scheduled_at) : null;
     if (!at || Number.isNaN(at.getTime())) return 'unscheduled';
@@ -258,4 +290,6 @@ module.exports = {
     meetingPatch,
     meetingState,
     publicPayload,
+    isJoinWindowOpen,
+    JOIN_WINDOW_MINS,
 };

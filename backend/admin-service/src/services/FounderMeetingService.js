@@ -2,7 +2,7 @@ const { Op } = require('sequelize');
 const { FounderMeeting, FounderMeetingRegistration } = require('../models');
 const { upload, removeFile, niceFileName } = require('../helpers/fileUploader');
 const { HttpError } = require('../middlewares/error');
-const { meetingPatch, publicPayload, canRegister, registrationPatch } = require('../lib/founderMeeting');
+const { meetingPatch, publicPayload, canRegister, registrationPatch, isJoinWindowOpen, JOIN_WINDOW_MINS } = require('../lib/founderMeeting');
 const posterSeed = require('./FounderPosterSeed');
 
 // "Weekly Meeting with Founder" — admin CRUD plus the single featured row the
@@ -28,12 +28,24 @@ const ORDER = () => [
  * `video` and `poster` are separate form fields, so the destination is known
  * from the field name rather than sniffed from the mimetype.
  */
+// The canonical poster box. Kept here (and surfaced in the admin form copy) so
+// the stored size, the UI guidance and the public 16:9 slot cannot drift apart.
+const POSTER_W = 1600;
+const POSTER_H = 900;
+
 const storeUpload = async (file, kind, title) => {
     const ext = (file.originalname || '').split('.').pop() || (kind === 'video' ? 'mp4' : 'jpg');
     const folder = kind === 'video' ? 'founder/videos' : 'founder/posters';
     const destPath = `uploads/${folder}/${niceFileName(title || 'founder-meeting', ext)}`;
     // Images get resized; videos are passed through untouched.
-    return upload(file, destPath, kind === 'video' ? null : 1600, kind === 'video' ? null : 900);
+    //
+    // Posters use fit:'contain' so a flyer the admin uploads is stored WHOLE.
+    // The previous cover-fit cropped at upload time, which silently destroyed
+    // the edges of any artwork that was not exactly 16:9 — the academy logo and
+    // the "Register now" button were being cut off the stored file itself, so
+    // the public page had nothing left to show.
+    if (kind === 'video') return upload(file, destPath, null, null);
+    return upload(file, destPath, POSTER_W, POSTER_H, { fit: 'contain' });
 };
 
 /**
@@ -244,17 +256,27 @@ const register = async ({ meetingId, body = {}, userId = null }) => {
             return {
                 success: 'You are already registered for this meeting.',
                 already_registered: true,
-                meeting_link: meeting.meeting_link || null,
+                meeting_link: isJoinWindowOpen(meeting) ? (meeting.meeting_link || null) : null,
                 registration: { id: row?.id ?? null, email: data.email },
             };
         }
         throw e;
     }
 
+    // The link is only handed over inside the join window (JOIN_WINDOW_MINS
+    // before the start). Outside it the seat is still confirmed — the student
+    // picks the link up from their dashboard when the time comes.
+    const linkReady = !!meeting.meeting_link && isJoinWindowOpen(meeting);
     return {
-        success: 'You are registered. The joining link is below.',
+        // Only promise a link when one is actually being returned. The admin may
+        // not have set a meeting_link, or the window may not be open yet; the
+        // old unconditional "The joining link is below" then pointed at nothing
+        // — the confirmation contradicted the dialog the person was looking at.
+        success: linkReady
+            ? 'You are registered. The joining link is below.'
+            : 'Your seat is confirmed.',
         already_registered: false,
-        meeting_link: meeting.meeting_link || null,
+        meeting_link: linkReady ? meeting.meeting_link : null,
         registration: { id: row.id, email: row.email },
     };
 };
@@ -309,11 +331,22 @@ const listForStudent = async ({ userId = null, email = null } = {}) => {
                 // page reader. Only attached to their own registered meetings,
                 // and only while the session is still joinable (not past).
                 const row = m.toJSON ? m.toJSON() : m;
-                const joinLink = payload.state === 'past' ? null : (row.meeting_link || null);
+                // The link is held back until JOIN_WINDOW_MINS before the start
+                // (and withheld once the session is past). Releasing it days
+                // early only produced clicks into an empty room with no way to
+                // tell a wrong link from a wrong time. `join_opens_at` lets the
+                // UI say exactly when the button will light up instead of
+                // leaving a bare "not yet".
+                const windowOpen = isJoinWindowOpen(row, now);
                 registered.push({
                     ...payload,
                     registration_status: regByMeeting.get(m.id).status,
-                    meeting_link: joinLink,
+                    meeting_link: windowOpen ? (row.meeting_link || null) : null,
+                    has_meeting_link: !!row.meeting_link,
+                    join_opens_at: row.scheduled_at
+                        ? new Date(new Date(row.scheduled_at).getTime() - JOIN_WINDOW_MINS * 60 * 1000).toISOString()
+                        : null,
+                    join_window_mins: JOIN_WINDOW_MINS,
                 });
             } else if (payload.state === 'upcoming' || payload.state === 'live') {
                 upcoming.push(payload);

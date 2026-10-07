@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { FaPen, FaTrash } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import Modal from '../../../components/Modal';
 import ConfirmDialog from '../../../components/ConfirmDialog';
@@ -47,10 +48,38 @@ export default function QuestionList({ quizId, onClose }) {
                             <div className="flex-1">
                                 <p className="text-[14px] text-dark m-0"><strong>Q{i + 1}.</strong> {q.title}</p>
                                 <span className="text-[12px] text-gray">{summary(q)}</span>
+                                {/* Media is easy to forget once it's uploaded —
+                                    flag it so the list shows what students see. */}
+                                {(q.image || q.video) && (
+                                    <span className="text-[12px] text-skin ml-2">
+                                        {q.image && <span className="mr-2">🖼 Image</span>}
+                                        {q.video && <span>🎬 Video</span>}
+                                    </span>
+                                )}
                             </div>
-                            <div className="flex items-center gap-2">
-                                <button type="button" title="Edit" className="text-skin px-2" onClick={() => setModal({ type: 'edit', question: q })}><span className="fi-rr-pencil" /></button>
-                                <button type="button" title="Delete" className="text-danger px-2" onClick={() => setConfirm({ id: q.id, label: q.title })}><span className="fi-rr-trash" /></button>
+                            {/* Icons come from react-icons, NOT the `fi-rr-*`
+                                Flaticon classes this list used to render. That
+                                webfont is not loaded anywhere in the project (no
+                                @font-face, no stylesheet, no package), so each
+                                icon was an empty zero-width span: the Edit and
+                                Delete buttons were present and clickable but
+                                completely invisible. Matches the Edit/Delete
+                                controls on the curriculum rows. */}
+                            <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                    type="button"
+                                    title="Edit question"
+                                    aria-label={`Edit question ${i + 1}`}
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-ol-8 text-gray-400 hover:text-gray-600 hover:bg-lightgreen/50 transition-colors"
+                                    onClick={() => setModal({ type: 'edit', question: q })}
+                                ><FaPen className="text-[12px]" /></button>
+                                <button
+                                    type="button"
+                                    title="Delete question"
+                                    aria-label={`Delete question ${i + 1}`}
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-ol-8 text-gray-400 hover:text-danger hover:bg-lightgreen/50 transition-colors"
+                                    onClick={() => setConfirm({ id: q.id, label: q.title })}
+                                ><FaTrash className="text-[12px]" /></button>
                             </div>
                         </li>
                     ))}

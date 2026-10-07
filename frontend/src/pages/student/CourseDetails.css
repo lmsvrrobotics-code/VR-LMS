@@ -1107,3 +1107,29 @@
 
 .dash-dark .toolbar-clear { color: #A9A29E; }
 .dash-dark .toolbar-clear:hover { color: #E9E6E4; }
+
+
+/* ---- Dark mode: lesson modal, card menus and remaining chrome ----
+   The page chrome above already has .dash-dark variants, but the LESSON MODAL
+   (where a class is actually opened and watched) and the per-card menus were
+   never covered, so opening a class from a dark course page dropped the student
+   onto a white panel. These complete the surface. */
+.dash-dark .lesson-modal { background: #1E1C1A; color: #E9E6E4; }
+.dash-dark .lesson-modal-head { border-bottom-color: rgba(255, 255, 255, 0.12); }
+.dash-dark .lesson-modal-head h3,
+.dash-dark .lesson-modal h3,
+.dash-dark .lesson-modal h4 { color: #E9E6E4; }
+.dash-dark .lesson-modal-done { background: rgba(16, 185, 129, 0.18); color: #6ee7b7; }
+.dash-dark .lesson-modal-close { background: rgba(255, 255, 255, 0.08); color: #c7ccd6; }
+.dash-dark .lesson-modal-close:hover { background: #ff6a00; color: #fff; }
+.dash-dark .lesson-modal-body { color: #c7ccd6; }
+
+.dash-dark .card-menu-pop { background: #1E1C1A; border-color: rgba(255, 255, 255, 0.12); }
+.dash-dark .card-menu-item { color: #c7ccd6; }
+.dash-dark .card-menu-item:hover:not(:disabled) { background: rgba(255, 255, 255, 0.07); }
+.dash-dark .card-menu-trigger:hover { background: rgba(255, 255, 255, 0.08); }
+
+.dash-dark .card-foot { border-top-color: rgba(255, 255, 255, 0.10); }
+.dash-dark .quiz-badge { background: rgba(59, 130, 246, 0.18); color: #93c5fd; }
+.dash-dark .student-nav-toggle { border-color: rgba(255, 255, 255, 0.14); color: #c7ccd6; }
+.dash-dark .header-progress .progress-bar { background: rgba(255, 255, 255, 0.12); }

@@ -11,10 +11,11 @@
 //
 // batch_teachers.batch_id is a FK to batches.unique_id (varchar), NOT the
 // surrogate integer batches.id — see the note in models/BatchTeacher.js and
-// migration 20, which declares the FK. The join also accepts the legacy
-// batches.batch_id alias (a column that exists in the live DB but in none of
-// the numbered migrations) because TeachingAssignmentService matches
-// batch_members the same way and older rows key off it.
+// migration 20, which declares the FK. unique_id is the ONLY key these joins
+// use: batches has no `batch_id` column (confirmed against the live DB), and an
+// earlier `OR bt.batch_id = b.batch_id` raised "column b.batch_id does not
+// exist", which the best-effort catch below swallowed into an empty list — a
+// teacher's batch courses silently vanished from their dashboard.
 //
 // Best-effort like its student-side counterpart: a DB miss returns an empty
 // list and logs, so the dashboard degrades to "no courses" rather than 500ing.
@@ -41,7 +42,7 @@ const batchRowsForTeacher = async (teacherId) => {
                 b.course_id,
                 (SELECT COUNT(*)
                    FROM batch_members bm
-                  WHERE (bm.batch_id = b.unique_id OR bm.batch_id = b.batch_id)
+                  WHERE bm.batch_id = b.unique_id
                     AND COALESCE(bm.status, 'active') = 'active') AS student_count
            FROM batches b
           WHERE b.course_id IS NOT NULL
@@ -51,7 +52,7 @@ const batchRowsForTeacher = async (teacherId) => {
                OR EXISTS (
                     SELECT 1
                       FROM batch_teachers bt
-                     WHERE (bt.batch_id = b.unique_id OR bt.batch_id = b.batch_id)
+                     WHERE bt.batch_id = b.unique_id
                        AND bt.user_id = :tid
                        -- COALESCE: the column is nullable with a DEFAULT, so
                        -- rows written before it existed can hold NULL and must

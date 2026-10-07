@@ -159,7 +159,7 @@ export default function CourseEdit() {
                         </div>
 
                         {/* Content */}
-                        <div className="tab-content w-full flex-1">
+                        <div className="tab-content flex-1 min-w-0">
                             {tab === 'basic' && <BasicTab course={course} onSave={onSave} formId={COURSE_FORM_ID} />}
                             {tab === 'pricing' && <PricingTab course={course} onSave={onSave} formId={COURSE_FORM_ID} />}
                             {tab === 'info' && <InfoTab course={course} onSave={onSave} formId={COURSE_FORM_ID} />}

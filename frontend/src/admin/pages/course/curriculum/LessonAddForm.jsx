@@ -17,6 +17,10 @@ const TYPE_MAP = {
     document:           { lesson_type: 'document_type', lesson_provider: 'document',           label: 'Document file' },
     image:              { lesson_type: 'image',         lesson_provider: 'image',              label: 'Image' },
     scorm:              { lesson_type: 'scorm',         lesson_provider: 'scorm',              label: 'Scorm Content' },
+    // A challenge sends the student to an EXTERNAL site and takes a link
+    // back. The URL rides in lesson_src, exactly like a video URL does, so
+    // no new column was needed on `lessons` (see migration 27).
+    challenge:          { lesson_type: 'challenge',     lesson_provider: 'challenge',          label: 'Challenge' },
 };
 
 const isUrlType = (t) => ['youtube', 'vimeo', 'html5', 'google_drive_video'].includes(t);
@@ -44,6 +48,12 @@ export default function LessonAddForm({ course, sections, lessonType, onDone }) 
     // Class metadata: cover image, long-form description, difficulty level.
     const [thumbnail, setThumbnail] = useState(null);
     const [description, setDescription] = useState('');
+    // CHALLENGE only — the "Expected output" tab. Either an uploaded file or a
+    // pasted URL; `outputMode` decides which is sent, so an admin switching
+    // between them cannot accidentally submit both.
+    const [outputMode, setOutputMode] = useState('upload');
+    const [outputFile, setOutputFile] = useState(null);
+    const [outputUrl, setOutputUrl] = useState('');
     const [difficulty, setDifficulty] = useState('');
 
     // Best-effort duration detection. If we can determine it, prefill the field;
@@ -117,6 +127,35 @@ export default function LessonAddForm({ course, sections, lessonType, onDone }) 
                 if (!scormFile) { toast.error('Please choose a SCORM zip'); setSaving(false); return; }
                 fd.append('scorm_file', scormFile);
                 fd.append('scorm_provider', scormProvider);
+            } else if (lessonType === 'challenge') {
+                const url = (lessonSrc || '').trim();
+                if (!url) { toast.error('Enter the challenge link.'); setSaving(false); return; }
+                // Validate here as well as server-side: catching it before the
+                // request means the admin keeps everything they typed instead
+                // of bouncing off a 422 with a half-filled form.
+                let parsed;
+                try { parsed = new URL(url); } catch {
+                    toast.error('Enter a valid link, including https://'); setSaving(false); return;
+                }
+                if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+                    toast.error('Only http:// and https:// links are allowed'); setSaving(false); return;
+                }
+                fd.append('lesson_src', url);
+                // Expected output is OPTIONAL — a challenge can be purely
+                // written instructions — so neither field is required.
+                if (outputMode === 'upload' && outputFile) {
+                    fd.append('attachment', outputFile);
+                } else if (outputMode === 'url' && outputUrl.trim()) {
+                    const ref = outputUrl.trim();
+                    let okRef;
+                    try { okRef = new URL(ref); } catch {
+                        toast.error('Enter a valid output link, including https://'); setSaving(false); return;
+                    }
+                    if (okRef.protocol !== 'http:' && okRef.protocol !== 'https:') {
+                        toast.error('Only http:// and https:// output links are allowed'); setSaving(false); return;
+                    }
+                    fd.append('expected_output_url', ref);
+                }
             }
 
             await storeLesson(fd);
@@ -169,6 +208,76 @@ export default function LessonAddForm({ course, sections, lessonType, onDone }) 
                         <input className="ol-form-control" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="00:00:00" />
                     </div>
                 </>
+            )}
+
+            {lessonType === 'challenge' && (
+                <div className="mb-3">
+                    <label className="ol-form-label">Challenge link</label>
+                    <input
+                        className="ol-form-control"
+                        type="url"
+                        value={lessonSrc}
+                        onChange={(e) => setLessonSrc(e.target.value)}
+                        placeholder="https://scratch.mit.edu/projects/..."
+                        required
+                    />
+                    <p className="text-[12px] text-gray mt-1">
+                        Where the student does the work — a Scratch project, a Code.org level, a
+                        GitHub task. It opens in a new tab. When they are finished they submit a
+                        link to their own result on this class, and you approve it or send it back.
+                    </p>
+                    <p className="text-[12px] text-gray mt-1">
+                        The student sees two tabs before this opens:
+                        <strong> Instructions</strong> (the Description field above) and
+                        <strong> Expected output</strong> (below).
+                    </p>
+
+                    <label className="ol-form-label mt-4">Expected output <span className="text-gray font-normal">(optional)</span></label>
+                    <p className="text-[12px] text-gray mb-2">
+                        Show them what &ldquo;done&rdquo; looks like — a screenshot of the finished
+                        project, or a short clip of it running.
+                    </p>
+                    <div className="flex items-center gap-4 mb-2">
+                        <label className="flex items-center gap-1.5 text-[13px] cursor-pointer">
+                            <input
+                                type="radio"
+                                name="output_mode"
+                                value="upload"
+                                checked={outputMode === 'upload'}
+                                onChange={() => setOutputMode('upload')}
+                                className="accent-skin"
+                            />
+                            Upload image or video
+                        </label>
+                        <label className="flex items-center gap-1.5 text-[13px] cursor-pointer">
+                            <input
+                                type="radio"
+                                name="output_mode"
+                                value="url"
+                                checked={outputMode === 'url'}
+                                onChange={() => setOutputMode('url')}
+                                className="accent-skin"
+                            />
+                            Paste a link
+                        </label>
+                    </div>
+                    {outputMode === 'upload' ? (
+                        <input
+                            className="ol-form-control"
+                            type="file"
+                            accept="image/*,video/*"
+                            onChange={(e) => setOutputFile(e.target.files[0])}
+                        />
+                    ) : (
+                        <input
+                            className="ol-form-control"
+                            type="url"
+                            value={outputUrl}
+                            onChange={(e) => setOutputUrl(e.target.value)}
+                            placeholder="https://youtu.be/... or a link to an image"
+                        />
+                    )}
+                </div>
             )}
 
             {lessonType === 'iframe' && (
@@ -246,6 +355,10 @@ export default function LessonAddForm({ course, sections, lessonType, onDone }) 
                 onDescriptionChange={setDescription}
                 difficulty={difficulty}
                 onDifficultyChange={setDifficulty}
+                descriptionLabel={lessonType === 'challenge' ? 'Instructions' : 'Class description'}
+                descriptionHint={lessonType === 'challenge'
+                    ? 'Shown to the student as the Instructions tab, before they open the task.'
+                    : ''}
             />
 
             <div className="mb-3">

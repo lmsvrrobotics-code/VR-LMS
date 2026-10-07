@@ -1460,3 +1460,393 @@ button, .btn, [role="button"] { transition: transform .2s ease, box-shadow .2s e
 @media (prefers-reduced-motion: reduce) {
   .seat-badge { animation: none; }
 }
+
+/* ============================================================
+   Dashboard dark mode - status/badge surfaces and tinted ink
+   ------------------------------------------------------------
+   The block near the top of this file repaints the neutral greys. It was built
+   as an ALLOWLIST of the exact utilities that were in use at the time, so any
+   tinted chip, callout or badge added later kept its light-mode colours and
+   rendered dark-ink-on-light-tint inside a dark dashboard - unreadable, and the
+   reason the student/teacher dashboards still showed light patches after the
+   toggle was flipped.
+
+   These rules close that gap for the whole semantic family at once, across all
+   three scopes, so a new amber warning pill or red error callout is dark from
+   the moment it is written instead of needing its own override here.
+
+   Two shapes are handled, mirroring the .bg-emerald-50 / .text-emerald-700 pair
+   already established above:
+     - LIGHT TINTED SURFACES (-50/-100/-200) become a low-alpha wash of the same
+       hue, so the chip keeps its meaning but sits on the dark surface.
+     - DARK TINTED INK (-700/-800/-900) lifts to a light tint of the same hue,
+       keeping the semantic colour while clearing the contrast floor.
+
+   Scoped to the three dashboard hooks only - the public marketing site never
+   carries them, so its light brand look is untouched.
+   ============================================================ */
+
+/* ---- Light tinted surfaces -> low-alpha wash ---- */
+.dash-dark .bg-red-50,
+.teacher-dark .bg-red-50,
+.admin-dark .bg-red-50,
+.dash-dark .bg-red-100,
+.teacher-dark .bg-red-100,
+.admin-dark .bg-red-100 { background-color: rgba(239, 63, 110, 0.16); }
+.dash-dark .bg-amber-50,
+.teacher-dark .bg-amber-50,
+.admin-dark .bg-amber-50,
+.dash-dark .bg-amber-100,
+.teacher-dark .bg-amber-100,
+.admin-dark .bg-amber-100,
+.dash-dark .bg-yellow-50,
+.teacher-dark .bg-yellow-50,
+.admin-dark .bg-yellow-50,
+.dash-dark .bg-yellow-100,
+.teacher-dark .bg-yellow-100,
+.admin-dark .bg-yellow-100 { background-color: rgba(245, 158, 11, 0.16); }
+.dash-dark .bg-green-50,
+.teacher-dark .bg-green-50,
+.admin-dark .bg-green-50,
+.dash-dark .bg-green-100,
+.teacher-dark .bg-green-100,
+.admin-dark .bg-green-100,
+.dash-dark .bg-emerald-100,
+.teacher-dark .bg-emerald-100,
+.admin-dark .bg-emerald-100 { background-color: rgba(16, 185, 129, 0.16); }
+.dash-dark .bg-blue-50,
+.teacher-dark .bg-blue-50,
+.admin-dark .bg-blue-50,
+.dash-dark .bg-blue-100,
+.teacher-dark .bg-blue-100,
+.admin-dark .bg-blue-100,
+.dash-dark .bg-sky-50,
+.teacher-dark .bg-sky-50,
+.admin-dark .bg-sky-50,
+.dash-dark .bg-indigo-50,
+.teacher-dark .bg-indigo-50,
+.admin-dark .bg-indigo-50 { background-color: rgba(59, 130, 246, 0.16); }
+.dash-dark .bg-orange-50,
+.teacher-dark .bg-orange-50,
+.admin-dark .bg-orange-50,
+.dash-dark .bg-orange-100,
+.teacher-dark .bg-orange-100,
+.admin-dark .bg-orange-100 { background-color: rgba(255, 106, 0, 0.16); }
+.dash-dark .bg-purple-50,
+.teacher-dark .bg-purple-50,
+.admin-dark .bg-purple-50,
+.dash-dark .bg-purple-100,
+.teacher-dark .bg-purple-100,
+.admin-dark .bg-purple-100,
+.dash-dark .bg-violet-50,
+.teacher-dark .bg-violet-50,
+.admin-dark .bg-violet-50 { background-color: rgba(139, 92, 246, 0.16); }
+/* Neutral chips (slate/zinc mirror the grays handled above). */
+.dash-dark .bg-slate-50,
+.teacher-dark .bg-slate-50,
+.admin-dark .bg-slate-50,
+.dash-dark .bg-slate-100,
+.teacher-dark .bg-slate-100,
+.admin-dark .bg-slate-100,
+.dash-dark .bg-gray-100,
+.teacher-dark .bg-gray-100,
+.admin-dark .bg-gray-100 { background-color: rgba(255, 255, 255, 0.07); }
+
+/* ---- Dark tinted ink -> light tint of the same hue ---- */
+.dash-dark .text-red-700,
+.teacher-dark .text-red-700,
+.admin-dark .text-red-700,
+.dash-dark .text-red-800,
+.teacher-dark .text-red-800,
+.admin-dark .text-red-800,
+.dash-dark .text-red-900,
+.teacher-dark .text-red-900,
+.admin-dark .text-red-900 { color: #fca5b5; }
+.dash-dark .text-amber-700,
+.teacher-dark .text-amber-700,
+.admin-dark .text-amber-700,
+.dash-dark .text-amber-800,
+.teacher-dark .text-amber-800,
+.admin-dark .text-amber-800,
+.dash-dark .text-yellow-700,
+.teacher-dark .text-yellow-700,
+.admin-dark .text-yellow-700,
+.dash-dark .text-yellow-800,
+.teacher-dark .text-yellow-800,
+.admin-dark .text-yellow-800 { color: #fcd34d; }
+.dash-dark .text-green-700,
+.teacher-dark .text-green-700,
+.admin-dark .text-green-700,
+.dash-dark .text-green-800,
+.teacher-dark .text-green-800,
+.admin-dark .text-green-800,
+.dash-dark .text-emerald-800,
+.teacher-dark .text-emerald-800,
+.admin-dark .text-emerald-800 { color: #6ee7b7; }
+.dash-dark .text-blue-700,
+.teacher-dark .text-blue-700,
+.admin-dark .text-blue-700,
+.dash-dark .text-blue-800,
+.teacher-dark .text-blue-800,
+.admin-dark .text-blue-800,
+.dash-dark .text-sky-700,
+.teacher-dark .text-sky-700,
+.admin-dark .text-sky-700,
+.dash-dark .text-indigo-700,
+.teacher-dark .text-indigo-700,
+.admin-dark .text-indigo-700 { color: #93c5fd; }
+.dash-dark .text-orange-700,
+.teacher-dark .text-orange-700,
+.admin-dark .text-orange-700,
+.dash-dark .text-orange-800,
+.teacher-dark .text-orange-800,
+.admin-dark .text-orange-800 { color: #fdba74; }
+.dash-dark .text-purple-700,
+.teacher-dark .text-purple-700,
+.admin-dark .text-purple-700,
+.dash-dark .text-violet-700,
+.teacher-dark .text-violet-700,
+.admin-dark .text-violet-700 { color: #c4b5fd; }
+/* Near-black ink used on light cards. */
+.dash-dark .text-black,
+.teacher-dark .text-black,
+.admin-dark .text-black,
+.dash-dark .text-slate-800,
+.teacher-dark .text-slate-800,
+.admin-dark .text-slate-800,
+.dash-dark .text-slate-900,
+.teacher-dark .text-slate-900,
+.admin-dark .text-slate-900 { color: #e6e8ee; }
+
+/* ---- Light hairline borders on tinted callouts ---- */
+.dash-dark .border-red-100,
+.teacher-dark .border-red-100,
+.admin-dark .border-red-100,
+.dash-dark .border-red-200,
+.teacher-dark .border-red-200,
+.admin-dark .border-red-200 { border-color: rgba(239, 63, 110, 0.32); }
+.dash-dark .border-amber-100,
+.teacher-dark .border-amber-100,
+.admin-dark .border-amber-100,
+.dash-dark .border-amber-200,
+.teacher-dark .border-amber-200,
+.admin-dark .border-amber-200 { border-color: rgba(245, 158, 11, 0.32); }
+.dash-dark .border-green-100,
+.teacher-dark .border-green-100,
+.admin-dark .border-green-100,
+.dash-dark .border-green-200,
+.teacher-dark .border-green-200,
+.admin-dark .border-green-200 { border-color: rgba(16, 185, 129, 0.32); }
+.dash-dark .border-blue-100,
+.teacher-dark .border-blue-100,
+.admin-dark .border-blue-100,
+.dash-dark .border-blue-200,
+.teacher-dark .border-blue-200,
+.admin-dark .border-blue-200 { border-color: rgba(59, 130, 246, 0.32); }
+.dash-dark .border-orange-100,
+.teacher-dark .border-orange-100,
+.admin-dark .border-orange-100,
+.dash-dark .border-orange-200,
+.teacher-dark .border-orange-200,
+.admin-dark .border-orange-200 { border-color: rgba(255, 106, 0, 0.32); }
+.dash-dark .border-slate-100,
+.teacher-dark .border-slate-100,
+.admin-dark .border-slate-100,
+.dash-dark .border-slate-200,
+.teacher-dark .border-slate-200,
+.admin-dark .border-slate-200 { border-color: rgba(255, 255, 255, 0.10); }
+
+/* ---- Translucent white scrims ----
+   A bg-white/NN panel over a photo or gradient reads as frosted glass. In a
+   dark dashboard that becomes a bright blob, so invert it to a dark scrim of
+   comparable strength. Opaque .bg-white is handled by the block above. */
+.dash-dark .bg-white\/90,
+.teacher-dark .bg-white\/90,
+.admin-dark .bg-white\/90 { background-color: rgba(30, 28, 26, 0.92); }
+.dash-dark .bg-white\/80,
+.teacher-dark .bg-white\/80,
+.admin-dark .bg-white\/80 { background-color: rgba(30, 28, 26, 0.85); }
+.dash-dark .bg-white\/70,
+.teacher-dark .bg-white\/70,
+.admin-dark .bg-white\/70 { background-color: rgba(30, 28, 26, 0.75); }
+.dash-dark .bg-white\/25,
+.teacher-dark .bg-white\/25,
+.admin-dark .bg-white\/25 { background-color: rgba(30, 28, 26, 0.28); }
+.dash-dark .bg-white\/20,
+.teacher-dark .bg-white\/20,
+.admin-dark .bg-white\/20 { background-color: rgba(30, 28, 26, 0.22); }
+.dash-dark .bg-white\/10,
+.teacher-dark .bg-white\/10,
+.admin-dark .bg-white\/10 { background-color: rgba(30, 28, 26, 0.14); }
+
+/* ============================================================
+   Course player - dark mode
+   ------------------------------------------------------------
+   The player is course CONTENT reached from the student dashboard, but it is a
+   TOP-LEVEL route (see App.tsx) rendered outside StudentDashboardShell, so it
+   never inherited the `dash-dark` hook and stayed on the light `.player-shell`
+   gradient no matter what the student chose. CoursePlayer now applies the same
+   scope its dashboard uses, and these rules give the player surface a dark
+   counterpart.
+
+   The inner cards (PlayerTabs, PlayerSidebar) are built from bg-white /
+   border-gray-200 / text-gray-900, which the dashboard dark block above already
+   repaints, so they come along once the scope is on the root. Only the shell
+   gradient and the player-specific chrome need their own rules here.
+   ============================================================ */
+.dash-dark.player-shell,
+.dash-dark .player-shell {
+  background:
+    radial-gradient(900px 500px at 85% -5%, rgba(255, 106, 0, 0.10), transparent 60%),
+    radial-gradient(700px 500px at 0% 100%, rgba(31, 137, 130, 0.08), transparent 55%),
+    linear-gradient(180deg, #131210 0%, #191716 100%);
+}
+/* The sticky header is already near-black in light mode; deepen it so it reads
+   as part of the dark surface rather than a lighter band floating on top. */
+.dash-dark .player-header { background: #0f0e0d; }
+/* Lesson/section rows and the quiz body sit on the repainted cards - keep the
+   hairlines consistent with the rest of the dark dashboard. */
+.dash-dark .player-shell .border-gray-200,
+.dash-dark .player-shell .border-gray-200\/80 { border-color: rgba(255, 255, 255, 0.12); }
+/* Rich-text lesson copy: .prose-custom is handled above, but the player also
+   renders raw description HTML whose inline code/pre blocks are light. */
+.dash-dark .player-shell code { background: rgba(255, 255, 255, 0.08); color: #e6e8ee; }
+
+
+/* ───── Rotating gradient border (.glow-border) ─────
+ *
+ * The animated conic edge on the founder-meeting card. The usual trick for this
+ * is `@property --angle` plus an animated conic-gradient, but a registered
+ * custom property is Safari 16.4+ only, and an unregistered one cannot be
+ * interpolated at all — the gradient would simply snap, or not animate.
+ *
+ * So the gradient does not animate; a child element carrying it ROTATES. That
+ * is a plain transform, works everywhere, and is compositor-friendly (no paint
+ * on each frame), which matters for something that spins continuously.
+ *
+ * Structure the markup gives us:
+ *   .glow-border            relative, rounded, 1px padding  ← the visible edge
+ *     ::before              the spinning conic sheet
+ *     .glow-border__inner   the opaque card that masks the middle
+ *
+ * The spinning sheet is sized to the diagonal (200% on the longest side) and
+ * centred, so no corner is ever uncovered as it turns.
+ */
+.glow-border {
+  position: relative;
+  isolation: isolate;        /* keep ::before behind the content, not the page */
+  overflow: hidden;          /* clip the oversized spinning sheet to the radius */
+}
+
+/* Layer 1 — the main sweep.
+   The stops are deliberately UNEVEN. A gradient with equally spaced colours
+   reads as a flat rainbow wheel; bunching the brand oranges together and
+   letting the cool half stretch produces a bright "comet" that races round a
+   calmer tail, which is what makes the effect feel alive rather than striped.
+   A few hard-ish transitions (two stops at the same position) add the glint of
+   a specular highlight catching an edge. */
+.glow-border::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  /* Square, sized off the WIDTH so it still covers a tall card when it turns. */
+  top: 50%;
+  left: 50%;
+  width: 180%;
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  background: conic-gradient(
+    from 0deg,
+    #FF6A00 0%,
+    #FFB347 6%,
+    #FFF4D6 11%,   /* hot core of the comet */
+    #FFD166 16%,
+    #FF6A00 26%,
+    #FF3D81 40%,
+    #8B5CF6 54%,
+    #22D3EE 68%,
+    #2563EB 80%,
+    #FF3D81 90%,
+    #FF6A00 100%
+  );
+  animation: glow-border-spin 5s linear infinite;
+}
+
+/* Layer 2 — a counter-rotating highlight.
+   A single spinning sheet looks mechanical. A second, faster sheet turning the
+   OTHER way crosses it at a changing angle, so the rim never repeats the same
+   frame twice in a cycle. It is mostly transparent: only two narrow white
+   wedges, so it reads as light moving over the first layer rather than as a
+   second border competing with it. */
+.glow-border::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  left: 50%;
+  width: 180%;
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.85) 4%,
+    transparent 10%,
+    transparent 48%,
+    rgba(255, 255, 255, 0.55) 52%,
+    transparent 58%,
+    transparent 100%
+  );
+  mix-blend-mode: overlay;
+  animation: glow-border-spin-reverse 3.5s linear infinite;
+}
+
+/* The inner surface sits above both sheets and hides all but the rim. */
+.glow-border__inner {
+  position: relative;
+  z-index: 1;
+}
+
+/* Outer bloom — the colour spills a little onto the page behind the card, so
+   the border looks like it is EMITTING light instead of being painted on.
+   Drawn on a wrapper rather than the card itself because .glow-border clips its
+   own children, so a glow drawn inside would be cut off at the radius. */
+.glow-border-wrap {
+  position: relative;
+}
+.glow-border-wrap::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: -2px;
+  border-radius: inherit;
+  background: linear-gradient(115deg, #FF6A00, #FF3D81, #8B5CF6, #22D3EE, #FF6A00);
+  background-size: 300% 300%;
+  filter: blur(22px);
+  opacity: 0.55;
+  animation: glow-border-bloom 5s ease-in-out infinite;
+}
+.glow-border-wrap > * {
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes glow-border-spin {
+  to { rotate: 360deg; }
+}
+@keyframes glow-border-spin-reverse {
+  to { rotate: -360deg; }
+}
+@keyframes glow-border-bloom {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+/* Reduced motion: keep the colourful edge, drop the spin. A static conic
+   gradient is still a brand-coloured border, so nothing is lost but the
+   movement the user asked not to see. */
+@media (prefers-reduced-motion: reduce) {
+  .glow-border::before,
+  .glow-border::after,
+  .glow-border-wrap::before { animation: none; }
+}

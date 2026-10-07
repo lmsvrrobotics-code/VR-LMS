@@ -48,6 +48,7 @@ const leadRoutes = require('./routes/lead.routes');
 const preAssessmentRoutes = require('./routes/preassessment.routes');
 const languageRoutes = require('./routes/language.routes');
 const assignmentRoutes = require('./routes/assignment.routes');
+const challengeRoutes = require('./routes/challenge.routes');
 const teacherAssignmentRoutes = require('./routes/teacherAssignment.routes');
 const notificationRoutes = require('./routes/notification.routes');
 const profileRoutes = require('./routes/profile.routes');
@@ -1172,6 +1173,13 @@ app.use('/api/admin', adminOrTeacher, batchRoutes.releaseRouter);
 // here for the same reason as the release router above: the adminOnly block
 // further down would 403 a teacher before routing ever reaches it.
 app.use('/api/admin', adminOrTeacher, teacherAssignmentRoutes);
+// Challenge review (teacher + admin). This MUST sit above the `adminOnly`
+// block below: Express runs /api/admin middleware in mount order, and
+// adminOnly responds 403 for any role that is not admin/root rather than
+// calling next(). Mounted after it, a teacher's request was rejected by one of
+// those earlier mounts and never reached this router — the dashboard queue
+// came back empty for every teacher while submissions sat waiting.
+app.use('/api/admin', adminOrTeacher, challengeRoutes.reviewRouter);
 
 // Teacher-delegation: admin assigns course+roster, teacher drips lessons.
 // Student performance feedback — teacher-authored post-class evaluations
@@ -1286,6 +1294,10 @@ app.use('/api/admin', adminOnly, adminBookOrderRoutes);
 app.use('/api/admin', adminOnly, adminKitOrderRoutes);
 app.use('/api/admin', auth, assignmentRoutes);
 app.use('/api/public', ...requireStudent, assignmentRoutes);
+// Challenge lessons — STUDENT surface. The teacher/admin review surface is
+// mounted much earlier, beside the other adminOrTeacher routes; see the note
+// there for why its position matters.
+app.use('/api/public', ...requireStudent, challengeRoutes.studentRouter);
 app.use('/api/admin', auth, notificationRoutes);
 app.use('/api/public', ...requireStudent, notificationRoutes);
 app.use('/api/public', ...requireStudent, profileRoutes);
