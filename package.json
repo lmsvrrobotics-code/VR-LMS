@@ -8,7 +8,8 @@
     "install:all": "npm --prefix backend/auth-service ci --omit=dev && npm --prefix backend/admin-service ci --omit=dev && npm --prefix backend/assessment-service ci --omit=dev && npm --prefix backend/Bastion-server ci --omit=dev",
     "start": "sh backend/start-all.sh"
   },
+  "_engines_note": "Node 22+, NOT 20. @supabase/supabase-js 2.106 reaches for a native WebSocket at import time (realtime-js), which Node 20 does not provide — admin-service then throws at require of src/lib/supabaseAdmin.js, and start-all.sh takes the whole container down with it. The service Dockerfiles already pin node:22-alpine; this field is what Nixpacks reads on Railway, and it was still on >=20.",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }
